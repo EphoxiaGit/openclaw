@@ -89,6 +89,7 @@ export type CompanionBridgeDelivery = Readonly<{
 
 type RunProjection = {
   lastSourceSequence: number;
+  lastSourceWasDelta: boolean;
   started: boolean;
   sawAssistantText: boolean;
   terminal: boolean;
@@ -214,6 +215,7 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
       }
       runs.set(input.runId, {
         lastSourceSequence: -1,
+        lastSourceWasDelta: false,
         started: true,
         sawAssistantText: false,
         terminal: false,
@@ -229,10 +231,17 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
         return [];
       }
       const run = runs.get(input.runId);
-      if (!run || run.terminal || input.seq <= run.lastSourceSequence) {
+      if (
+        !run ||
+        run.terminal ||
+        input.seq < run.lastSourceSequence ||
+        (input.seq === run.lastSourceSequence &&
+          (input.state === "delta" || !run.lastSourceWasDelta))
+      ) {
         return [];
       }
       run.lastSourceSequence = input.seq;
+      run.lastSourceWasDelta = input.state === "delta";
 
       if (input.state === "delta") {
         const events: CompanionBridgeEvent[] = [];

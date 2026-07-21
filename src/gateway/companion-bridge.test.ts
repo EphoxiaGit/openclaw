@@ -149,6 +149,47 @@ describe("companion bridge", () => {
     ]);
   });
 
+  it("accepts a final event that shares its sequence with the preceding delta", () => {
+    const subject = bridge();
+    subject.beginRun(runStart("run-same-seq-final"));
+    const delta = lifecycleEvent({
+      runId: "run-same-seq-final",
+      sessionKey: "agent:main:main",
+      agentId: "main",
+      seq: 4,
+      state: "delta",
+      deltaText: "Streamed reply",
+    });
+    const final = lifecycleEvent({ ...delta, state: "final", deltaText: undefined });
+
+    expect(subject.projectChatEvent(delta)).toHaveLength(2);
+    expect(subject.projectChatEvent(delta)).toEqual([]);
+    expect(subject.projectChatEvent(final)).toEqual([
+      expect.objectContaining({ type: "state", phase: "complete" }),
+    ]);
+    expect(subject.projectChatEvent(final)).toEqual([]);
+  });
+
+  it("accepts an aborted event that shares its sequence with the preceding delta", () => {
+    const subject = bridge();
+    subject.beginRun(runStart("run-same-seq-aborted"));
+    const delta = lifecycleEvent({
+      runId: "run-same-seq-aborted",
+      sessionKey: "agent:main:main",
+      agentId: "main",
+      seq: 7,
+      state: "delta",
+      deltaText: "Partial reply",
+    });
+    const aborted = lifecycleEvent({ ...delta, state: "aborted", deltaText: undefined });
+
+    expect(subject.projectChatEvent(delta)).toHaveLength(2);
+    expect(subject.projectChatEvent(aborted)).toEqual([
+      expect.objectContaining({ type: "state", phase: "cancelled" }),
+    ]);
+    expect(subject.projectChatEvent(aborted)).toEqual([]);
+  });
+
   it("rejects mismatched, missing-agent, replayed, and out-of-order source events", () => {
     const subject = bridge();
     subject.beginRun(runStart("run-3"));
