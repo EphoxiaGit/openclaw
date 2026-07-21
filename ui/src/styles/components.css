@@ -390,6 +390,14 @@
   animation: connection-banner-enter 0.25s var(--ease-out);
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .connection-banner__pill {
+    background: var(--bg-elevated);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @keyframes connection-banner-enter {
   from {
     opacity: 0;

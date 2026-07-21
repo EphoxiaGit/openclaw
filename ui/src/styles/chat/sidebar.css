@@ -69,6 +69,12 @@
   background: color-mix(in srgb, var(--panel) 84%, transparent);
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .chat-workspace-rail {
+    background: var(--bg-accent);
+  }
+}
+
 .chat-workspace-rail--collapsed {
   align-items: center;
   gap: 10px;
@@ -271,7 +277,7 @@
   min-height: 38px;
   padding: 0 6px 0 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -1225,6 +1231,23 @@
 
   .chat-workspace-rail {
     display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .chat-workspace-rail,
+  .chat-sidebar {
+    border-color: CanvasText;
+  }
+
+  .chat-workspace-rail__file--active {
+    border-color: Highlight;
+  }
+
+  .chat-workspace-rail__file-open:focus-visible,
+  .chat-workspace-rail__row-action:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
   }
 }
 

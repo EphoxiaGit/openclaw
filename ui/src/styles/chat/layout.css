@@ -858,13 +858,6 @@ openclaw-chat-page {
   box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
-@supports (backdrop-filter: blur(1px)) {
-  .agent-chat__input {
-    backdrop-filter: blur(12px) saturate(1.6);
-    -webkit-backdrop-filter: blur(12px) saturate(1.6);
-  }
-}
-
 .agent-chat__composer-progress {
   display: flex;
   align-items: center;
@@ -877,6 +870,25 @@ openclaw-chat-page {
   background: color-mix(in srgb, currentColor 8%, var(--card));
   color: var(--muted);
   pointer-events: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .agent-chat__input {
+    background: var(--bg-accent);
+  }
+}
+
+@media (forced-colors: active) {
+  .agent-chat__input,
+  .chat-new-messages {
+    border-color: CanvasText;
+  }
+
+  .agent-chat__input:focus-within,
+  .chat-new-messages:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 .agent-chat__composer-progress--mobile {
