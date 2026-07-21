@@ -1360,3 +1360,138 @@ CREATE INDEX IF NOT EXISTS idx_worktrees_repo_fingerprint
 
 CREATE INDEX IF NOT EXISTS idx_worktrees_removed_at
   ON worktrees(removed_at);
+
+-- Durable operator-authored project plans. These tables link to existing task,
+-- flow, session, and external-owner identifiers without owning their lifecycle.
+CREATE TABLE IF NOT EXISTS work_projects (
+  project_id TEXT NOT NULL PRIMARY KEY,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  primary_conversation_id TEXT NOT NULL,
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS work_goals (
+  goal_id TEXT NOT NULL PRIMARY KEY,
+  project_id TEXT NOT NULL UNIQUE,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  objective TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled','superseded')),
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES work_projects(project_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS work_plans (
+  plan_id TEXT NOT NULL PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  goal_id TEXT NOT NULL,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  definition_revision INTEGER NOT NULL DEFAULT 1,
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL CHECK (status IN ('draft','ready','running','waiting','blocked','review','completed','failed','cancelled','superseded')),
+  display_cursor INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  superseded_at INTEGER,
+  FOREIGN KEY (project_id) REFERENCES work_projects(project_id) ON DELETE CASCADE,
+  FOREIGN KEY (goal_id) REFERENCES work_goals(goal_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_work_plans_project ON work_plans(project_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS work_plan_steps (
+  plan_id TEXT NOT NULL,
+  definition_revision INTEGER NOT NULL,
+  step_id TEXT NOT NULL,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  ordinal INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending','ready','running','waiting','blocked','review','succeeded','failed','skipped','cancelled','superseded')),
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  superseded_at INTEGER,
+  PRIMARY KEY (plan_id, definition_revision, step_id),
+  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_work_plan_steps_ordinal ON work_plan_steps(plan_id, definition_revision, ordinal);
+
+CREATE TABLE IF NOT EXISTS work_plan_step_dependencies (
+  plan_id TEXT NOT NULL,
+  definition_revision INTEGER NOT NULL,
+  step_id TEXT NOT NULL,
+  depends_on_step_id TEXT NOT NULL,
+  PRIMARY KEY (plan_id, definition_revision, step_id, depends_on_step_id),
+  FOREIGN KEY (plan_id, definition_revision, step_id) REFERENCES work_plan_steps(plan_id, definition_revision, step_id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id, definition_revision, depends_on_step_id) REFERENCES work_plan_steps(plan_id, definition_revision, step_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS work_plan_requirements (
+  plan_id TEXT NOT NULL,
+  definition_revision INTEGER NOT NULL,
+  requirement_id TEXT NOT NULL,
+  requirement_text TEXT NOT NULL,
+  disposition TEXT NOT NULL CHECK (disposition IN ('mapped','excluded','unresolved')),
+  mapped_step_id TEXT,
+  exclusion_reason TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (plan_id, definition_revision, requirement_id),
+  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS work_plan_step_task_links (
+  plan_id TEXT NOT NULL,
+  definition_revision INTEGER NOT NULL,
+  step_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  task_flow_id TEXT,
+  linked_at INTEGER NOT NULL,
+  PRIMARY KEY (plan_id, definition_revision, step_id, task_id)
+);
+
+CREATE TABLE IF NOT EXISTS work_plan_step_attempts (
+  attempt_id TEXT NOT NULL PRIMARY KEY,
+  plan_id TEXT NOT NULL,
+  definition_revision INTEGER NOT NULL,
+  step_id TEXT NOT NULL,
+  attempt_number INTEGER NOT NULL,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('task','task_flow','codex','omx','worktree','external')),
+  owner_id TEXT NOT NULL,
+  owner_state TEXT NOT NULL CHECK (owner_state IN ('pending','running','waiting','succeeded','failed','cancelled','lost','unknown')),
+  recovery_state TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  UNIQUE (plan_id, definition_revision, step_id, attempt_number),
+  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS work_plan_transitions (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  transition_id TEXT NOT NULL UNIQUE,
+  project_id TEXT NOT NULL,
+  plan_id TEXT,
+  step_id TEXT,
+  definition_revision INTEGER,
+  entity_type TEXT NOT NULL,
+  from_status TEXT,
+  to_status TEXT,
+  action TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_work_plan_transitions_plan ON work_plan_transitions(plan_id, sequence);
+
+CREATE TABLE IF NOT EXISTS work_plan_mutation_receipts (
+  project_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, idempotency_key)
+);

@@ -78,6 +78,10 @@ const loadArtifactsHandlers = lazyHandlerModule(
   () => import("./server-methods/artifacts.js"),
   (module) => module.artifactsHandlers,
 );
+const loadWorkPlansHandlers = lazyHandlerModule(
+  () => import("./server-methods/work-plans.js"),
+  (module) => module.workPlansHandlers,
+);
 const loadAuditHandlers = lazyHandlerModule(
   () => import("./server-methods/audit.js"),
   (module) => module.auditHandlers,
@@ -497,6 +501,19 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...createLazyCoreHandlers({
     methods: ["tasks.list", "tasks.get", "tasks.cancel"],
     loadHandlers: loadTasksHandlers,
+  }),
+  ...createLazyCoreHandlers({
+    methods: [
+      "work.projects.create",
+      "work.projects.list",
+      "work.projects.get",
+      "work.plans.create",
+      "work.plans.get",
+      "work.plans.mutate",
+      "work.plans.history",
+      "work.plans.projection",
+    ],
+    loadHandlers: loadWorkPlansHandlers,
   }),
   ...createLazyCoreHandlers({
     methods: ["tools.catalog"],

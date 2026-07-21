@@ -358,6 +358,16 @@ import {
   WizardStepSchema,
 } from "./wizard.js";
 import {
+  WorkPlansCreateParamsSchema,
+  WorkPlansGetParamsSchema,
+  WorkPlansHistoryParamsSchema,
+  WorkPlansMutateParamsSchema,
+  WorkPlansProjectionParamsSchema,
+  WorkProjectsCreateParamsSchema,
+  WorkProjectsGetParamsSchema,
+  WorkProjectsListParamsSchema,
+} from "./work-plans.js";
+import {
   WorktreeRecordSchema,
   WorktreesCreateParamsSchema,
   WorktreesGcParamsSchema,
@@ -493,6 +503,14 @@ export const ProtocolSchemas = {
   TasksGetResult: TasksGetResultSchema,
   TasksCancelParams: TasksCancelParamsSchema,
   TasksCancelResult: TasksCancelResultSchema,
+  WorkProjectsCreateParams: WorkProjectsCreateParamsSchema,
+  WorkProjectsListParams: WorkProjectsListParamsSchema,
+  WorkProjectsGetParams: WorkProjectsGetParamsSchema,
+  WorkPlansCreateParams: WorkPlansCreateParamsSchema,
+  WorkPlansGetParams: WorkPlansGetParamsSchema,
+  WorkPlansMutateParams: WorkPlansMutateParamsSchema,
+  WorkPlansHistoryParams: WorkPlansHistoryParamsSchema,
+  WorkPlansProjectionParams: WorkPlansProjectionParamsSchema,
   ConfigGetParams: ConfigGetParamsSchema,
   ConfigSetParams: ConfigSetParamsSchema,
   ConfigApplyParams: ConfigApplyParamsSchema,

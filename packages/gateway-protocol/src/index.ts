@@ -8,6 +8,7 @@ export {
   type ClawHubTrustErrorCode,
   type ClawHubTrustErrorDetails,
 } from "./clawhub-trust-error-details.js";
+export * from "./schema/work-plans.js";
 import { Compile, type Validator as TypeBoxValidator } from "typebox/compile";
 import {
   type AgentEvent,
@@ -598,6 +599,16 @@ import {
   type WorktreesGcResult,
   WorktreesGcResultSchema,
 } from "./schema.js";
+import {
+  WorkPlansCreateParamsSchema,
+  WorkPlansGetParamsSchema,
+  WorkPlansHistoryParamsSchema,
+  WorkPlansMutateParamsSchema,
+  WorkPlansProjectionParamsSchema,
+  WorkProjectsCreateParamsSchema,
+  WorkProjectsGetParamsSchema,
+  WorkProjectsListParamsSchema,
+} from "./schema/work-plans.js";
 
 /** Normalized validation error shape exposed by every protocol validator. */
 export type ValidationError = {
@@ -835,6 +846,14 @@ export const validateSessionsUsageParams =
 export const validateTasksListParams = lazyCompile<TasksListParams>(TasksListParamsSchema);
 export const validateTasksGetParams = lazyCompile<TasksGetParams>(TasksGetParamsSchema);
 export const validateTasksCancelParams = lazyCompile<TasksCancelParams>(TasksCancelParamsSchema);
+export const validateWorkProjectsCreateParams = lazyCompile(WorkProjectsCreateParamsSchema);
+export const validateWorkProjectsListParams = lazyCompile(WorkProjectsListParamsSchema);
+export const validateWorkProjectsGetParams = lazyCompile(WorkProjectsGetParamsSchema);
+export const validateWorkPlansCreateParams = lazyCompile(WorkPlansCreateParamsSchema);
+export const validateWorkPlansGetParams = lazyCompile(WorkPlansGetParamsSchema);
+export const validateWorkPlansMutateParams = lazyCompile(WorkPlansMutateParamsSchema);
+export const validateWorkPlansHistoryParams = lazyCompile(WorkPlansHistoryParamsSchema);
+export const validateWorkPlansProjectionParams = lazyCompile(WorkPlansProjectionParamsSchema);
 export const validateConfigGetParams = lazyCompile<ConfigGetParams>(ConfigGetParamsSchema);
 export const validateConfigSetParams = lazyCompile<ConfigSetParams>(ConfigSetParamsSchema);
 export const validateConfigApplyParams = lazyCompile<ConfigApplyParams>(ConfigApplyParamsSchema);

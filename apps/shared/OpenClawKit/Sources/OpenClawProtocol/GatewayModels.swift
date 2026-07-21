@@ -3445,6 +3445,178 @@ public struct TasksCancelResult: Codable, Sendable {
     }
 }
 
+public struct WorkProjectsCreateParams: Codable, Sendable {
+    public let projectid: String
+    public let goalid: String
+    public let primaryconversationid: String
+    public let objective: String
+    public let idempotencykey: String
+    public let actorid: String
+
+    public init(
+        projectid: String,
+        goalid: String,
+        primaryconversationid: String,
+        objective: String,
+        idempotencykey: String,
+        actorid: String)
+    {
+        self.projectid = projectid
+        self.goalid = goalid
+        self.primaryconversationid = primaryconversationid
+        self.objective = objective
+        self.idempotencykey = idempotencykey
+        self.actorid = actorid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case goalid = "goalId"
+        case primaryconversationid = "primaryConversationId"
+        case objective
+        case idempotencykey = "idempotencyKey"
+        case actorid = "actorId"
+    }
+}
+
+public struct WorkProjectsListParams: Codable, Sendable {}
+
+public struct WorkProjectsGetParams: Codable, Sendable {
+    public let projectid: String
+
+    public init(
+        projectid: String)
+    {
+        self.projectid = projectid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+    }
+}
+
+public struct WorkPlansCreateParams: Codable, Sendable {
+    public let projectid: String
+    public let planid: String
+    public let goalid: String
+    public let expectedrevision: Int
+    public let idempotencykey: String
+    public let actorid: String
+    public let status: AnyCodable?
+    public let steps: [[String: AnyCodable]]
+    public let requirements: [[String: AnyCodable]]?
+
+    public init(
+        projectid: String,
+        planid: String,
+        goalid: String,
+        expectedrevision: Int,
+        idempotencykey: String,
+        actorid: String,
+        status: AnyCodable?,
+        steps: [[String: AnyCodable]],
+        requirements: [[String: AnyCodable]]?)
+    {
+        self.projectid = projectid
+        self.planid = planid
+        self.goalid = goalid
+        self.expectedrevision = expectedrevision
+        self.idempotencykey = idempotencykey
+        self.actorid = actorid
+        self.status = status
+        self.steps = steps
+        self.requirements = requirements
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case planid = "planId"
+        case goalid = "goalId"
+        case expectedrevision = "expectedRevision"
+        case idempotencykey = "idempotencyKey"
+        case actorid = "actorId"
+        case status
+        case steps
+        case requirements
+    }
+}
+
+public struct WorkPlansGetParams: Codable, Sendable {
+    public let planid: String
+
+    public init(
+        planid: String)
+    {
+        self.planid = planid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case planid = "planId"
+    }
+}
+
+public struct WorkPlansMutateParams: Codable, Sendable {
+    public let projectid: String
+    public let planid: String
+    public let expectedrevision: Int
+    public let idempotencykey: String
+    public let actorid: String
+    public let mutation: AnyCodable
+
+    public init(
+        projectid: String,
+        planid: String,
+        expectedrevision: Int,
+        idempotencykey: String,
+        actorid: String,
+        mutation: AnyCodable)
+    {
+        self.projectid = projectid
+        self.planid = planid
+        self.expectedrevision = expectedrevision
+        self.idempotencykey = idempotencykey
+        self.actorid = actorid
+        self.mutation = mutation
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case planid = "planId"
+        case expectedrevision = "expectedRevision"
+        case idempotencykey = "idempotencyKey"
+        case actorid = "actorId"
+        case mutation
+    }
+}
+
+public struct WorkPlansHistoryParams: Codable, Sendable {
+    public let planid: String
+
+    public init(
+        planid: String)
+    {
+        self.planid = planid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case planid = "planId"
+    }
+}
+
+public struct WorkPlansProjectionParams: Codable, Sendable {
+    public let planid: String
+
+    public init(
+        planid: String)
+    {
+        self.planid = planid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case planid = "planId"
+    }
+}
+
 public struct ConfigGetParams: Codable, Sendable {}
 
 public struct ConfigSetParams: Codable, Sendable {

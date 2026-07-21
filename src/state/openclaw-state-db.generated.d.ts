@@ -1029,6 +1029,122 @@ export interface WebPushVapidKeys {
   updated_at_ms: number;
 }
 
+export interface WorkGoals {
+  created_at: number;
+  goal_id: string;
+  objective: string;
+  project_id: string;
+  record_revision: Generated<number>;
+  schema_version: Generated<number>;
+  status: Generated<string>;
+  updated_at: number;
+}
+
+export interface WorkPlanMutationReceipts {
+  created_at: number;
+  idempotency_key: string;
+  project_id: string;
+  request_hash: string;
+  result_json: string;
+}
+
+export interface WorkPlanRequirements {
+  created_at: number;
+  definition_revision: number;
+  disposition: string;
+  exclusion_reason: string | null;
+  mapped_step_id: string | null;
+  plan_id: string;
+  requirement_id: string;
+  requirement_text: string;
+  updated_at: number;
+}
+
+export interface WorkPlanStepAttempts {
+  attempt_id: string;
+  attempt_number: number;
+  created_at: number;
+  definition_revision: number;
+  ended_at: number | null;
+  owner_id: string;
+  owner_state: string;
+  owner_type: string;
+  plan_id: string;
+  recovery_state: string | null;
+  step_id: string;
+  updated_at: number;
+}
+
+export interface WorkPlanStepDependencies {
+  definition_revision: number;
+  depends_on_step_id: string;
+  plan_id: string;
+  step_id: string;
+}
+
+export interface WorkPlanStepTaskLinks {
+  definition_revision: number;
+  linked_at: number;
+  plan_id: string;
+  step_id: string;
+  task_flow_id: string | null;
+  task_id: string;
+}
+
+export interface WorkPlanSteps {
+  created_at: number;
+  definition_revision: number;
+  ordinal: number;
+  plan_id: string;
+  record_revision: Generated<number>;
+  schema_version: Generated<number>;
+  status: string;
+  step_id: string;
+  superseded_at: number | null;
+  title: string;
+  updated_at: number;
+}
+
+export interface WorkPlanTransitions {
+  action: string;
+  actor_id: string;
+  created_at: number;
+  definition_revision: number | null;
+  entity_type: string;
+  from_status: string | null;
+  payload_json: string;
+  plan_id: string | null;
+  project_id: string;
+  request_hash: string;
+  sequence: Generated<number>;
+  step_id: string | null;
+  to_status: string | null;
+  transition_id: string;
+}
+
+export interface WorkPlans {
+  created_at: number;
+  definition_revision: Generated<number>;
+  display_cursor: Generated<number>;
+  goal_id: string;
+  plan_id: string;
+  project_id: string;
+  record_revision: Generated<number>;
+  schema_version: Generated<number>;
+  status: string;
+  superseded_at: number | null;
+  updated_at: number;
+}
+
+export interface WorkProjects {
+  created_at: number;
+  primary_conversation_id: string;
+  project_id: string;
+  record_revision: Generated<number>;
+  schema_version: Generated<number>;
+  updated_at: number;
+}
+
 export interface WorkspaceSetupState {
   bootstrap_seeded_at: string | null;
   setup_completed_at: string | null;
@@ -1125,6 +1241,16 @@ export interface DB {
   voicewake_triggers: VoicewakeTriggers;
   web_push_subscriptions: WebPushSubscriptions;
   web_push_vapid_keys: WebPushVapidKeys;
+  work_goals: WorkGoals;
+  work_plan_mutation_receipts: WorkPlanMutationReceipts;
+  work_plan_requirements: WorkPlanRequirements;
+  work_plan_step_attempts: WorkPlanStepAttempts;
+  work_plan_step_dependencies: WorkPlanStepDependencies;
+  work_plan_step_task_links: WorkPlanStepTaskLinks;
+  work_plan_steps: WorkPlanSteps;
+  work_plan_transitions: WorkPlanTransitions;
+  work_plans: WorkPlans;
+  work_projects: WorkProjects;
   workspace_setup_state: WorkspaceSetupState;
   worktrees: Worktrees;
 }
