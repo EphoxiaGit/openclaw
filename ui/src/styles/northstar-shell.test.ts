@@ -1,18 +1,27 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-const shellStyleUrls = [
-  new URL("./base.css", import.meta.url),
-  new URL("./layout.css", import.meta.url),
-  new URL("./layout.mobile.css", import.meta.url),
-  new URL("./components.css", import.meta.url),
-  new URL("./chat/layout.css", import.meta.url),
-  new URL("./chat/sidebar.css", import.meta.url),
-  new URL("./chat/split-view.css", import.meta.url),
+const shellStylePaths = [
+  "base.css",
+  "layout.css",
+  "layout.mobile.css",
+  "components.css",
+  "chat/layout.css",
+  "chat/sidebar.css",
+  "chat/split-view.css",
 ];
 
 async function readShellStyles(): Promise<string> {
-  return (await Promise.all(shellStyleUrls.map((url) => readFile(url, "utf8")))).join("\n");
+  const stylesDirectory = path.join(process.cwd(), "src/styles");
+  return (
+    await Promise.all(
+      shellStylePaths.map((relativePath) =>
+        readFile(path.join(stylesDirectory, relativePath), "utf8"),
+      ),
+    )
+  ).join("\n");
 }
 
 describe("Project Northstar shell styles", () => {
