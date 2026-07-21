@@ -63,6 +63,23 @@ export type CompanionBridge = Readonly<{
   projectChatEvent: (input: unknown) => readonly CompanionBridgeEvent[];
 }>;
 
+/**
+ * Server-owned presentation sink. A future authorized gateway route supplies
+ * this callback only after it has selected the Companion recipient; this
+ * module deliberately has no browser, socket, or credential dependency.
+ */
+export type CompanionBridgePublisher = (event: CompanionBridgeEvent) => void;
+
+/**
+ * Imperative facade for server-side lifecycle wiring. It publishes only the
+ * redacted output of a fixed CompanionBridge and exposes no binding details.
+ */
+export type CompanionBridgeDelivery = Readonly<{
+  bootstrap: () => CompanionBootstrap;
+  beginRun: (input: CompanionRunStart) => boolean;
+  projectChatEvent: (input: unknown) => number;
+}>;
+
 type RunProjection = {
   lastSourceSequence: number;
   started: boolean;
@@ -78,7 +95,9 @@ function requireNonEmpty(name: string, value: string): string {
 }
 
 function isCompanionChatEvent(value: unknown): value is CompanionChatEvent {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const event = value as Record<string, unknown>;
   return (
     typeof event.runId === "string" &&
@@ -101,14 +120,24 @@ function boundedText(value: string): { text: string; truncated: boolean } {
 }
 
 function readAssistantMessageText(message: unknown): string | undefined {
-  if (!message || typeof message !== "object") return undefined;
+  if (!message || typeof message !== "object") {
+    return undefined;
+  }
   const entry = message as Record<string, unknown>;
-  if (typeof entry.content === "string") return entry.content;
-  if (typeof entry.text === "string") return entry.text;
-  if (!Array.isArray(entry.content)) return undefined;
+  if (typeof entry.content === "string") {
+    return entry.content;
+  }
+  if (typeof entry.text === "string") {
+    return entry.text;
+  }
+  if (!Array.isArray(entry.content)) {
+    return undefined;
+  }
   const text = entry.content
     .map((part) => {
-      if (!part || typeof part !== "object") return "";
+      if (!part || typeof part !== "object") {
+        return "";
+      }
       const record = part as Record<string, unknown>;
       return record.type === "text" && typeof record.text === "string" ? record.text : "";
     })
@@ -166,7 +195,9 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
         return null;
       }
       const run = runs.get(input.runId);
-      if (run?.started) return null;
+      if (run?.started) {
+        return null;
+      }
       runs.set(input.runId, {
         lastSourceSequence: -1,
         started: true,
@@ -177,17 +208,23 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
     },
 
     projectChatEvent: (input) => {
-      if (!isCompanionChatEvent(input)) return [];
+      if (!isCompanionChatEvent(input)) {
+        return [];
+      }
       if (input.sessionKey !== fixedBinding.sessionKey || input.agentId !== fixedBinding.agentId) {
         return [];
       }
       const run = runs.get(input.runId);
-      if (!run || run.terminal || input.seq <= run.lastSourceSequence) return [];
+      if (!run || run.terminal || input.seq <= run.lastSourceSequence) {
+        return [];
+      }
       run.lastSourceSequence = input.seq;
 
       if (input.state === "delta") {
         const events: CompanionBridgeEvent[] = [];
-        if (!run.sawAssistantText) events.push(emitState("assistant-streaming"));
+        if (!run.sawAssistantText) {
+          events.push(emitState("assistant-streaming"));
+        }
         const delta = typeof input.deltaText === "string" ? input.deltaText : "";
         if (delta.length > 0) {
           events.push(emitText(input.replace === true ? "replace" : "append", delta));
@@ -200,7 +237,9 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
         const events: CompanionBridgeEvent[] = [];
         if (!run.sawAssistantText) {
           const text = readAssistantMessageText(input.message);
-          if (text) events.push(emitText("replace", text));
+          if (text) {
+            events.push(emitText("replace", text));
+          }
         }
         run.terminal = true;
         events.push(emitState("complete"));
@@ -209,5 +248,35 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
       run.terminal = true;
       return [emitState(input.state === "aborted" ? "cancelled" : "error")];
     },
+  };
+}
+
+/**
+ * Creates the testable server delivery seam for a fixed Companion binding.
+ * This does not register a Gateway event listener or send browser traffic.
+ */
+export function createCompanionBridgeDelivery(params: {
+  binding: CompanionBridgeBinding;
+  publish: CompanionBridgePublisher;
+}): CompanionBridgeDelivery {
+  const bridge = createCompanionBridge(params.binding);
+  const publishAll = (events: readonly CompanionBridgeEvent[]) => {
+    for (const event of events) {
+      params.publish(event);
+    }
+    return events.length;
+  };
+
+  return {
+    bootstrap: bridge.bootstrap,
+    beginRun: (input) => {
+      const event = bridge.beginRun(input);
+      if (!event) {
+        return false;
+      }
+      params.publish(event);
+      return true;
+    },
+    projectChatEvent: (input) => publishAll(bridge.projectChatEvent(input)),
   };
 }

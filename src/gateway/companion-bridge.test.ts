@@ -3,6 +3,7 @@ import {
   COMPANION_BRIDGE_PROTOCOL,
   MAX_COMPANION_TRANSCRIPT_CHARS,
   createCompanionBridge,
+  createCompanionBridgeDelivery,
 } from "./companion-bridge.js";
 
 function bridge() {
@@ -134,5 +135,54 @@ describe("companion bridge", () => {
         message: { content: "sensitive reply" },
       }),
     ).toEqual([expect.objectContaining({ type: "state", phase: "error" })]);
+  });
+
+  it("delivers only the fixed bridge projection through a server-owned publisher", () => {
+    const delivered: unknown[] = [];
+    const delivery = createCompanionBridgeDelivery({
+      binding: {
+        conversationId: "companion-conversation-opaque",
+        sessionKey: "agent:main:main",
+        agentId: "main",
+      },
+      publish: (event) => delivered.push(event),
+    });
+
+    expect(delivery.bootstrap()).toEqual({
+      protocol: COMPANION_BRIDGE_PROTOCOL,
+      conversationId: "companion-conversation-opaque",
+      phase: "idle",
+    });
+    expect(
+      delivery.beginRun({ runId: "run-delivery", sessionKey: "agent:main:main", agentId: "main" }),
+    ).toBe(true);
+    expect(
+      delivery.projectChatEvent({
+        runId: "run-delivery",
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        seq: 0,
+        state: "delta",
+        deltaText: "Safe text",
+      }),
+    ).toBe(2);
+    expect(
+      delivery.projectChatEvent({
+        runId: "run-delivery",
+        sessionKey: "agent:other:main",
+        agentId: "other",
+        seq: 1,
+        state: "error",
+        message: { content: "raw private failure" },
+      }),
+    ).toBe(0);
+
+    expect(delivered).toEqual([
+      expect.objectContaining({ type: "state", phase: "thinking" }),
+      expect.objectContaining({ type: "state", phase: "assistant-streaming" }),
+      expect.objectContaining({ type: "assistant-text", text: "Safe text" }),
+    ]);
+    expect(JSON.stringify(delivered)).not.toContain("agent:main:main");
+    expect(JSON.stringify(delivered)).not.toContain("raw private failure");
   });
 });
