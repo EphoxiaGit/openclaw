@@ -1,0 +1,246 @@
+:root {
+  color: #eaf5ff;
+  background: transparent;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+summary {
+  color: inherit;
+  font: inherit;
+}
+
+.companion-stage,
+.stage-frame,
+.avatar-aperture {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  background: transparent;
+}
+
+.companion-stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.stage-frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.stage-header {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  left: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: calc(100% - 36px);
+  pointer-events: none;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 72%);
+}
+
+.stage-eyebrow {
+  margin: 0 0 3px;
+  color: #a8e3ff;
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(0.95rem, 2vw, 1.18rem);
+  font-weight: 650;
+}
+
+.stage-status {
+  margin: 1px 0 0;
+  color: #c8f8e4;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.avatar-aperture {
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar-canvas-host,
+.avatar-aperture canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+.avatar-aperture canvas {
+  display: block;
+  outline: none;
+}
+
+.stage-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 32px;
+  background: rgb(8 16 36 / 72%);
+  text-align: center;
+}
+
+.stage-overlay strong {
+  font-size: 1.1rem;
+}
+
+.stage-overlay span {
+  max-width: 34rem;
+  color: #c5d5e6;
+}
+
+.stage-error {
+  color: #ffd2d2;
+}
+.stage-error button {
+  justify-self: center;
+}
+
+.stage-controls {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 16px;
+  max-width: min(31rem, calc(100% - 32px));
+  color: #eaf5ff;
+}
+
+.stage-controls summary {
+  width: fit-content;
+  margin-left: auto;
+  padding: 7px 10px;
+  border: 1px solid rgb(187 232 255 / 32%);
+  border-radius: 999px;
+  background: rgb(8 19 40 / 60%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  cursor: pointer;
+  font-size: 0.75rem;
+  list-style: none;
+}
+
+.stage-controls summary::-webkit-details-marker {
+  display: none;
+}
+
+.stage-controls-panel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid rgb(187 232 255 / 24%);
+  border-radius: 14px;
+  background: rgb(8 19 40 / 76%);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 26%);
+}
+
+.stage-controls button,
+.stage-error button {
+  padding: 7px 9px;
+  border: 1px solid rgb(187 232 255 / 28%);
+  border-radius: 9px;
+  background: rgb(120 190 255 / 13%);
+  cursor: pointer;
+  font-size: 0.74rem;
+}
+
+.stage-controls button:hover:not(:disabled),
+.stage-error button:hover {
+  background: rgb(120 190 255 / 25%);
+}
+
+.stage-controls button:focus-visible,
+.stage-controls summary:focus-visible,
+.stage-error button:focus-visible {
+  outline: 3px solid #8ee9d1;
+  outline-offset: 2px;
+}
+
+.stage-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.stage-capabilities {
+  position: absolute;
+  z-index: 2;
+  bottom: 18px;
+  left: 18px;
+  max-width: min(36rem, calc(100% - 160px));
+  margin: 0;
+  color: rgb(222 240 255 / 78%);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  pointer-events: none;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 78%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .stage-header {
+    top: 12px;
+    left: 13px;
+    gap: 8px;
+  }
+
+  .stage-status {
+    font-size: 0.65rem;
+  }
+
+  .stage-controls {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100% - 24px);
+  }
+
+  .stage-capabilities {
+    bottom: 12px;
+    left: 13px;
+    max-width: calc(100% - 148px);
+  }
+}

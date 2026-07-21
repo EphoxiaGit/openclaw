@@ -226,6 +226,9 @@ USER.md
 /client_secret_*.json
 package-lock.json
 !src/commands/copilot-sdk-install-manifest/package-lock.json
+!companion-stage/package-lock.json
+companion-stage/.env.local
+companion-stage/local-assets/
 .claude/
 .agent/
 skills-lock.json

@@ -13,6 +13,15 @@ describe("buildControlUiCspHeader", () => {
     expect(csp).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
   });
 
+  it("allows only the fixed local Companion renderer as a cross-origin frame", () => {
+    const csp = buildControlUiCspHeader();
+    const frameSrc = csp.split("; ").find((directive) => directive.startsWith("frame-src "));
+    expect(frameSrc?.split(" ")).toEqual(["frame-src", "'self'", "http://127.0.0.1:5184"]);
+    expect(frameSrc).not.toContain("localhost");
+    expect(frameSrc).not.toContain("https:");
+    expect(csp).toContain("frame-ancestors 'none'");
+  });
+
   it("allows Google Fonts for style and font loading", () => {
     const csp = buildControlUiCspHeader();
     expect(csp).toContain("https://fonts.googleapis.com");

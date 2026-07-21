@@ -40,4 +40,23 @@ describe("Project Northstar shell styles", () => {
     expect(css).toContain("@media (max-width: 1120px)");
     expect(css).toContain("@media (max-width: 768px)");
   });
+
+  it("keeps the shell solid and expanded navigation labels readable", async () => {
+    const layout = await readFile(path.join(process.cwd(), "src/styles/layout.css"), "utf8");
+    const mobileLayout = await readFile(
+      path.join(process.cwd(), "src/styles/layout.mobile.css"),
+      "utf8",
+    );
+    const topbarRule = layout.match(/^\.topbar\s*\{(?<declarations>[^}]*)\}/m)?.groups
+      ?.declarations;
+    const navLabelRule = layout.match(/^\.nav-item__text\s*\{(?<declarations>[^}]*)\}/m)?.groups
+      ?.declarations;
+
+    expect(topbarRule).toContain("background: var(--bg)");
+    expect(topbarRule).not.toContain("backdrop-filter");
+    expect(navLabelRule).toContain("white-space: normal");
+    expect(navLabelRule).toContain("overflow-wrap: anywhere");
+    expect(navLabelRule).not.toContain("text-overflow: ellipsis");
+    expect(mobileLayout).not.toMatch(/\.nav-item[^}]*white-space:\s*nowrap/);
+  });
 });
