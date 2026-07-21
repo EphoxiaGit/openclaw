@@ -14,6 +14,7 @@ type NavigationItem = {
 // list and Settings/Docs live in the sidebar footer, so neither is listed here.
 export const SIDEBAR_NAV_ROUTES = [
   "overview",
+  "companion",
   "activity",
   "workboard",
   "instances",
@@ -79,6 +80,7 @@ export const SETTINGS_NAVIGATION_ROUTES = [
 const NAVIGATION_ICONS: NavigationItem = {
   agents: "bot",
   activity: "activity",
+  companion: "spark",
   overview: "barChart",
   workboard: "kanban",
   worktrees: "folder",
@@ -161,9 +163,14 @@ export function cancelRoutePreload(
   }
 }
 
-const NAVIGATION_COPY: Record<NavigationRouteId, { titleKey: string; subtitleKey: string }> = {
+type NavigationCopy =
+  | { titleKey: string; subtitleKey: string }
+  | { title: string; subtitle: string };
+
+const NAVIGATION_COPY: Record<NavigationRouteId, NavigationCopy> = {
   agents: { titleKey: "tabs.agents", subtitleKey: "subtitles.agents" },
   activity: { titleKey: "tabs.activity", subtitleKey: "subtitles.activity" },
+  companion: { title: "Companion", subtitle: "Local avatar renderer (development only)." },
   overview: { titleKey: "tabs.overview", subtitleKey: "subtitles.overview" },
   workboard: { titleKey: "tabs.workboard", subtitleKey: "subtitles.workboard" },
   worktrees: { titleKey: "tabs.worktrees", subtitleKey: "subtitles.worktrees" },
@@ -197,9 +204,11 @@ const NAVIGATION_COPY: Record<NavigationRouteId, { titleKey: string; subtitleKey
 };
 
 export function titleForRoute(routeId: NavigationRouteId): string {
-  return t(NAVIGATION_COPY[routeId].titleKey);
+  const copy = NAVIGATION_COPY[routeId];
+  return "title" in copy ? copy.title : t(copy.titleKey);
 }
 
 export function subtitleForRoute(routeId: NavigationRouteId): string {
-  return t(NAVIGATION_COPY[routeId].subtitleKey);
+  const copy = NAVIGATION_COPY[routeId];
+  return "subtitle" in copy ? copy.subtitle : t(copy.subtitleKey);
 }

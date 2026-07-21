@@ -2307,6 +2307,20 @@
     {
       "count": 1,
       "kind": "html-attribute",
+      "name": "title",
+      "path": "ui/src/pages/companion/companion-page.ts",
+      "text": "AIRI Companion"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/companion/companion-page.ts",
+      "text": "Local Companion renderer is disabled."
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
       "name": "aria-label",
       "path": "ui/src/pages/config/config-page.ts",
       "text": "Settings view"

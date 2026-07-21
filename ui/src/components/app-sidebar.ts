@@ -17,6 +17,7 @@ import {
   titleForRoute,
 } from "../app-navigation.ts";
 import { pathForRoute, type RouteId } from "../app-route-paths.ts";
+import { COMPANION_LOCAL_STAGE_SEARCH } from "../app/companion-stage.ts";
 import {
   applicationContext,
   type ApplicationContext,
@@ -1175,10 +1176,13 @@ class AppSidebar extends LitElement {
       return nothing;
     }
     const routeSessionKey = routeId === "chat" ? this.getRouteSessionKey() : "";
-    const href =
+    const routeOptions =
       routeSessionKey && routeId === "chat"
-        ? `${pathForRoute("chat", this.basePath)}${searchForSession(routeSessionKey)}`
-        : pathForRoute(routeId, this.basePath);
+        ? { search: searchForSession(routeSessionKey) }
+        : routeId === "companion"
+          ? { search: COMPANION_LOCAL_STAGE_SEARCH }
+          : undefined;
+    const href = `${pathForRoute(routeId, this.basePath)}${routeOptions?.search ?? ""}`;
     const label = titleForRoute(routeId);
     const link = html`
       <a
@@ -1194,14 +1198,7 @@ class AppSidebar extends LitElement {
             return;
           }
           event.preventDefault();
-          this.onNavigate?.(
-            routeId,
-            routeId === "chat" && routeSessionKey
-              ? {
-                  search: searchForSession(routeSessionKey),
-                }
-              : undefined,
-          );
+          this.onNavigate?.(routeId, routeOptions);
         }}
       >
         <span class="nav-item__icon" aria-hidden="true"

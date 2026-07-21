@@ -54,6 +54,7 @@ describe("navigationIconForRoute", () => {
       Object.fromEntries(ALL_ROUTES.map((routeId) => [routeId, navigationIconForRoute(routeId)])),
     ).toEqual({
       chat: "messageSquare",
+      companion: "spark",
       overview: "barChart",
       activity: "activity",
       workboard: "kanban",
@@ -94,6 +95,7 @@ describe("titleForRoute", () => {
       Object.fromEntries(ALL_ROUTES.map((routeId) => [routeId, titleForRoute(routeId)])),
     ).toEqual({
       chat: "Chat",
+      companion: "Companion",
       overview: "Overview",
       activity: "Activity",
       workboard: "Workboard",
@@ -128,6 +130,7 @@ describe("subtitleForRoute", () => {
       Object.fromEntries(ALL_ROUTES.map((routeId) => [routeId, subtitleForRoute(routeId)])),
     ).toEqual({
       chat: "Gateway chat for quick interventions.",
+      companion: "Local avatar renderer (development only).",
       overview: "Status, entry points, health.",
       activity: "Browser-local tool activity summaries.",
       workboard: "Agent work queue and session handoff.",
@@ -197,6 +200,7 @@ describe("normalizePath", () => {
 describe("pathForRoute", () => {
   it("returns correct path without base", () => {
     expect(pathForRoute("chat")).toBe("/chat");
+    expect(pathForRoute("companion")).toBe("/companion");
     expect(pathForRoute("overview")).toBe("/overview");
     expect(pathForRoute("debug")).toBe("/debug");
     expect(pathForRoute("logs")).toBe("/logs");
@@ -211,6 +215,7 @@ describe("pathForRoute", () => {
 describe("routeIdFromPath", () => {
   it("returns tab for valid path", () => {
     expect(routeIdFromPath("/chat")).toBe("chat");
+    expect(routeIdFromPath("/companion")).toBe("companion");
     expect(routeIdFromPath("/overview")).toBe("overview");
     expect(routeIdFromPath("/activity")).toBe("activity");
     expect(routeIdFromPath("/sessions")).toBe("sessions");
@@ -279,6 +284,7 @@ describe("inferBasePathFromPathname", () => {
 
   it("returns empty string for direct tab path", () => {
     expect(inferBasePathFromPathname("/chat")).toBe("");
+    expect(inferBasePathFromPathname("/companion")).toBe("");
     expect(inferBasePathFromPathname("/overview")).toBe("");
     expect(inferBasePathFromPathname("/settings/general")).toBe("");
     expect(inferBasePathFromPathname("/settings/appearance")).toBe("");
