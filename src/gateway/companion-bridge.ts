@@ -6,6 +6,9 @@
 
 export const COMPANION_BRIDGE_PROTOCOL = "openclaw.companion.v1" as const;
 export const MAX_COMPANION_TRANSCRIPT_CHARS = 4_000;
+export const COMPANION_MAIN_AGENT_ID = "main" as const;
+export const COMPANION_RUN_START_SOURCE = "authorized-chat-send" as const;
+export const COMPANION_CHAT_EVENT_SOURCE = "authoritative-chat-lifecycle" as const;
 
 export type CompanionBridgeBinding = Readonly<{
   /** Opaque client-facing identifier; not an OpenClaw session key. */
@@ -17,6 +20,7 @@ export type CompanionBridgeBinding = Readonly<{
 }>;
 
 export type CompanionChatEvent = Readonly<{
+  source: typeof COMPANION_CHAT_EVENT_SOURCE;
   runId: string;
   sessionKey: string;
   agentId?: string;
@@ -52,6 +56,8 @@ export type CompanionTranscriptEvent = Readonly<{
 export type CompanionBridgeEvent = CompanionStateEvent | CompanionTranscriptEvent;
 
 export type CompanionRunStart = Readonly<{
+  source: typeof COMPANION_RUN_START_SOURCE;
+  status: "started";
   runId: string;
   sessionKey: string;
   agentId: string;
@@ -64,9 +70,10 @@ export type CompanionBridge = Readonly<{
 }>;
 
 /**
- * Server-owned presentation sink. A future authorized gateway route supplies
- * this callback only after it has selected the Companion recipient; this
- * module deliberately has no browser, socket, or credential dependency.
+ * Server-owned, non-buffering presentation sink. A future authorized gateway
+ * route supplies this one callback only after it has selected the Companion
+ * recipient; this module deliberately has no browser, socket, persistence, or
+ * credential dependency.
  */
 export type CompanionBridgePublisher = (event: CompanionBridgeEvent) => void;
 
@@ -101,6 +108,7 @@ function isCompanionChatEvent(value: unknown): value is CompanionChatEvent {
   const event = value as Record<string, unknown>;
   return (
     typeof event.runId === "string" &&
+    event.source === COMPANION_CHAT_EVENT_SOURCE &&
     typeof event.sessionKey === "string" &&
     typeof event.seq === "number" &&
     Number.isInteger(event.seq) &&
@@ -146,7 +154,7 @@ function readAssistantMessageText(message: unknown): string | undefined {
 }
 
 /**
- * Creates a local projection for one server-configured OpenClaw conversation.
+ * Creates a local projection for one server-configured Main conversation.
  * Browser-facing events deliberately omit the session key, agent id, run id,
  * provider, tool data, usage, and raw error details.
  */
@@ -158,6 +166,10 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
   };
   const runs = new Map<string, RunProjection>();
   let nextSequence = 0;
+
+  if (fixedBinding.agentId !== COMPANION_MAIN_AGENT_ID) {
+    throw new Error("invalid_companion_main_agent");
+  }
 
   const emitState = (phase: CompanionStateEvent["phase"]): CompanionStateEvent => ({
     type: "state",
@@ -188,6 +200,8 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
 
     beginRun: (input) => {
       if (
+        input.source !== COMPANION_RUN_START_SOURCE ||
+        input.status !== "started" ||
         input.sessionKey !== fixedBinding.sessionKey ||
         input.agentId !== fixedBinding.agentId ||
         input.runId.trim().length === 0
