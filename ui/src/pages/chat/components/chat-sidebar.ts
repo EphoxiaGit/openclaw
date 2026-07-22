@@ -11,6 +11,7 @@ import {
   toSanitizedMarkdownHtml,
 } from "../../../components/markdown.ts";
 import "../../../components/tooltip.ts";
+import { t } from "../../../i18n/index.ts";
 import { extractRawText } from "../../../lib/chat/message-extract.ts";
 import {
   resolveCanvasIframeUrl,
@@ -77,11 +78,41 @@ type FileSidebarContent = {
   unavailableReason?: DetailUnavailableReason | null;
 };
 
+export type WorkPlanSidebarContent = {
+  kind: "work-plan";
+  title: string;
+  projectName: string;
+  planDisplay: string;
+  planStatus: string;
+  summary: string;
+  focus: string;
+  capsuleCounts: {
+    constraints: number;
+    decisions: number;
+    openQuestions: number;
+    conflicts: number;
+  };
+  provenanceStatus: "Current" | "Stale" | "Unavailable";
+  objective: string;
+  activeSteps: string[];
+  readySteps: string[];
+  blockedSteps: string[];
+  evidenceCount: number;
+  revisions: { project: number; plan: number; goal: number; capsule: number };
+  checkpointPresent: boolean;
+  nextTask: string;
+  nextTaskSource: "Capsule" | "Checkpoint" | "Ready step" | "None";
+  rawText?: null;
+  fullMessageRequest?: never;
+  unavailableReason?: null;
+};
+
 export type SidebarContent =
   | MarkdownSidebarContent
   | CanvasSidebarContent
   | ImageSidebarContent
-  | FileSidebarContent;
+  | FileSidebarContent
+  | WorkPlanSidebarContent;
 
 function hasFullMessageRequest(content: SidebarContent): content is SidebarContent & {
   fullMessageRequest: NonNullable<SidebarContent["fullMessageRequest"]>;
@@ -122,6 +153,9 @@ export function buildRawSidebarContent(
   content: SidebarContent | null | undefined,
 ): SidebarContent | null {
   if (!content) {
+    return null;
+  }
+  if (content.kind === "work-plan") {
     return null;
   }
   if (content.kind === "markdown") {
@@ -436,6 +470,95 @@ function resolveSidebarCanvasSandbox(
   return content.kind === "canvas" ? resolveEmbedSandbox(embedSandboxMode) : "allow-scripts";
 }
 
+function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
+  const provenanceLabel =
+    content.provenanceStatus === "Current"
+      ? t("chat.liveWork.detail.current")
+      : content.provenanceStatus === "Stale"
+        ? t("chat.liveWork.stale")
+        : t("chat.liveWork.detail.unavailable");
+  const nextTaskSource =
+    content.nextTaskSource === "Capsule"
+      ? t("chat.liveWork.detail.capsule")
+      : content.nextTaskSource === "Checkpoint"
+        ? t("chat.liveWork.detail.checkpoint")
+        : content.nextTaskSource === "Ready step"
+          ? t("chat.liveWork.detail.readyStep")
+          : t("chat.liveWork.detail.none");
+  const steps = (label: string, values: string[]) => html` <section
+    class="work-plan-detail__section"
+  >
+    <h3>${label}</h3>
+    ${values.length
+      ? html`<ul>
+          ${values.map((value) => html`<li>${value}</li>`)}
+        </ul>`
+      : html`<p class="muted">${t("chat.liveWork.detail.none")}</p>`}
+  </section>`;
+  return html` <article class="work-plan-detail">
+    <p class="work-plan-detail__status">
+      <strong>${content.planDisplay}</strong> · ${content.planStatus}
+    </p>
+    <section class="work-plan-detail__section">
+      <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
+      <p>${content.summary}</p>
+      <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
+      <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
+      <dl class="work-plan-detail__counts">
+        <div>
+          <dt>${t("chat.liveWork.detail.constraints")}</dt>
+          <dd>${content.capsuleCounts.constraints}</dd>
+        </div>
+        <div>
+          <dt>${t("chat.liveWork.detail.decisions")}</dt>
+          <dd>${content.capsuleCounts.decisions}</dd>
+        </div>
+        <div>
+          <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
+          <dd>${content.capsuleCounts.openQuestions}</dd>
+        </div>
+        <div>
+          <dt>${t("chat.liveWork.detail.conflicts")}</dt>
+          <dd>${content.capsuleCounts.conflicts}</dd>
+        </div>
+      </dl>
+    </section>
+    <section class="work-plan-detail__section">
+      <h3>${t("chat.liveWork.detail.goal")}</h3>
+      <p>${content.objective}</p>
+    </section>
+    ${steps(t("chat.liveWork.detail.activeSteps"), content.activeSteps)}${steps(
+      t("chat.liveWork.detail.readySteps"),
+      content.readySteps,
+    )}${steps(t("chat.liveWork.detail.blockedSteps"), content.blockedSteps)}
+    <section class="work-plan-detail__section">
+      <h3>${t("chat.liveWork.detail.evidence")}</h3>
+      <p>
+        ${t("chat.liveWork.detail.evidenceSummary", {
+          count: String(content.evidenceCount),
+          checkpoint: t(
+            content.checkpointPresent
+              ? "chat.liveWork.detail.present"
+              : "chat.liveWork.detail.notPresent",
+          ),
+        })}
+      </p>
+      <p>
+        ${t("chat.liveWork.detail.revisions", {
+          project: String(content.revisions.project),
+          plan: String(content.revisions.plan),
+          goal: String(content.revisions.goal),
+          capsule: String(content.revisions.capsule),
+        })}
+      </p>
+    </section>
+    <section class="work-plan-detail__section">
+      <h3>${t("chat.liveWork.detail.nextTask")}</h3>
+      <p><span class="work-plan-detail__source">${nextTaskSource}</span> ${content.nextTask}</p>
+    </section>
+  </article>`;
+}
+
 type MarkdownSidebarProps = {
   content: SidebarContent | null;
   error: string | null;
@@ -472,9 +595,11 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
         ? content.title.trim() || "Image Preview"
         : content?.kind === "file"
           ? content.name.trim() || "File"
-          : content?.kind === "markdown"
-            ? "Markdown Preview"
-            : "Tool Details";
+          : content?.kind === "work-plan"
+            ? content.title
+            : content?.kind === "markdown"
+              ? "Markdown Preview"
+              : "Tool Details";
   return html`
     <div class="sidebar-panel">
       <div class="sidebar-header">
@@ -503,48 +628,28 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                 : nothing}
             `
           : content
-            ? content.kind === "file"
-              ? renderFileSidebarContent(content, props.onViewRawText, props.fileView)
-              : content.kind === "canvas"
-                ? html`
-                    <div class="chat-tool-card__preview" data-kind="canvas">
-                      <div class="chat-tool-card__preview-panel" data-side="front">
-                        ${keyed(
-                          `${canvasSandbox}\u0000${canvasSrc ?? ""}\u0000${content.preferredHeight ?? ""}`,
-                          html`
-                            <iframe
-                              class="chat-tool-card__preview-frame"
-                              title=${content.title?.trim() || "Render preview"}
-                              sandbox=${canvasSandbox}
-                              src=${canvasSrc ?? nothing}
-                              style=${content.preferredHeight
-                                ? `height:${content.preferredHeight}px`
-                                : ""}
-                            ></iframe>
-                          `,
-                        )}
-                      </div>
-                      ${content.rawText?.trim()
-                        ? html`
-                            <div style="margin-top: 12px;">
-                              <button @click=${props.onViewRawText} class="btn" type="button">
-                                View Raw Text
-                              </button>
-                            </div>
-                          `
-                        : nothing}
-                    </div>
-                  `
-                : content.kind === "image"
+            ? content.kind === "work-plan"
+              ? renderWorkPlanSidebar(content)
+              : content.kind === "file"
+                ? renderFileSidebarContent(content, props.onViewRawText, props.fileView)
+                : content.kind === "canvas"
                   ? html`
-                      <div class="chat-tool-card__preview" data-kind="image">
+                      <div class="chat-tool-card__preview" data-kind="canvas">
                         <div class="chat-tool-card__preview-panel" data-side="front">
-                          <img
-                            class="chat-tool-card__preview-image"
-                            src=${content.src}
-                            alt=${title}
-                            style="display:block;max-width:100%;height:auto;border-radius:8px;"
-                          />
+                          ${keyed(
+                            `${canvasSandbox}\u0000${canvasSrc ?? ""}\u0000${content.preferredHeight ?? ""}`,
+                            html`
+                              <iframe
+                                class="chat-tool-card__preview-frame"
+                                title=${content.title?.trim() || "Render preview"}
+                                sandbox=${canvasSandbox}
+                                src=${canvasSrc ?? nothing}
+                                style=${content.preferredHeight
+                                  ? `height:${content.preferredHeight}px`
+                                  : ""}
+                              ></iframe>
+                            `,
+                          )}
                         </div>
                         ${content.rawText?.trim()
                           ? html`
@@ -557,35 +662,57 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                           : nothing}
                       </div>
                     `
-                  : html`
-                      <section class="sidebar-markdown-shell">
-                        <div class="sidebar-markdown-shell__toolbar">
-                          <div class="sidebar-markdown-shell__intro">
-                            <div class="sidebar-markdown-shell__eyebrow">
-                              ${icons.scrollText}
-                              <span>Rendered Markdown</span>
-                            </div>
-                            <div class="sidebar-markdown-shell__hint">
-                              Sanitized rich-text preview for quick reading.
-                            </div>
+                  : content.kind === "image"
+                    ? html`
+                        <div class="chat-tool-card__preview" data-kind="image">
+                          <div class="chat-tool-card__preview-panel" data-side="front">
+                            <img
+                              class="chat-tool-card__preview-image"
+                              src=${content.src}
+                              alt=${title}
+                              style="display:block;max-width:100%;height:auto;border-radius:8px;"
+                            />
                           </div>
-                          <button @click=${props.onViewRawText} class="btn btn--sm" type="button">
-                            View Raw Text
-                          </button>
+                          ${content.rawText?.trim()
+                            ? html`
+                                <div style="margin-top: 12px;">
+                                  <button @click=${props.onViewRawText} class="btn" type="button">
+                                    View Raw Text
+                                  </button>
+                                </div>
+                              `
+                            : nothing}
                         </div>
-                        ${markdownHtml
-                          ? html`
-                              <article class="sidebar-markdown-reader sidebar-markdown">
-                                ${unsafeHTML(markdownHtml)}
-                              </article>
-                            `
-                          : html`
-                              <div class="sidebar-markdown-empty">
-                                No previewable markdown content.
+                      `
+                    : html`
+                        <section class="sidebar-markdown-shell">
+                          <div class="sidebar-markdown-shell__toolbar">
+                            <div class="sidebar-markdown-shell__intro">
+                              <div class="sidebar-markdown-shell__eyebrow">
+                                ${icons.scrollText}
+                                <span>Rendered Markdown</span>
                               </div>
-                            `}
-                      </section>
-                    `
+                              <div class="sidebar-markdown-shell__hint">
+                                Sanitized rich-text preview for quick reading.
+                              </div>
+                            </div>
+                            <button @click=${props.onViewRawText} class="btn btn--sm" type="button">
+                              View Raw Text
+                            </button>
+                          </div>
+                          ${markdownHtml
+                            ? html`
+                                <article class="sidebar-markdown-reader sidebar-markdown">
+                                  ${unsafeHTML(markdownHtml)}
+                                </article>
+                              `
+                            : html`
+                                <div class="sidebar-markdown-empty">
+                                  No previewable markdown content.
+                                </div>
+                              `}
+                        </section>
+                      `
             : html` <div class="muted">No content available</div> `}
       </div>
     </div>

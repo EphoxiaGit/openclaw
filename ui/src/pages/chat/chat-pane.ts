@@ -64,7 +64,13 @@ import {
   type ChatPageHost,
 } from "./chat-state.ts";
 import { renderChat, resetChatViewState, type ChatProps } from "./chat-view.ts";
+import { isChatComposerComposing } from "./components/chat-composer.ts";
 import { renderChatControls } from "./components/chat-controls.ts";
+import {
+  createLiveWorkState,
+  refreshLiveWork,
+  type LiveWorkState,
+} from "./components/chat-live-work.ts";
 import {
   createSessionWorkspaceProps,
   openSessionWorkspaceFile,
@@ -137,6 +143,9 @@ class ChatPane extends LitElement {
   private connectionGeneration = 0;
   private nativeDraftCleanup: (() => void) | null = null;
   private readonly unreadPatchGuard = new SessionUnreadPatchGuard();
+  private readonly liveWorkState: LiveWorkState = createLiveWorkState();
+  private liveWorkRunActive = false;
+  private liveWorkAnnouncement = "";
 
   private markSessionRead(row: GatewaySessionRow | undefined) {
     const state = this.state;
@@ -230,6 +239,17 @@ class ChatPane extends LitElement {
     void subscriptionSync;
     void historyLoad;
     void sessionsRefresh;
+    this.refreshLiveWork();
+  }
+
+  private refreshLiveWork() {
+    const state = this.state;
+    if (!state) {
+      return;
+    }
+    void refreshLiveWork(this.liveWorkState, state.client, state.sessionKey, state.connected, () =>
+      state.requestUpdate?.(),
+    );
   }
 
   private readonly handleCommandPaletteSlashCommand = (command: string) => {
@@ -328,6 +348,10 @@ class ChatPane extends LitElement {
     this.onFocusPane?.(this.paneId);
   };
 
+  private readonly handleComposerCompositionChange = () => {
+    this.state?.requestUpdate?.();
+  };
+
   private sendPendingSkillWorkshopRevision(expectedSessionKey: string) {
     const state = this.state;
     if (!this.active || !state || !state.connected || state.sessionKey !== expectedSessionKey) {
@@ -388,6 +412,16 @@ class ChatPane extends LitElement {
       });
       return;
     }
+    if (state.sidebarOpen && state.sidebarContent?.kind === "work-plan") {
+      event.preventDefault();
+      state.handleCloseSidebar();
+      void this.updateComplete.then(() =>
+        this.querySelector<HTMLButtonElement>(".chat-live-work__details")?.focus({
+          preventScroll: true,
+        }),
+      );
+      return;
+    }
     if (!state.chatMobileControlsOpen) {
       return;
     }
@@ -431,6 +465,7 @@ class ChatPane extends LitElement {
     super.connectedCallback();
     this.addEventListener("pointerdown", this.handlePaneFocus);
     this.addEventListener("focusin", this.handlePaneFocus);
+    this.addEventListener("chat-composer-composition-change", this.handleComposerCompositionChange);
     document.addEventListener("keydown", this.handleDocumentKeydown, true);
     document.addEventListener("pointerdown", this.handleDocumentPointerdown, true);
     const chatState = this.chatState;
@@ -439,6 +474,10 @@ class ChatPane extends LitElement {
       document.removeEventListener("pointerdown", this.handleDocumentPointerdown, true);
       this.removeEventListener("pointerdown", this.handlePaneFocus);
       this.removeEventListener("focusin", this.handlePaneFocus);
+      this.removeEventListener(
+        "chat-composer-composition-change",
+        this.handleComposerCompositionChange,
+      );
     });
     const pageState = createPageState(this.context, chatState.requestUpdate, this);
     pageState.createChatSession = async () => {
@@ -532,6 +571,11 @@ class ChatPane extends LitElement {
     if (select && this.state && select.value !== this.state.sessionKey) {
       select.value = this.state.sessionKey;
     }
+    const runActive = Boolean(this.state && (this.state.chatRunId || this.state.chatSending));
+    if (this.liveWorkRunActive && !runActive) {
+      this.refreshLiveWork();
+    }
+    this.liveWorkRunActive = runActive;
   }
 
   override disconnectedCallback() {
@@ -676,6 +720,7 @@ class ChatPane extends LitElement {
       state.realtimeTalkStatus = "idle";
       state.resetToolStream();
       state.requestUpdate?.();
+      this.refreshLiveWork();
       return;
     }
     if (clientChanged && snapshot.client) {
@@ -708,6 +753,7 @@ class ChatPane extends LitElement {
         }
       };
       this.connectedClient = startupClient;
+      this.refreshLiveWork();
       void syncSelectedSessionMessageSubscription(state, { force: true });
       void retryReconnectableQueuedChatSends(state);
       void refreshPageChat(state, { startup: true, awaitHistory: true }).finally(() => {
@@ -905,7 +951,10 @@ class ChatPane extends LitElement {
         realtimeTalkInputLoading: state.realtimeTalkInputLoading,
         realtimeTalkInputError: state.realtimeTalkInputError,
         canOpenRealtimeTalkSettings,
-        onRefresh: () => handleChatManualRefresh(state),
+        onRefresh: () => {
+          handleChatManualRefresh(state);
+          this.refreshLiveWork();
+        },
         onRealtimeTalkInputRefresh: () => void state.refreshRealtimeTalkInputs(true),
         onRealtimeTalkInputSelect: state.selectRealtimeTalkInput,
         onRealtimeTalkOptionsChange: state.updateRealtimeTalkOptions,
@@ -929,12 +978,51 @@ class ChatPane extends LitElement {
         onOpenSplitView: this.onOpenSplitView,
       }),
       sessionWorkspace: createSessionWorkspaceProps(state),
+      liveWork: this.liveWorkState.view
+        ? {
+            view: this.liveWorkState.view,
+            canContinue:
+              state.connected &&
+              !selectedSessionArchived &&
+              !hasAbortableSessionRun(state) &&
+              !state.chatSending &&
+              !isChatComposerComposing(this.paneId) &&
+              !state.chatMessage.trim() &&
+              !this.liveWorkState.view.stale,
+            announcement: this.liveWorkAnnouncement,
+            onContinue: (draft) => {
+              if (isChatComposerComposing(this.paneId)) {
+                return;
+              }
+              state.handleChatDraftChange(draft);
+              this.liveWorkAnnouncement = t("chat.liveWork.continuationPrepared");
+              state.requestUpdate?.();
+              void this.updateComplete.then(() =>
+                this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR)?.focus({
+                  preventScroll: true,
+                }),
+              );
+            },
+            onOpenDetails: (content) => {
+              state.handleOpenSidebar(content);
+              void this.updateComplete.then(() =>
+                this.querySelector<HTMLButtonElement>(
+                  ".chat-sidebar .sidebar-header button",
+                )?.focus({
+                  preventScroll: true,
+                }),
+              );
+            },
+            onRefresh: () => this.refreshLiveWork(),
+          }
+        : undefined,
       onOpenWorkspaceFile: (target) => openSessionWorkspaceFile(state, target),
       onRevealWorkspaceFile: (path) => revealSessionWorkspaceFile(state, path),
       onRefresh: () => {
         state.chatSideResult = null;
         state.resetToolStream();
         void refreshPageChat(state, { awaitHistory: true, scheduleScroll: false });
+        this.refreshLiveWork();
       },
       onChatScroll: state.handleChatScroll,
       getDraft: () => state.chatMessage,
@@ -1015,7 +1103,17 @@ class ChatPane extends LitElement {
       splitRatio: state.splitRatio,
       canvasPluginSurfaceUrl: state.hello?.pluginSurfaceUrls?.canvas ?? null,
       onOpenSidebar: state.handleOpenSidebar,
-      onCloseSidebar: state.handleCloseSidebar,
+      onCloseSidebar: () => {
+        const restoreWorkFocus = state.sidebarContent?.kind === "work-plan";
+        state.handleCloseSidebar();
+        if (restoreWorkFocus) {
+          void this.updateComplete.then(() =>
+            this.querySelector<HTMLButtonElement>(".chat-live-work__details")?.focus({
+              preventScroll: true,
+            }),
+          );
+        }
+      },
       onSplitRatioChange: state.handleSplitRatioChange,
       assistantName: state.assistantName,
       assistantAvatar: state.assistantAvatar,

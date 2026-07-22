@@ -4197,4 +4197,37 @@ describe("right-click Reply", () => {
     // Without onSetReply, the handler returns early and no menu is created
     expect(document.querySelector(".chat-reply-context-menu")).toBeNull();
   });
+
+  it("prepares live-work continuation through the existing draft callback without sending", () => {
+    const onContinue = vi.fn();
+    const onSend = vi.fn();
+    const container = renderChatView({
+      onSend,
+      liveWork: {
+        view: {
+          kind: "plan",
+          stale: false,
+          projectName: "Northstar",
+          planDisplay: "Plan 1/2",
+          planStatus: "ready",
+          currentStep: "Implement the next slice",
+          progressNow: 1,
+          progressMax: 2,
+          continueDraft: "Continue Northstar: Implement the next slice",
+        },
+        canContinue: true,
+        onContinue,
+        onOpenDetails: vi.fn(),
+        onRefresh: vi.fn(),
+      },
+    });
+    container
+      .querySelector<HTMLButtonElement>(".chat-live-work__actions button:last-child")
+      ?.click();
+    expect(onContinue).toHaveBeenCalledWith("Continue Northstar: Implement the next slice");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(
+      container.querySelector(".chat-live-work")?.closest(".agent-chat__composer-shell"),
+    ).not.toBeNull();
+  });
 });

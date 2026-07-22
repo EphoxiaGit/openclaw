@@ -93,6 +93,7 @@ type ChatComposerProps = {
   realtimeTalkDetail?: string | null;
   realtimeTalkConversation?: RealtimeTalkConversationEntry[];
   composerControls?: TemplateResult | typeof nothing;
+  liveWork?: TemplateResult | typeof nothing;
   getDraft?: () => string;
   onDraftChange: (next: string) => void;
   onRequestUpdate?: () => void;
@@ -168,6 +169,10 @@ function getChatComposerState(paneId: string): ChatComposerState {
   const state = createChatComposerState();
   composerStates.set(paneId, state);
   return state;
+}
+
+export function isChatComposerComposing(paneId: string): boolean {
+  return composerStates.get(paneId)?.composerComposing === true;
 }
 
 function hasTerminalRunStatus(status: ChatRunUiStatus | null | undefined): boolean {
@@ -2121,6 +2126,9 @@ export function renderChatComposer(props: ChatComposerProps) {
   };
   const handleCompositionEnd = (event: CompositionEvent) => {
     state.composerComposing = false;
+    (event.target as HTMLElement).dispatchEvent(
+      new CustomEvent("chat-composer-composition-change", { bubbles: true, composed: true }),
+    );
     if (state.composingDraft?.key === draftKey) {
       state.composingDraft = null;
     }
@@ -2193,6 +2201,7 @@ export function renderChatComposer(props: ChatComposerProps) {
       : nothing}
 
     <div class="agent-chat__composer-shell">
+      ${props.liveWork ?? nothing}
       ${mobileRunStatusIndicator !== nothing && composerRunStatus
         ? html`
             <div
@@ -2396,6 +2405,12 @@ export function renderChatComposer(props: ChatComposerProps) {
               @input=${handleInput}
               @compositionstart=${(event: CompositionEvent) => {
                 state.composerComposing = true;
+                (event.target as HTMLElement).dispatchEvent(
+                  new CustomEvent("chat-composer-composition-change", {
+                    bubbles: true,
+                    composed: true,
+                  }),
+                );
                 state.composingDraft = {
                   key: draftKey,
                   value: (event.target as HTMLTextAreaElement).value,

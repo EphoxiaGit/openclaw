@@ -834,6 +834,68 @@ openclaw-chat-page {
   margin: 8px auto 14px;
 }
 
+.chat-live-work {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-live-work__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-live-work__progress {
+  height: 4px;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+
+.chat-live-work__progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--duration-fast) ease;
+}
+
+.chat-live-work__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .chat-live-work__actions .btn {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-live-work__progress > span {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .chat-live-work,
+  .chat-live-work__progress {
+    border: 1px solid CanvasText;
+  }
+  .chat-live-work__progress > span {
+    background: Highlight;
+  }
+}
+
 .agent-chat__input {
   --chat-box-inset: 8px;
 

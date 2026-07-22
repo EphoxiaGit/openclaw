@@ -58,6 +58,59 @@
   animation: chat-sidebar-fade-in 160ms ease-out;
 }
 
+.work-plan-detail {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.work-plan-detail__section h3,
+.work-plan-detail__section p {
+  margin-top: 0;
+}
+
+.work-plan-detail__section ul {
+  margin: 0;
+  padding-inline-start: 22px;
+}
+
+.work-plan-detail__counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.work-plan-detail__counts div {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.work-plan-detail__counts dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+
+.work-plan-detail__source {
+  display: inline-block;
+  margin-inline-end: 6px;
+  color: var(--muted);
+  font-size: 0.875em;
+}
+
+@media (max-width: 480px) {
+  .work-plan-detail__counts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (forced-colors: active) {
+  .work-plan-detail__counts div {
+    border-color: CanvasText;
+  }
+}
+
 .chat-workspace-rail {
   grid-column: 2;
   grid-row: 1;

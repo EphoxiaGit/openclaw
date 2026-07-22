@@ -20,6 +20,7 @@ import {
   renderChatComposer,
   resetChatComposerState,
 } from "./components/chat-composer.ts";
+import { renderLiveWorkStrip, type LiveWorkProps } from "./components/chat-live-work.ts";
 import {
   renderSessionWorkspaceRail,
   type SessionWorkspaceProps,
@@ -143,6 +144,7 @@ export type ChatProps = {
   onClearReply?: () => void;
   onSetReply?: (target: { messageId: string; text: string; senderLabel?: string | null }) => void;
   sessionWorkspace?: SessionWorkspaceProps;
+  liveWork?: LiveWorkProps;
 };
 
 export function resetChatViewState(paneId?: string) {
@@ -229,6 +231,7 @@ export function renderChat(props: ChatProps) {
     realtimeTalkDetail: props.realtimeTalkDetail,
     realtimeTalkConversation: props.realtimeTalkConversation,
     composerControls: props.composerControls,
+    liveWork: renderLiveWorkStrip(props.liveWork),
     getDraft: props.getDraft,
     onDraftChange: props.onDraftChange,
     onRequestUpdate: requestUpdate,
