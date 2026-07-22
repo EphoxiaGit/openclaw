@@ -1694,4 +1694,47 @@ CREATE TABLE IF NOT EXISTS persona_transitions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_persona_transitions_persona
-  ON persona_transitions(persona_id, sequence);\n`;
+  ON persona_transitions(persona_id, sequence);
+
+CREATE TABLE IF NOT EXISTS work_input_requests (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id TEXT NOT NULL UNIQUE,
+  revision INTEGER NOT NULL CHECK (revision >= 1),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'resolved', 'cancelled', 'expired')),
+  session_key TEXT NOT NULL,
+  project_id TEXT,
+  plan_id TEXT,
+  step_id TEXT,
+  task_id TEXT,
+  request_json TEXT NOT NULL,
+  response_json TEXT,
+  flow_id TEXT,
+  flow_revision INTEGER,
+  cancel_outcome TEXT NOT NULL DEFAULT 'cancelled' CHECK (cancel_outcome IN ('waiting', 'cancelled', 'rejected')),
+  expiry_outcome TEXT NOT NULL DEFAULT 'cancelled' CHECK (expiry_outcome IN ('waiting', 'cancelled', 'rejected')),
+  delivery_status TEXT NOT NULL CHECK (delivery_status IN ('not_applicable', 'pending', 'applied', 'failed')),
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_input_requests_session_status
+  ON work_input_requests(session_key, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_work_input_requests_project_status
+  ON work_input_requests(project_id, status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS work_input_request_transitions (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  transition_id TEXT NOT NULL UNIQUE,
+  request_id TEXT NOT NULL REFERENCES work_input_requests(request_id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  idempotency_key TEXT,
+  request_hash TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE (request_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_input_transitions_request
+  ON work_input_request_transitions(request_id, sequence);\n`;

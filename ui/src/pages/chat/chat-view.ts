@@ -142,6 +142,7 @@ export type ChatProps = {
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
   basePath?: string;
+  inputRequest?: TemplateResult | typeof nothing;
   composerControls?: TemplateResult | typeof nothing;
   replyTarget?: { messageId: string; text: string; senderLabel?: string | null } | null;
   onClearReply?: () => void;
@@ -233,6 +234,7 @@ export function renderChat(props: ChatProps) {
     realtimeTalkStatus: props.realtimeTalkStatus,
     realtimeTalkDetail: props.realtimeTalkDetail,
     realtimeTalkConversation: props.realtimeTalkConversation,
+    inputRequest: props.inputRequest,
     composerControls: props.composerControls,
     liveWork: renderLiveWorkStrip(props.liveWork),
     getDraft: props.getDraft,

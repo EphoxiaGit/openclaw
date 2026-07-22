@@ -86,6 +86,10 @@ const loadPersonaHandlers = lazyHandlerModule(
   () => import("./server-methods/personas.js"),
   (module) => module.personaHandlers,
 );
+const loadWorkInputHandlers = lazyHandlerModule(
+  () => import("./server-methods/work-inputs.js"),
+  (module) => module.workInputHandlers,
+);
 const loadAuditHandlers = lazyHandlerModule(
   () => import("./server-methods/audit.js"),
   (module) => module.auditHandlers,
@@ -521,6 +525,10 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
       "personas.history",
     ],
     loadHandlers: loadPersonaHandlers,
+  }),
+  ...createLazyCoreHandlers({
+    methods: ["work.inputs.list", "work.inputs.get", "work.inputs.resolve", "work.inputs.cancel"],
+    loadHandlers: loadWorkInputHandlers,
   }),
   ...createLazyCoreHandlers({
     methods: [

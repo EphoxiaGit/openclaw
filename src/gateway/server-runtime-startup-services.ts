@@ -1,6 +1,7 @@
 // Gateway startup-time runtime services.
 // Starts mode-dependent background monitors with inert handles for disabled paths.
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { WorkInputService } from "../work-inputs/service.js";
 import type { ChannelHealthMonitor } from "./channel-health-monitor.js";
 import { startChannelHealthMonitor } from "./channel-health-monitor.js";
 import {
@@ -47,6 +48,7 @@ export function startGatewayRuntimeServices(params: {
   channelHealthMonitor: ChannelHealthMonitor | null;
   stopModelPricingRefresh: () => void;
 } {
+  new WorkInputService().reconcile();
   const channelHealthMonitor = startGatewayChannelHealthMonitor({
     cfg: params.cfgAtStart,
     channelManager: params.channelManager,

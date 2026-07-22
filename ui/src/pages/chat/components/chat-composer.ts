@@ -92,6 +92,7 @@ type ChatComposerProps = {
   realtimeTalkStatus?: RealtimeTalkStatus;
   realtimeTalkDetail?: string | null;
   realtimeTalkConversation?: RealtimeTalkConversationEntry[];
+  inputRequest?: TemplateResult | typeof nothing;
   composerControls?: TemplateResult | typeof nothing;
   liveWork?: TemplateResult | typeof nothing;
   getDraft?: () => string;
@@ -2201,7 +2202,7 @@ export function renderChatComposer(props: ChatComposerProps) {
       : nothing}
 
     <div class="agent-chat__composer-shell">
-      ${props.liveWork ?? nothing}
+      ${props.inputRequest ?? nothing} ${props.liveWork ?? nothing}
       ${mobileRunStatusIndicator !== nothing && composerRunStatus
         ? html`
             <div

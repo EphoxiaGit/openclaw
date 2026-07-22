@@ -40,6 +40,8 @@ const EVENT_SCOPE_GUARDS: Record<string, string[]> = {
   task: [READ_SCOPE],
   "persona.changed": [READ_SCOPE],
   "persona.selection.changed": [READ_SCOPE],
+  "work.input.requested": [READ_SCOPE],
+  "work.input.changed": [READ_SCOPE],
   "update.available": [],
   "voicewake.changed": [READ_SCOPE],
   "voicewake.routing.changed": [READ_SCOPE],

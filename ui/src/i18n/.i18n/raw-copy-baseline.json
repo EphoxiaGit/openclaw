@@ -1998,6 +1998,20 @@
     },
     {
       "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/chat/components/chat-controls.ts",
+      "text": "No Persona"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/chat/components/chat-controls.ts",
+      "text": "Persona"
+    },
+    {
+      "count": 1,
       "kind": "html-attribute",
       "name": "aria-label",
       "path": "ui/src/pages/chat/components/chat-message.ts",
@@ -4340,6 +4354,363 @@
       "name": "placeholder",
       "path": "ui/src/pages/overview/view.ts",
       "text": "ws://100.x.y.z:18789"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "aria-label",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Persona settings"
+    },
+    {
+      "count": 2,
+      "kind": "html-attribute",
+      "name": "placeholder",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "agent-a, agent-b"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Active"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Active revision"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Add a reusable identity above Agents without changing Agent files."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Agent Binding"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Archive"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Archive unused Personas before permanently deleting them."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Backing Agent"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Behavior guidance"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Behavior guidance (SOUL.md)"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Cancel"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Choose the primary execution Agent and the Agents this Persona may delegate to."
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Communication style"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Create an immutable revision of this Persona's identity and behavior."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Create Lucy from an Agent's IDENTITY.md and SOUL.md files."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Create Lucy Persona"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Create Persona"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Create revision"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Create your first Persona"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Delegate Agent IDs"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Delete"
+    },
+    {
+      "count": 3,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Description"
+    },
+    {
+      "count": 3,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Display name"
+    },
+    {
+      "count": 3,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Identity"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Identity & behavior"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Identity & Personality"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Identity metadata and lifecycle."
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Import Lucy"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Lifecycle"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "New Persona"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "No Personas yet"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "No revisions recorded."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Overview"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Personas combine identity and personality with one or more Agents."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Preview import"
+    },
+    {
+      "count": 3,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Primary Agent"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Relationship"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Restore"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Review or restore a previous immutable Persona revision."
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Revision history"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Revision reason"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Rollback"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Save Agent binding"
+    },
+    {
+      "count": 1,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Save profile"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Select Agent"
+    },
+    {
+      "count": 2,
+      "kind": "html-text",
+      "name": "text",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Slug"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Agent Binding"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Identity & Personality"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Overview"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/pages/personas/personas-page.ts",
+      "text": "Revisions"
     },
     {
       "count": 1,

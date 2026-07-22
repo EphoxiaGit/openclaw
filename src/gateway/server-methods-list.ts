@@ -55,6 +55,8 @@ export const GATEWAY_EVENTS = [
   "task",
   "persona.changed",
   "persona.selection.changed",
+  "work.input.requested",
+  "work.input.changed",
   "node.pair.requested",
   "node.pair.resolved",
   "node.invoke.request",

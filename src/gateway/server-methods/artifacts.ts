@@ -586,6 +586,20 @@ function toSummary(artifact: ArtifactRecord): ArtifactSummary {
   return summary;
 }
 
+/** Validates an artifact id through the same transcript/session scope as artifacts.get. */
+export async function validateManagedArtifactReference(params: {
+  artifactId: string;
+  sessionKey: string;
+  config: OpenClawConfig;
+}): Promise<boolean> {
+  const { artifact } = await findArtifact(
+    { artifactId: params.artifactId, sessionKey: params.sessionKey },
+    params.config,
+    { includeDownloadData: false },
+  );
+  return artifact !== undefined;
+}
+
 /** Gateway handlers for listing, summarizing, and downloading transcript artifacts. */
 export const artifactsHandlers: GatewayRequestHandlers = {
   "artifacts.list": async ({ params, respond, context }) => {

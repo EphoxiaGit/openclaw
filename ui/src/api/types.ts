@@ -21,6 +21,11 @@ export type {
   PersonasSelectionGetParams,
   PersonasSelectionSetParams,
 } from "../../../packages/gateway-protocol/src/schema/personas.js";
+export type {
+  WorkInputRequest,
+  WorkInputResponse,
+  WorkInputsResolveParams,
+} from "../../../packages/gateway-protocol/src/schema/work-inputs.js";
 
 export type ChannelsStatusSnapshot = {
   ts: number;

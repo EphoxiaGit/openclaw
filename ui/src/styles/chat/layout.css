@@ -846,6 +846,70 @@ openclaw-chat-page {
   box-shadow: var(--shadow-sm);
 }
 
+.chat-input-request {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-input-request__header,
+.chat-input-request__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-input-request__header strong,
+.chat-input-request__description {
+  overflow-wrap: anywhere;
+}
+
+.chat-input-request__description {
+  color: var(--muted);
+}
+
+.chat-input-request__form,
+.chat-input-request__choices {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-input-request__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.chat-input-request__choice input {
+  margin-top: 2px;
+}
+
+.chat-input-request__secret-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .chat-input-request__header,
+  .chat-input-request__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chat-input-request__secret-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .chat-live-work__summary {
   display: flex;
   flex-wrap: wrap;
@@ -887,6 +951,7 @@ openclaw-chat-page {
 }
 
 @media (forced-colors: active) {
+  .chat-input-request,
   .chat-live-work,
   .chat-live-work__progress {
     border: 1px solid CanvasText;

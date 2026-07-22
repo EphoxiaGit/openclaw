@@ -1175,6 +1175,40 @@ export interface WorkGoals {
   updated_at: number;
 }
 
+export interface WorkInputRequestTransitions {
+  action: string;
+  actor_id: string;
+  created_at: number;
+  idempotency_key: string | null;
+  request_hash: string;
+  request_id: string;
+  result_json: string;
+  sequence: Generated<number>;
+  transition_id: string;
+}
+
+export interface WorkInputRequests {
+  cancel_outcome: Generated<string>;
+  created_at: number;
+  delivery_status: string;
+  expires_at: number | null;
+  expiry_outcome: Generated<string>;
+  flow_id: string | null;
+  flow_revision: number | null;
+  plan_id: string | null;
+  project_id: string | null;
+  request_id: string;
+  request_json: string;
+  response_json: string | null;
+  revision: number;
+  sequence: Generated<number>;
+  session_key: string;
+  status: string;
+  step_id: string | null;
+  task_id: string | null;
+  updated_at: number;
+}
+
 export interface WorkPlanMutationReceipts {
   created_at: number;
   idempotency_key: string;
@@ -1399,6 +1433,8 @@ export interface DB {
   web_push_subscriptions: WebPushSubscriptions;
   web_push_vapid_keys: WebPushVapidKeys;
   work_goals: WorkGoals;
+  work_input_request_transitions: WorkInputRequestTransitions;
+  work_input_requests: WorkInputRequests;
   work_plan_mutation_receipts: WorkPlanMutationReceipts;
   work_plan_requirements: WorkPlanRequirements;
   work_plan_step_attempts: WorkPlanStepAttempts;

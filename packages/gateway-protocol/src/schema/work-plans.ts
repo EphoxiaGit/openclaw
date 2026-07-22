@@ -513,6 +513,7 @@ const WorkPlanOrchestrationSchema = Type.Object(
       Type.Literal("other"),
       Type.Literal("none"),
     ]),
+    inputRequestId: Type.Optional(NonEmptyString),
     attemptNumber: Type.Integer({ minimum: 1 }),
     taskCount: Type.Integer({ minimum: 0 }),
     activeTaskCount: Type.Integer({ minimum: 0 }),

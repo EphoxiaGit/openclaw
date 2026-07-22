@@ -380,6 +380,19 @@ import {
   WizardStepSchema,
 } from "./wizard.js";
 import {
+  WorkInputChangedEventSchema,
+  WorkInputRequestedEventSchema,
+  WorkInputRequestSchema,
+  WorkInputResponseSchema,
+  WorkInputsCancelParamsSchema,
+  WorkInputsGetParamsSchema,
+  WorkInputsGetResultSchema,
+  WorkInputsListParamsSchema,
+  WorkInputsListResultSchema,
+  WorkInputsMutationResultSchema,
+  WorkInputsResolveParamsSchema,
+} from "./work-inputs.js";
+import {
   WorkCapsulesUpdateParamsSchema,
   WorkCapsulesUpdateResultSchema,
   WorkCheckpointsCreateParamsSchema,
@@ -451,6 +464,17 @@ export const ProtocolSchemas = {
   PersonasHistoryResult: PersonasHistoryResultSchema,
   PersonaChangedEvent: PersonaChangedEventSchema,
   PersonaSelectionChangedEvent: PersonaSelectionChangedEventSchema,
+  WorkInputRequest: WorkInputRequestSchema,
+  WorkInputResponse: WorkInputResponseSchema,
+  WorkInputsListParams: WorkInputsListParamsSchema,
+  WorkInputsListResult: WorkInputsListResultSchema,
+  WorkInputsGetParams: WorkInputsGetParamsSchema,
+  WorkInputsGetResult: WorkInputsGetResultSchema,
+  WorkInputsResolveParams: WorkInputsResolveParamsSchema,
+  WorkInputsCancelParams: WorkInputsCancelParamsSchema,
+  WorkInputsMutationResult: WorkInputsMutationResultSchema,
+  WorkInputRequestedEvent: WorkInputRequestedEventSchema,
+  WorkInputChangedEvent: WorkInputChangedEventSchema,
   // Handshake, transport frames, state snapshots, and shared error envelopes.
   ConnectParams: ConnectParamsSchema,
   HelloOk: HelloOkSchema,

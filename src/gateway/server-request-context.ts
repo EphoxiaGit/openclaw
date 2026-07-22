@@ -58,6 +58,7 @@ export type GatewayRequestContextParams = {
   unsubscribeSessionMessageEvents: GatewayRequestContext["unsubscribeSessionMessageEvents"];
   unsubscribeAllSessionEvents: GatewayRequestContext["unsubscribeAllSessionEvents"];
   getSessionEventSubscriberConnIds: GatewayRequestContext["getSessionEventSubscriberConnIds"];
+  getSessionMessageSubscriberConnIds?: GatewayRequestContext["getSessionMessageSubscriberConnIds"];
   registerToolEventRecipient: GatewayRequestContext["registerToolEventRecipient"];
   dedupe: GatewayRequestContext["dedupe"];
   wizardSessions: GatewayRequestContext["wizardSessions"];
@@ -204,6 +205,9 @@ export function createGatewayRequestContext(
     unsubscribeSessionMessageEvents: params.unsubscribeSessionMessageEvents,
     unsubscribeAllSessionEvents: params.unsubscribeAllSessionEvents,
     getSessionEventSubscriberConnIds: params.getSessionEventSubscriberConnIds,
+    ...(params.getSessionMessageSubscriberConnIds
+      ? { getSessionMessageSubscriberConnIds: params.getSessionMessageSubscriberConnIds }
+      : {}),
     registerToolEventRecipient: params.registerToolEventRecipient,
     dedupe: params.dedupe,
     wizardSessions: params.wizardSessions,

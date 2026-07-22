@@ -2,7 +2,7 @@ import { consume } from "@lit/context";
 import { html, LitElement } from "lit";
 import { property } from "lit/decorators.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import type { GatewaySessionRow } from "../../api/types.ts";
+import type { GatewaySessionRow, WorkInputRequest, WorkInputResponse } from "../../api/types.ts";
 import {
   applicationContext,
   type ApplicationContext,
@@ -66,6 +66,7 @@ import {
 import { renderChat, resetChatViewState, type ChatProps } from "./chat-view.ts";
 import { isChatComposerComposing } from "./components/chat-composer.ts";
 import { renderChatControls } from "./components/chat-controls.ts";
+import { renderChatInputRequest } from "./components/chat-input-request.ts";
 import {
   canActivateLiveWorkContinue,
   createLiveWorkState,
@@ -156,6 +157,83 @@ class ChatPane extends LitElement {
   private personaSelection: { personaId: string; recordRevision: number } | null = null;
   private personaSelectionLoading = true;
   private personaSelectionGeneration = 0;
+  private workInputBusy = false;
+  private workInputError: string | null = null;
+
+  private readonly resolveWorkInput = async (
+    request: WorkInputRequest,
+    response: WorkInputResponse,
+  ) => {
+    const current = this.pendingWorkInput();
+    if (
+      !current ||
+      current.id !== request.id ||
+      current.revision !== request.revision ||
+      this.workInputBusy
+    ) {
+      return;
+    }
+    this.workInputBusy = true;
+    this.workInputError = null;
+    this.requestUpdate();
+    try {
+      await this.context.workInputs.resolve(current, response);
+    } catch (error) {
+      this.workInputError = String(error);
+    } finally {
+      this.workInputBusy = false;
+      this.requestUpdate();
+    }
+  };
+
+  private readonly cancelWorkInput = async (request: WorkInputRequest) => {
+    const current = this.pendingWorkInput();
+    if (
+      !current ||
+      current.id !== request.id ||
+      current.revision !== request.revision ||
+      this.workInputBusy
+    ) {
+      return;
+    }
+    this.workInputBusy = true;
+    this.requestUpdate();
+    try {
+      await this.context.workInputs.cancel(current);
+    } catch (error) {
+      this.workInputError = String(error);
+    } finally {
+      this.workInputBusy = false;
+      this.requestUpdate();
+    }
+  };
+
+  private pendingWorkInput(): WorkInputRequest | undefined {
+    const sessionKey = this.state?.sessionKey;
+    if (!sessionKey) {
+      return undefined;
+    }
+    return this.context.workInputs
+      .forSession(sessionKey)
+      .requests.find(
+        (request) => request.status === "pending" && request.sessionKey === sessionKey,
+      );
+  }
+
+  private async refreshWorkInputsAfterSubscription(
+    state: ChatPageHost,
+    sessionKey: string,
+    options?: { force?: boolean },
+  ): Promise<void> {
+    await syncSelectedSessionMessageSubscription(state, options);
+    if (
+      state.sessionKey !== sessionKey ||
+      state.chatSessionMessageSubscriptionRequestedKey !== sessionKey
+    ) {
+      return;
+    }
+    await this.context.workInputs.refresh(sessionKey);
+  }
 
   private async refreshPersonaSelection(sessionKey = this.state?.sessionKey) {
     if (!sessionKey) {
@@ -292,7 +370,7 @@ class ChatPane extends LitElement {
     void refreshChatAvatar(state);
     void refreshChatMetadata(state).finally(() => state.requestUpdate?.());
     void this.refreshPersonaSelection(nextSessionKey);
-    const subscriptionSync = syncSelectedSessionMessageSubscription(state);
+    const subscriptionSync = this.refreshWorkInputsAfterSubscription(state, nextSessionKey);
     const historyLoad = loadChatHistory(state);
     state.requestUpdate();
     const scheduleHistoryScroll = () => {
@@ -665,6 +743,7 @@ class ChatPane extends LitElement {
         this.requestUpdate();
       }),
     );
+    chatState.addCleanup(this.context.workInputs.subscribe(() => this.requestUpdate()));
     void this.context.personas.refresh(true);
     void this.refreshPersonaSelection();
     this.applyGatewaySnapshot(this.context.gateway.snapshot);
@@ -901,7 +980,7 @@ class ChatPane extends LitElement {
       };
       this.connectedClient = startupClient;
       this.refreshLiveWork();
-      void syncSelectedSessionMessageSubscription(state, { force: true });
+      void this.refreshWorkInputsAfterSubscription(state, startupSessionKey, { force: true });
       void retryReconnectableQueuedChatSends(state);
       void refreshPageChat(state, { startup: true, awaitHistory: true }).finally(() => {
         void finishStartup();
@@ -1050,6 +1129,7 @@ class ChatPane extends LitElement {
     const canOpenRealtimeTalkSettings = hasOperatorAdminAccess(
       this.context.gateway.snapshot.hello?.auth ?? null,
     );
+    const pendingWorkInput = this.pendingWorkInput();
     const props: ChatProps = {
       paneId: this.paneId,
       sessionKey: state.sessionKey,
@@ -1089,6 +1169,21 @@ class ChatPane extends LitElement {
         basePath: state.basePath,
         modelAuthStatusResult: state.modelAuthStatusResult,
       },
+      inputRequest: renderChatInputRequest({
+        request: pendingWorkInput,
+        busy: this.workInputBusy,
+        error: this.workInputError ?? this.context.workInputs.forSession(state.sessionKey).error,
+        onResolve: (response) => {
+          if (pendingWorkInput) {
+            void this.resolveWorkInput(pendingWorkInput, response);
+          }
+        },
+        onCancel: () => {
+          if (pendingWorkInput) {
+            void this.cancelWorkInput(pendingWorkInput);
+          }
+        },
+      }),
       composerControls: renderChatControls({
         paneId: this.paneId,
         agentsList: state.agentsList,

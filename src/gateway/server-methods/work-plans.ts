@@ -298,7 +298,11 @@ function orchestrationWait(flow: TaskFlowRecord | undefined) {
     };
   }
   if (kind === "input_request") {
-    return { kind: "input" as const, resumable: false };
+    return {
+      kind: "input" as const,
+      resumable: false,
+      ...(typeof wait.requestId === "string" ? { inputRequestId: wait.requestId } : {}),
+    };
   }
   return { kind: "other" as const, resumable: false };
 }
@@ -359,6 +363,7 @@ export function projectWorkPlanOrchestration(params: {
         ...(phase ? { phase } : {}),
         state,
         waitKind: wait.kind,
+        ...(wait.inputRequestId ? { inputRequestId: wait.inputRequestId } : {}),
         attemptNumber: attempt.attemptNumber,
         taskCount: tasks.length,
         activeTaskCount: tasks.filter(
