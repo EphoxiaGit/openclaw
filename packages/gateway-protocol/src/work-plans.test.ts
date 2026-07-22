@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   validateWorkCapsulesUpdateParams,
+  validateWorkCheckpointsCreateResult,
   validateWorkDocumentsGetResult,
+  validateWorkHandoffsCreateResult,
   validateWorkPlansCreateParams,
   validateWorkPlansCreateResult,
   validateWorkPlansGetResult,
@@ -9,13 +11,16 @@ import {
   validateWorkPlansMutateParams,
   validateWorkPlansMutateResult,
   validateWorkPlansProjectionResult,
+  validateWorkProjectContextGetResult,
   validateWorkProjectsCreateParams,
   validateWorkProjectsCreateRegisteredParams,
+  validateWorkProjectsCreateRegisteredResult,
   validateWorkProjectsCreateResult,
   validateWorkProjectsGetResult,
   validateWorkProjectsListResult,
   validateWorkRegisteredProjectsGetResult,
   validateWorkRegisteredProjectsListParams,
+  validateWorkRegisteredProjectsListResult,
 } from "./index.js";
 
 describe("work-plan gateway validation", () => {
@@ -86,31 +91,34 @@ describe("work-plan gateway validation", () => {
         idempotencyKey: "once",
       }),
     ).toBe(true);
-    expect(
-      validateWorkCapsulesUpdateParams({
-        projectId: "project-1",
-        expectedRevision: 1,
-        idempotencyKey: "capsule-1",
-        content: {
-          summary: "Summary",
-          currentFocus: "Focus",
-          constraints: [],
-          decisions: [],
-          openQuestions: [],
-          conflicts: [],
-          explicitNextTask: "Next",
-        },
-        provenance: [
-          { sourceType: "registered_document", sourceId: "constraints", sourceRevision: 1 },
-        ],
-      }),
-    ).toBe(true);
+    const capsuleUpdate = {
+      projectId: "project-1",
+      expectedRevision: 1,
+      idempotencyKey: "capsule-1",
+      content: {
+        summary: "Summary",
+        currentFocus: "Focus",
+        constraints: [],
+        decisions: [],
+        openQuestions: [],
+        conflicts: [],
+        explicitNextTask: "Next",
+      },
+      provenance: [
+        { sourceType: "registered_document" as const, sourceId: "constraints", sourceRevision: 1 },
+      ],
+    };
+    expect(validateWorkCapsulesUpdateParams(capsuleUpdate)).toBe(true);
+    expect(validateWorkCapsulesUpdateParams({ ...capsuleUpdate, actorId: "client-forged" })).toBe(
+      false,
+    );
     for (const forbidden of [
       { repoRoot: "/private" },
       { repositoryLocator: "ssh://private" },
       { command: "rm -rf" },
       { model: "arbitrary" },
       { sessionId: "forged" },
+      { sessionGoalRef: "forged" },
       { worktreeId: "forged" },
       { capabilities: ["shell"] },
       { actorId: "client-forged" },
@@ -184,6 +192,95 @@ describe("work-plan gateway validation", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("validates registered list, create, context, checkpoint, and handoff results", () => {
+    const registeredProject = {
+      registeredProjectId: "glass",
+      displayName: "Glass",
+      enabled: true,
+      profile: "repo-planning-v1",
+      defaultConversationId: "conversation-main",
+      recordRevision: 1,
+      updatedAt: 1,
+      repositories: [
+        {
+          repositoryId: "main",
+          displayName: "Main",
+          active: true,
+          primary: true,
+          recordRevision: 1,
+        },
+      ],
+      documents: [],
+    } as const;
+    expect(validateWorkRegisteredProjectsListResult({ projects: [registeredProject] })).toBe(true);
+    expect(
+      validateWorkProjectsCreateRegisteredResult({
+        registeredProjectId: "glass",
+        projectId: "project-1",
+        goalId: "goal-1",
+        primaryConversationId: "conversation-main",
+        recordRevision: 1,
+      }),
+    ).toBe(true);
+    expect(
+      validateWorkProjectContextGetResult({
+        context: {
+          project: {
+            projectId: "project-1",
+            primaryConversationId: "conversation-main",
+            recordRevision: 1,
+            updatedAt: 1,
+          },
+          registeredProject,
+          goal: { goalId: "goal-1", objective: "Ship", recordRevision: 1 },
+          plans: [],
+        },
+      }),
+    ).toBe(true);
+    const checkpoint = {
+      documentId: "checkpoint-1",
+      kind: "checkpoint",
+      revision: 1,
+      immutable: true,
+      content: {
+        objective: "Ship",
+        progress: [],
+        files: [],
+        tests: [],
+        blockers: [],
+        exactNextAction: "Continue",
+        plans: [],
+      },
+      provenance: [],
+      createdAt: 1,
+    } as const;
+    expect(
+      validateWorkCheckpointsCreateResult({ document: checkpoint, projectRecordRevision: 2 }),
+    ).toBe(true);
+    expect(
+      validateWorkHandoffsCreateResult({
+        document: {
+          documentId: "handoff-1",
+          kind: "handoff",
+          revision: 1,
+          immutable: true,
+          content: {
+            checkpointDocumentId: "checkpoint-1",
+            objective: "Ship",
+            progress: [],
+            blockers: [],
+            exactNextAction: "Continue",
+          },
+          provenance: [
+            { sourceType: "project_document", sourceId: "checkpoint-1", sourceRevision: 1 },
+          ],
+          createdAt: 1,
+        },
+        projectRecordRevision: 3,
+      }),
+    ).toBe(true);
   });
 
   it("exports typed result validators for every work RPC", () => {

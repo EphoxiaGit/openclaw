@@ -140,6 +140,23 @@ function ensureColumn(db: DatabaseSync, tableName: string, columnSql: string): b
   return true;
 }
 
+function ensureRegisteredProjectSchema(db: DatabaseSync): void {
+  ensureColumn(
+    db,
+    "registered_project_documents",
+    "active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))",
+  );
+  if (!tableExists(db, "registered_project_repositories")) {
+    return;
+  }
+  db.exec(`
+    DROP INDEX IF EXISTS idx_registered_project_primary_repository;
+    CREATE UNIQUE INDEX idx_registered_project_primary_repository
+      ON registered_project_repositories(registered_project_id)
+      WHERE is_primary = 1;
+  `);
+}
+
 function ensureCanonicalWorkGoalsTable(db: DatabaseSync): void {
   if (!tableExists(db, "work_goals")) {
     return;
@@ -819,6 +836,7 @@ function backfillDeliveryQueueEntriesFromEntryJson(db: DatabaseSync): void {
 function ensureAdditiveStateColumns(db: DatabaseSync): void {
   ensureCanonicalWorkGoalsTable(db);
   ensureColumn(db, "work_projects", "registered_project_id TEXT");
+  ensureRegisteredProjectSchema(db);
   ensureColumn(db, "node_pairing_pending", "client_id TEXT");
   ensureColumn(db, "node_pairing_pending", "client_mode TEXT");
   ensureColumn(db, "node_pairing_paired", "client_id TEXT");

@@ -1380,7 +1380,7 @@ CREATE TABLE IF NOT EXISTS registered_project_repositories (
   display_name TEXT NOT NULL,
   server_locator TEXT NOT NULL,
   active INTEGER NOT NULL CHECK (active IN (0,1)),
-  is_primary INTEGER NOT NULL CHECK (is_primary IN (0,1)),
+  is_primary INTEGER NOT NULL CHECK (is_primary IN (0,1) AND (is_primary = 0 OR active = 1)),
   ordinal INTEGER NOT NULL,
   record_revision INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
@@ -1390,7 +1390,7 @@ CREATE TABLE IF NOT EXISTS registered_project_repositories (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_registered_project_primary_repository
   ON registered_project_repositories(registered_project_id)
-  WHERE active = 1 AND is_primary = 1;
+  WHERE is_primary = 1;
 
 CREATE TABLE IF NOT EXISTS registered_project_documents (
   registered_project_id TEXT NOT NULL,
@@ -1399,6 +1399,7 @@ CREATE TABLE IF NOT EXISTS registered_project_documents (
   kind TEXT NOT NULL CHECK (kind IN ('current','architecture','constraints','decisions','tasks','handoff','other')),
   label TEXT NOT NULL,
   server_locator TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
   record_revision INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -1447,6 +1448,29 @@ CREATE TABLE IF NOT EXISTS project_document_provenance (
   PRIMARY KEY (document_sequence, ordinal),
   FOREIGN KEY (document_sequence) REFERENCES project_documents(sequence) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS registered_project_mutation_receipts (
+  registered_project_id TEXT NOT NULL,
+  operation_scope TEXT NOT NULL CHECK (operation_scope IN ('registration','create_work_project')),
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (registered_project_id, operation_scope, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS registered_project_transitions (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  transition_id TEXT NOT NULL UNIQUE,
+  registered_project_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_registered_project_transitions_project
+  ON registered_project_transitions(registered_project_id, sequence);
 
 CREATE TABLE IF NOT EXISTS work_goals (
   -- Immutable project anchor and optional opaque SessionEntry.goal reference;

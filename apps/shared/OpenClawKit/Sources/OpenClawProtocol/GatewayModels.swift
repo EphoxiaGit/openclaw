@@ -3592,25 +3592,21 @@ public struct WorkRegisteredProjectsGetResult: Codable, Sendable {
 public struct WorkProjectsCreateRegisteredParams: Codable, Sendable {
     public let registeredprojectid: String
     public let objective: String
-    public let sessiongoalref: String?
     public let idempotencykey: String
 
     public init(
         registeredprojectid: String,
         objective: String,
-        sessiongoalref: String?,
         idempotencykey: String)
     {
         self.registeredprojectid = registeredprojectid
         self.objective = objective
-        self.sessiongoalref = sessiongoalref
         self.idempotencykey = idempotencykey
     }
 
     private enum CodingKeys: String, CodingKey {
         case registeredprojectid = "registeredProjectId"
         case objective
-        case sessiongoalref = "sessionGoalRef"
         case idempotencykey = "idempotencyKey"
     }
 }

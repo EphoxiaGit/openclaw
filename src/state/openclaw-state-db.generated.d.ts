@@ -812,6 +812,7 @@ export interface ProjectDocuments {
 }
 
 export interface RegisteredProjectDocuments {
+  active: Generated<number>;
   created_at: number;
   document_id: string;
   kind: string;
@@ -821,6 +822,15 @@ export interface RegisteredProjectDocuments {
   repository_id: string;
   server_locator: string;
   updated_at: number;
+}
+
+export interface RegisteredProjectMutationReceipts {
+  created_at: number;
+  idempotency_key: string;
+  operation_scope: string;
+  registered_project_id: string;
+  request_hash: string;
+  result_json: string;
 }
 
 export interface RegisteredProjectRepositories {
@@ -834,6 +844,17 @@ export interface RegisteredProjectRepositories {
   repository_id: string;
   server_locator: string;
   updated_at: number;
+}
+
+export interface RegisteredProjectTransitions {
+  action: string;
+  actor_id: string;
+  created_at: number;
+  payload_json: string;
+  registered_project_id: string;
+  request_hash: string;
+  sequence: Generated<number>;
+  transition_id: string;
 }
 
 export interface RegisteredProjects {
@@ -1292,7 +1313,9 @@ export interface DB {
   project_document_provenance: ProjectDocumentProvenance;
   project_documents: ProjectDocuments;
   registered_project_documents: RegisteredProjectDocuments;
+  registered_project_mutation_receipts: RegisteredProjectMutationReceipts;
   registered_project_repositories: RegisteredProjectRepositories;
+  registered_project_transitions: RegisteredProjectTransitions;
   registered_projects: RegisteredProjects;
   sandbox_registry_entries: SandboxRegistryEntries;
   schema_meta: SchemaMeta;

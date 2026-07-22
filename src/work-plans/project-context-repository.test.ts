@@ -120,14 +120,82 @@ describe("registered project context", () => {
       )
       .get();
     expect(raw).toEqual({ server_locator: "/server/private/main" });
+    expect(
+      openOpenClawStateDatabase({ path: dbPath })
+        .db.prepare("SELECT session_goal_id FROM work_goals WHERE project_id=?")
+        .get(project.projectId),
+    ).toEqual({ session_goal_id: null });
     const audit = JSON.stringify(
       openOpenClawStateDatabase({ path: dbPath })
         .db.prepare(
-          "SELECT result_json,payload_json FROM work_plan_mutation_receipts r JOIN work_plan_transitions t ON t.project_id=r.project_id WHERE r.project_id='registered:glass'",
+          "SELECT result_json,payload_json FROM registered_project_mutation_receipts r JOIN registered_project_transitions t ON t.registered_project_id=r.registered_project_id WHERE r.registered_project_id='glass'",
         )
         .all(),
     );
     expect(audit).not.toMatch(/server\/private|ssh:|CONSTRAINTS\.md|serverLocator/);
+  });
+
+  it("isolates registered receipts from caller-chosen G004 project identities and operations", () => {
+    const dbPath = path.join(makeTempDir(dirs, "project-context-receipts-"), "state.sqlite");
+    const context = new ProjectContextRepository({ path: dbPath });
+    const plans = new WorkPlanRepository({ path: dbPath });
+    plans.createProject({
+      projectId: "registered:glass",
+      goalId: "legacy-goal",
+      primaryConversationId: "legacy-conversation",
+      objective: "Legacy collision",
+      idempotencyKey: "same-key",
+      actorId: "legacy:actor",
+    });
+    context.putTrustedRegisteredProject({
+      registeredProjectId: "glass",
+      displayName: "Glass",
+      enabled: true,
+      profile: "repo-planning-v1",
+      defaultConversationId: "conversation-main",
+      expectedRevision: 0,
+      idempotencyKey: "same-key",
+      actorId: "server:registration",
+      repositories: [
+        {
+          repositoryId: "main",
+          displayName: "Main",
+          serverLocator: "/private/main",
+          active: true,
+          primary: true,
+        },
+      ],
+      documents: [],
+    });
+    const created = context.createRegisteredWorkProject({
+      registeredProjectId: "glass",
+      objective: "Registered work",
+      idempotencyKey: "same-key",
+      actorId: "server:create",
+    });
+    expect(created.projectId).toMatch(/^project-/);
+    const db = openOpenClawStateDatabase({ path: dbPath }).db;
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM work_plan_mutation_receipts WHERE project_id='registered:glass'",
+        )
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(
+      db
+        .prepare(
+          "SELECT operation_scope FROM registered_project_mutation_receipts WHERE registered_project_id='glass' ORDER BY operation_scope",
+        )
+        .all(),
+    ).toEqual([{ operation_scope: "create_work_project" }, { operation_scope: "registration" }]);
+    expect(
+      db
+        .prepare(
+          "SELECT action,actor_id FROM registered_project_transitions WHERE registered_project_id='glass'",
+        )
+        .all(),
+    ).toEqual([{ action: "create", actor_id: "server:registration" }]);
   });
 
   it("enforces fixed profiles, opaque document identifiers, active registration, and one primary", () => {
@@ -168,6 +236,48 @@ describe("registered project context", () => {
     expect(() =>
       context.putTrustedRegisteredProject({
         ...base,
+        repositories: [{ ...base.repositories[0]!, active: false }],
+      }),
+    ).toThrow(WorkPlanValidationError);
+    expect(() =>
+      context.putTrustedRegisteredProject({
+        ...base,
+        repositories: [
+          ...base.repositories,
+          {
+            ...base.repositories[0]!,
+            repositoryId: "inactive-primary",
+            active: false,
+          },
+        ],
+      }),
+    ).toThrow(WorkPlanValidationError);
+    expect(() =>
+      context.putTrustedRegisteredProject({
+        ...base,
+        repositories: [
+          ...base.repositories,
+          {
+            ...base.repositories[0]!,
+            repositoryId: "inactive",
+            active: false,
+            primary: false,
+          },
+        ],
+        documents: [
+          {
+            documentId: "inactive-doc",
+            repositoryId: "inactive",
+            kind: "other",
+            label: "Inactive",
+            serverLocator: "doc.md",
+          },
+        ],
+      }),
+    ).toThrow(WorkPlanValidationError);
+    expect(() =>
+      context.putTrustedRegisteredProject({
+        ...base,
         documents: [
           {
             documentId: "../secret",
@@ -181,6 +291,13 @@ describe("registered project context", () => {
     ).toThrow(WorkPlanValidationError);
     const disabledRequest = { ...base, enabled: false };
     const disabled = context.putTrustedRegisteredProject(disabledRequest);
+    expect(() =>
+      openOpenClawStateDatabase({ path: dbPath })
+        .db.prepare(
+          "INSERT INTO registered_project_repositories(registered_project_id,repository_id,display_name,server_locator,active,is_primary,ordinal,created_at,updated_at) VALUES('glass','invalid','Invalid','internal',0,1,1,1,1)",
+        )
+        .run(),
+    ).toThrow();
     expect(context.putTrustedRegisteredProject(disabledRequest)).toEqual(disabled);
     expect(() =>
       context.putTrustedRegisteredProject({ ...disabledRequest, displayName: "Mismatch" }),
@@ -300,6 +417,217 @@ describe("registered project context", () => {
       ).toThrow(WorkPlanValidationError);
     }
     expect(context.listDocuments(project.projectId)).toEqual([]);
+  });
+
+  it("re-resolves capsule provenance and refuses checkpoints after plan advancement", () => {
+    const { context, plans, project } = fixture();
+    const plan = plans.createPlan({
+      projectId: project.projectId,
+      goalId: project.goalId,
+      planId: "plan-1",
+      expectedRevision: 1,
+      idempotencyKey: "create-plan",
+      actorId: "operator:test",
+      steps: [{ stepId: "step-1", title: "Implement" }],
+    });
+    const capsuleResult = context.updateCapsule({
+      projectId: project.projectId,
+      expectedRevision: plan.projectRecordRevision,
+      idempotencyKey: "capsule-plan",
+      actorId: "operator:test",
+      content: capsule(),
+      provenance: [
+        {
+          sourceType: "work_plan",
+          sourceId: plan.planId,
+          sourceRevision: plan.recordRevision,
+        },
+      ],
+    });
+    plans.mutate({
+      projectId: project.projectId,
+      planId: plan.planId,
+      expectedRevision: plan.recordRevision,
+      idempotencyKey: "advance-plan",
+      actorId: "operator:test",
+      mutation: { action: "setPlanStatus", status: "ready" },
+    });
+    expect(context.getProjectContext(project.projectId).capsuleProvenance).toEqual({
+      state: "stale",
+      staleRefs: [
+        { sourceType: "work_plan", sourceId: plan.planId, sourceRevision: plan.recordRevision },
+      ],
+    });
+    expect(() =>
+      context.createCheckpoint({
+        projectId: project.projectId,
+        expectedRevision: capsuleResult.projectRecordRevision,
+        idempotencyKey: "stale-checkpoint",
+        actorId: "operator:test",
+      }),
+    ).toThrow(/stale provenance/);
+  });
+
+  it("tombstones registered documents so removal and re-add cannot validate old provenance", () => {
+    const { context, dbPath, project } = fixture();
+    const firstCapsule = context.updateCapsule({
+      projectId: project.projectId,
+      expectedRevision: 1,
+      idempotencyKey: "capsule-doc-v1",
+      actorId: "operator:test",
+      content: capsule(),
+      provenance: [
+        { sourceType: "registered_document", sourceId: "constraints", sourceRevision: 1 },
+      ],
+    });
+    const repositories = [
+      {
+        repositoryId: "main",
+        displayName: "Main",
+        serverLocator: "/server/private/main",
+        active: true,
+        primary: true,
+      },
+      {
+        repositoryId: "docs",
+        displayName: "Docs",
+        serverLocator: "ssh://private/docs",
+        active: true,
+        primary: false,
+      },
+    ];
+    context.putTrustedRegisteredProject({
+      registeredProjectId: "glass",
+      displayName: "Glass",
+      enabled: true,
+      profile: "repo-planning-v1",
+      defaultConversationId: "conversation-main",
+      expectedRevision: 1,
+      idempotencyKey: "remove-doc",
+      actorId: "server:test",
+      repositories,
+      documents: [],
+    });
+    expect(context.getRegisteredProject("glass").documents).toEqual([]);
+    expect(
+      openOpenClawStateDatabase({ path: dbPath })
+        .db.prepare(
+          "SELECT active,record_revision FROM registered_project_documents WHERE registered_project_id='glass' AND document_id='constraints'",
+        )
+        .get(),
+    ).toEqual({ active: 0, record_revision: 2 });
+    const readded = context.putTrustedRegisteredProject({
+      registeredProjectId: "glass",
+      displayName: "Glass",
+      enabled: true,
+      profile: "repo-planning-v1",
+      defaultConversationId: "conversation-main",
+      expectedRevision: 2,
+      idempotencyKey: "readd-doc",
+      actorId: "server:test",
+      repositories,
+      documents: [
+        {
+          documentId: "constraints",
+          repositoryId: "main",
+          kind: "constraints",
+          label: "Constraints",
+          serverLocator: "docs/CONSTRAINTS.md",
+        },
+      ],
+    });
+    expect(readded.documents[0]?.recordRevision).toBe(3);
+    expect(context.getProjectContext(project.projectId).capsuleProvenance).toEqual({
+      state: "stale",
+      staleRefs: [
+        { sourceType: "registered_document", sourceId: "constraints", sourceRevision: 1 },
+      ],
+    });
+    expect(() =>
+      context.createCheckpoint({
+        projectId: project.projectId,
+        expectedRevision: firstCapsule.projectRecordRevision,
+        idempotencyKey: "stale-doc-checkpoint",
+        actorId: "operator:test",
+      }),
+    ).toThrow(/stale provenance/);
+    expect(() =>
+      context.updateCapsule({
+        projectId: project.projectId,
+        expectedRevision: firstCapsule.projectRecordRevision,
+        idempotencyKey: "old-doc-provenance",
+        actorId: "operator:test",
+        content: capsule("Still stale"),
+        provenance: [
+          { sourceType: "registered_document", sourceId: "constraints", sourceRevision: 1 },
+        ],
+      }),
+    ).toThrow(/stale, foreign, or unknown/);
+  });
+
+  it("treats historical project-document revisions as stale provenance", () => {
+    const { context, project } = fixture();
+    const first = context.updateCapsule({
+      projectId: project.projectId,
+      expectedRevision: 1,
+      idempotencyKey: "capsule-first",
+      actorId: "operator:test",
+      content: capsule("First"),
+      provenance: [],
+    });
+    const second = context.updateCapsule({
+      projectId: project.projectId,
+      expectedRevision: first.projectRecordRevision,
+      idempotencyKey: "capsule-second",
+      actorId: "operator:test",
+      content: capsule("Second"),
+      provenance: [{ sourceType: "project_document", sourceId: "capsule", sourceRevision: 1 }],
+    });
+    expect(context.getProjectContext(project.projectId).capsuleProvenance).toEqual({
+      state: "stale",
+      staleRefs: [{ sourceType: "project_document", sourceId: "capsule", sourceRevision: 1 }],
+    });
+    expect(() =>
+      context.createCheckpoint({
+        projectId: project.projectId,
+        expectedRevision: second.projectRecordRevision,
+        idempotencyKey: "historical-document-checkpoint",
+        actorId: "operator:test",
+      }),
+    ).toThrow(/stale provenance/);
+  });
+
+  it("bounds checkpoint plans, progress, and provenance to the same 50 most-recent plans", () => {
+    const { context, dbPath, project } = fixture();
+    const db = openOpenClawStateDatabase({ path: dbPath }).db;
+    const insert = db.prepare(
+      "INSERT INTO work_plans(plan_id,project_id,goal_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+    );
+    for (let index = 0; index < 55; index += 1) {
+      insert.run(
+        `plan-${String(index).padStart(2, "0")}`,
+        project.projectId,
+        project.goalId,
+        "draft",
+        index,
+        index,
+      );
+    }
+    const checkpoint = context.createCheckpoint({
+      projectId: project.projectId,
+      expectedRevision: 1,
+      idempotencyKey: "bounded-checkpoint",
+      actorId: "operator:test",
+    });
+    expect(checkpoint.document.kind).toBe("checkpoint");
+    if (checkpoint.document.kind !== "checkpoint") {
+      throw new Error("expected checkpoint");
+    }
+    expect(checkpoint.document.content.plans).toHaveLength(50);
+    expect(checkpoint.document.content.progress).toHaveLength(50);
+    expect(checkpoint.document.provenance).toHaveLength(50);
+    expect(checkpoint.document.content.plans[0]?.planId).toBe("plan-54");
+    expect(checkpoint.document.content.plans.some((plan) => plan.planId === "plan-00")).toBe(false);
   });
 
   it("creates immutable sequenced checkpoints and same-project handoffs", () => {

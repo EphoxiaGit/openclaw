@@ -196,7 +196,6 @@ export const WorkProjectsCreateRegisteredParamsSchema = Type.Object(
   {
     registeredProjectId: OpaqueIdentifierSchema,
     objective: CapsuleTextSchema,
-    sessionGoalRef: Type.Optional(OpaqueIdentifierSchema),
     idempotencyKey: OpaqueIdentifierSchema,
   },
   { additionalProperties: false },
@@ -474,7 +473,7 @@ const ProjectCheckpointSchema = Type.Object(
     tests: CapsuleListSchema,
     blockers: CapsuleListSchema,
     exactNextAction: CapsuleTextSchema,
-    plans: Type.Array(WorkPlanContextSummarySchema, { maxItems: 1_000 }),
+    plans: Type.Array(WorkPlanContextSummarySchema, { maxItems: 50 }),
   },
   { additionalProperties: false },
 );
@@ -561,8 +560,17 @@ export const WorkProjectContextGetResultSchema = Type.Object(
           },
           { additionalProperties: false },
         ),
-        plans: Type.Array(WorkPlanContextSummarySchema),
+        plans: Type.Array(WorkPlanContextSummarySchema, { maxItems: 50 }),
         capsule: Type.Optional(CapsuleProjectDocumentSchema),
+        capsuleProvenance: Type.Optional(
+          Type.Object(
+            {
+              state: Type.Union([Type.Literal("current"), Type.Literal("stale")]),
+              staleRefs: Type.Array(ProjectDocumentProvenanceSchema, { maxItems: 50 }),
+            },
+            { additionalProperties: false },
+          ),
+        ),
         latestCheckpoint: Type.Optional(CheckpointProjectDocumentSchema),
         latestHandoff: Type.Optional(HandoffProjectDocumentSchema),
       },

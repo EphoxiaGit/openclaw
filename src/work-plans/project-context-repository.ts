@@ -67,14 +67,14 @@ function validateRegistration(input: TrustedRegisteredProjectInput): void {
   if (input.repositories.length === 0) {
     throw new WorkPlanValidationError("a registered project requires a repository");
   }
-  if (
-    input.repositories.filter((repository) => repository.active && repository.primary).length !== 1
-  ) {
+  const primaryRepositories = input.repositories.filter((repository) => repository.primary);
+  if (primaryRepositories.length !== 1 || !primaryRepositories[0]?.active) {
     throw new WorkPlanValidationError(
       "a registered project requires exactly one primary repository",
     );
   }
   const repositoryIds = new Set<string>();
+  const activeRepositoryIds = new Set<string>();
   for (const repository of input.repositories) {
     requireSafeId(repository.repositoryId, "repositoryId");
     requireText(repository.displayName, "repository displayName");
@@ -83,14 +83,19 @@ function validateRegistration(input: TrustedRegisteredProjectInput): void {
       throw new WorkPlanValidationError(`duplicate repository: ${repository.repositoryId}`);
     }
     repositoryIds.add(repository.repositoryId);
+    if (repository.active) {
+      activeRepositoryIds.add(repository.repositoryId);
+    }
   }
   const documentIds = new Set<string>();
   for (const document of input.documents) {
     requireSafeId(document.documentId, "documentId");
     requireText(document.label, "document label");
     requireText(document.serverLocator, "document serverLocator");
-    if (!repositoryIds.has(document.repositoryId)) {
-      throw new WorkPlanValidationError(`unknown document repository: ${document.repositoryId}`);
+    if (!activeRepositoryIds.has(document.repositoryId)) {
+      throw new WorkPlanValidationError(
+        `document repository is unknown or inactive: ${document.repositoryId}`,
+      );
     }
     if (documentIds.has(document.documentId)) {
       throw new WorkPlanValidationError(`duplicate registered document: ${document.documentId}`);
@@ -117,10 +122,15 @@ export class ProjectContextRepository {
   putTrustedRegisteredProject(input: TrustedRegisteredProjectInput): RegisteredProjectView {
     validateRegistration(input);
     const hash = requestHash(input);
-    const receiptProjectId = `registered:${input.registeredProjectId}`;
     const now = this.#now();
     return runOpenClawStateWriteTransaction(({ db }) => {
-      const replay = this.#receipt(db, receiptProjectId, input.idempotencyKey, hash);
+      const replay = this.#registeredReceipt(
+        db,
+        input.registeredProjectId,
+        "registration",
+        input.idempotencyKey,
+        hash,
+      );
       if (replay) {
         return replay as RegisteredProjectView;
       }
@@ -178,15 +188,22 @@ export class ProjectContextRepository {
             .all(input.registeredProjectId) as Row[]
         ).map((row) => [String(row.document_id), row]),
       );
-      db.prepare("DELETE FROM registered_project_documents WHERE registered_project_id=?").run(
-        input.registeredProjectId,
+      const repositoryIds = new Set(
+        input.repositories.map((repository) => repository.repositoryId),
       );
-      db.prepare("DELETE FROM registered_project_repositories WHERE registered_project_id=?").run(
-        input.registeredProjectId,
-      );
-      const insertRepository = db.prepare(
-        "INSERT INTO registered_project_repositories(registered_project_id,repository_id,display_name,server_locator,active,is_primary,ordinal,record_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-      );
+      db.prepare(
+        "UPDATE registered_project_repositories SET is_primary=0 WHERE registered_project_id=?",
+      ).run(input.registeredProjectId);
+      for (const [repositoryId, old] of oldRepositories) {
+        if (
+          !repositoryIds.has(repositoryId) &&
+          (Number(old.active) === 1 || Number(old.is_primary) === 1)
+        ) {
+          db.prepare(
+            "UPDATE registered_project_repositories SET active=0,is_primary=0,record_revision=record_revision+1,updated_at=? WHERE registered_project_id=? AND repository_id=?",
+          ).run(now, input.registeredProjectId, repositoryId);
+        }
+      }
       for (const [ordinal, repository] of input.repositories.entries()) {
         const old = oldRepositories.get(repository.repositoryId);
         const unchanged =
@@ -194,45 +211,86 @@ export class ProjectContextRepository {
           old.server_locator === repository.serverLocator &&
           Number(old.active) === (repository.active ? 1 : 0) &&
           Number(old.is_primary) === (repository.primary ? 1 : 0);
-        insertRepository.run(
-          input.registeredProjectId,
-          repository.repositoryId,
-          repository.displayName,
-          repository.serverLocator,
-          repository.active ? 1 : 0,
-          repository.primary ? 1 : 0,
-          ordinal,
-          old ? Number(old.record_revision) + (unchanged ? 0 : 1) : 1,
-          old ? Number(old.created_at) : now,
-          unchanged && old ? Number(old.updated_at) : now,
-        );
+        if (old) {
+          db.prepare(
+            "UPDATE registered_project_repositories SET display_name=?,server_locator=?,active=?,is_primary=?,ordinal=?,record_revision=?,updated_at=? WHERE registered_project_id=? AND repository_id=?",
+          ).run(
+            repository.displayName,
+            repository.serverLocator,
+            repository.active ? 1 : 0,
+            repository.primary ? 1 : 0,
+            ordinal,
+            Number(old.record_revision) + (unchanged ? 0 : 1),
+            unchanged ? Number(old.updated_at) : now,
+            input.registeredProjectId,
+            repository.repositoryId,
+          );
+        } else {
+          db.prepare(
+            "INSERT INTO registered_project_repositories(registered_project_id,repository_id,display_name,server_locator,active,is_primary,ordinal,record_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          ).run(
+            input.registeredProjectId,
+            repository.repositoryId,
+            repository.displayName,
+            repository.serverLocator,
+            repository.active ? 1 : 0,
+            repository.primary ? 1 : 0,
+            ordinal,
+            1,
+            now,
+            now,
+          );
+        }
       }
-      const insertDocument = db.prepare(
-        "INSERT INTO registered_project_documents(registered_project_id,document_id,repository_id,kind,label,server_locator,record_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-      );
+      const documentIds = new Set(input.documents.map((document) => document.documentId));
+      for (const [documentId, old] of oldDocuments) {
+        if (!documentIds.has(documentId) && Number(old.active) === 1) {
+          db.prepare(
+            "UPDATE registered_project_documents SET active=0,record_revision=record_revision+1,updated_at=? WHERE registered_project_id=? AND document_id=?",
+          ).run(now, input.registeredProjectId, documentId);
+        }
+      }
       for (const document of input.documents) {
         const old = oldDocuments.get(document.documentId);
         const unchanged =
           old?.repository_id === document.repositoryId &&
           old.kind === document.kind &&
           old.label === document.label &&
-          old.server_locator === document.serverLocator;
-        insertDocument.run(
-          input.registeredProjectId,
-          document.documentId,
-          document.repositoryId,
-          document.kind,
-          document.label,
-          document.serverLocator,
-          old ? Number(old.record_revision) + (unchanged ? 0 : 1) : 1,
-          old ? Number(old.created_at) : now,
-          unchanged && old ? Number(old.updated_at) : now,
-        );
+          old.server_locator === document.serverLocator &&
+          Number(old.active) === 1;
+        if (old) {
+          db.prepare(
+            "UPDATE registered_project_documents SET repository_id=?,kind=?,label=?,server_locator=?,active=1,record_revision=?,updated_at=? WHERE registered_project_id=? AND document_id=?",
+          ).run(
+            document.repositoryId,
+            document.kind,
+            document.label,
+            document.serverLocator,
+            Number(old.record_revision) + (unchanged ? 0 : 1),
+            unchanged ? Number(old.updated_at) : now,
+            input.registeredProjectId,
+            document.documentId,
+          );
+        } else {
+          db.prepare(
+            "INSERT INTO registered_project_documents(registered_project_id,document_id,repository_id,kind,label,server_locator,active,record_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          ).run(
+            input.registeredProjectId,
+            document.documentId,
+            document.repositoryId,
+            document.kind,
+            document.label,
+            document.serverLocator,
+            1,
+            1,
+            now,
+            now,
+          );
+        }
       }
       const result = this.#loadRegisteredProject(db, input.registeredProjectId);
-      this.#transition(db, {
-        projectId: receiptProjectId,
-        entityType: "registered_project",
+      this.#registeredTransition(db, {
+        registeredProjectId: input.registeredProjectId,
         action: existing ? "update" : "create",
         actorId: input.actorId,
         hash,
@@ -243,7 +301,15 @@ export class ProjectContextRepository {
         },
         now,
       });
-      this.#saveReceipt(db, receiptProjectId, input.idempotencyKey, hash, result, now);
+      this.#saveRegisteredReceipt(
+        db,
+        input.registeredProjectId,
+        "registration",
+        input.idempotencyKey,
+        hash,
+        result,
+        now,
+      );
       return result;
     }, this.#options);
   }
@@ -267,7 +333,6 @@ export class ProjectContextRepository {
   createRegisteredWorkProject(input: {
     registeredProjectId: string;
     objective: string;
-    sessionGoalRef?: string;
     idempotencyKey: string;
     actorId: string;
   }): {
@@ -283,10 +348,15 @@ export class ProjectContextRepository {
       throw new WorkPlanValidationError("objective must be bounded text");
     }
     const hash = requestHash(input);
-    const receiptProjectId = `registered:${input.registeredProjectId}`;
     const now = this.#now();
     return runOpenClawStateWriteTransaction(({ db }) => {
-      const replay = this.#receipt(db, receiptProjectId, input.idempotencyKey, hash);
+      const replay = this.#registeredReceipt(
+        db,
+        input.registeredProjectId,
+        "create_work_project",
+        input.idempotencyKey,
+        hash,
+      );
       if (replay) {
         return replay as ReturnType<ProjectContextRepository["createRegisteredWorkProject"]>;
       }
@@ -298,15 +368,7 @@ export class ProjectContextRepository {
       ).run(projectId, input.registeredProjectId, registered.defaultConversationId, now, now);
       db.prepare(
         "INSERT INTO work_goals(goal_id,project_id,origin_session_key,session_goal_id,objective,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-      ).run(
-        goalId,
-        projectId,
-        registered.defaultConversationId,
-        input.sessionGoalRef ?? null,
-        input.objective,
-        now,
-        now,
-      );
+      ).run(goalId, projectId, registered.defaultConversationId, null, input.objective, now, now);
       const result = {
         registeredProjectId: input.registeredProjectId,
         projectId,
@@ -323,7 +385,15 @@ export class ProjectContextRepository {
         payload: result,
         now,
       });
-      this.#saveReceipt(db, receiptProjectId, input.idempotencyKey, hash, result, now);
+      this.#saveRegisteredReceipt(
+        db,
+        input.registeredProjectId,
+        "create_work_project",
+        input.idempotencyKey,
+        hash,
+        result,
+        now,
+      );
       return result;
     }, this.#options);
   }
@@ -431,6 +501,9 @@ export class ProjectContextRepository {
       }
       this.#requireProjectRevision(db, input.projectId, input.expectedRevision);
       const context = this.#loadContext(db, input.projectId);
+      if (context.capsuleProvenance?.state === "stale") {
+        throw new WorkPlanValidationError("cannot checkpoint a capsule with stale provenance");
+      }
       const progress = context.plans.map((plan) => `${plan.display}: ${plan.status}`);
       const content: ProjectCheckpoint = {
         objective: context.goal.objective,
@@ -552,25 +625,34 @@ export class ProjectContextRepository {
     if (!project) {
       throw new WorkPlanNotFoundError(`registered project not found: ${registeredProjectId}`);
     }
-    const repositories = db
+    const repositoryRows = db
       .prepare(
         "SELECT repository_id,display_name,active,is_primary,record_revision FROM registered_project_repositories WHERE registered_project_id=? ORDER BY ordinal,repository_id",
       )
       .all(registeredProjectId) as Row[];
-    if (
-      repositories.filter(
-        (repository) => Number(repository.active) === 1 && Number(repository.is_primary) === 1,
-      ).length !== 1
-    ) {
+    const primaryRepositories = repositoryRows.filter(
+      (repository) => Number(repository.is_primary) === 1,
+    );
+    if (primaryRepositories.length !== 1 || Number(primaryRepositories[0]?.active) !== 1) {
       throw new WorkPlanValidationError(
         "registered project does not have exactly one primary repository",
       );
     }
     const documents = db
       .prepare(
-        "SELECT document_id,repository_id,kind,label,record_revision,updated_at FROM registered_project_documents WHERE registered_project_id=? ORDER BY document_id",
+        "SELECT document_id,repository_id,kind,label,record_revision,updated_at FROM registered_project_documents WHERE registered_project_id=? AND active=1 ORDER BY document_id",
       )
       .all(registeredProjectId) as Row[];
+    const activeRepositoryIds = new Set(
+      repositoryRows
+        .filter((repository) => Number(repository.active) === 1)
+        .map((repository) => String(repository.repository_id)),
+    );
+    if (documents.some((document) => !activeRepositoryIds.has(String(document.repository_id)))) {
+      throw new WorkPlanValidationError(
+        "active registered document belongs to an inactive repository",
+      );
+    }
     if (project.profile !== PROJECT_PROFILE) {
       throw new WorkPlanValidationError(`unsupported project profile: ${String(project.profile)}`);
     }
@@ -582,13 +664,15 @@ export class ProjectContextRepository {
       defaultConversationId: String(project.default_conversation_id),
       recordRevision: Number(project.record_revision),
       updatedAt: Number(project.updated_at),
-      repositories: repositories.map((repository) => ({
-        repositoryId: String(repository.repository_id),
-        displayName: String(repository.display_name),
-        active: Number(repository.active) === 1,
-        primary: Number(repository.is_primary) === 1,
-        recordRevision: Number(repository.record_revision),
-      })),
+      repositories: repositoryRows
+        .filter((repository) => Number(repository.active) === 1)
+        .map((repository) => ({
+          repositoryId: String(repository.repository_id),
+          displayName: String(repository.display_name),
+          active: Number(repository.active) === 1,
+          primary: Number(repository.is_primary) === 1,
+          recordRevision: Number(repository.record_revision),
+        })),
       documents: documents.map((document) => ({
         documentId: String(document.document_id),
         repositoryId: String(document.repository_id),
@@ -648,7 +732,7 @@ export class ProjectContextRepository {
     const plans = (
       db
         .prepare(
-          "SELECT plan_id,status,display_cursor,record_revision,definition_revision FROM work_plans WHERE project_id=? ORDER BY updated_at DESC,plan_id",
+          "SELECT plan_id,status,display_cursor,record_revision,definition_revision FROM work_plans WHERE project_id=? ORDER BY updated_at DESC,plan_id LIMIT 50",
         )
         .all(projectId) as Row[]
     ).map((plan) => {
@@ -679,6 +763,9 @@ export class ProjectContextRepository {
     const latestHandoff = latest("handoff") as
       | Extract<ProjectDocument, { kind: "handoff" }>
       | undefined;
+    const staleRefs = capsule
+      ? this.#staleProvenance(db, projectId, capsule.provenance)
+      : undefined;
     return {
       project: {
         projectId,
@@ -695,6 +782,14 @@ export class ProjectContextRepository {
       },
       plans,
       ...(capsule ? { capsule } : {}),
+      ...(staleRefs
+        ? {
+            capsuleProvenance: {
+              state: staleRefs.length === 0 ? ("current" as const) : ("stale" as const),
+              staleRefs,
+            },
+          }
+        : {}),
       ...(latestCheckpoint ? { latestCheckpoint } : {}),
       ...(latestHandoff ? { latestHandoff } : {}),
     };
@@ -732,28 +827,41 @@ export class ProjectContextRepository {
       if (source.sourceRevision < 1) {
         throw new WorkPlanValidationError("provenance sourceRevision must be positive");
       }
-      const found =
-        source.sourceType === "work_plan"
-          ? db
-              .prepare(
-                "SELECT 1 AS ok FROM work_plans WHERE project_id=? AND plan_id=? AND record_revision=?",
-              )
-              .get(projectId, source.sourceId, source.sourceRevision)
-          : source.sourceType === "registered_document"
-            ? db
-                .prepare(
-                  "SELECT 1 AS ok FROM registered_project_documents d JOIN work_projects p ON p.registered_project_id=d.registered_project_id WHERE p.project_id=? AND d.document_id=? AND d.record_revision=?",
-                )
-                .get(projectId, source.sourceId, source.sourceRevision)
-            : db
-                .prepare(
-                  "SELECT 1 AS ok FROM project_documents WHERE project_id=? AND document_id=? AND revision=?",
-                )
-                .get(projectId, source.sourceId, source.sourceRevision);
-      if (!found) {
-        throw new WorkPlanValidationError("provenance source is stale, foreign, or unknown");
-      }
     }
+    if (this.#staleProvenance(db, projectId, provenance).length > 0) {
+      throw new WorkPlanValidationError("provenance source is stale, foreign, or unknown");
+    }
+  }
+
+  #staleProvenance(
+    db: DatabaseSync,
+    projectId: string,
+    provenance: ProjectDocumentProvenance[],
+  ): ProjectDocumentProvenance[] {
+    return provenance.filter((source) => {
+      if (source.sourceType === "work_plan") {
+        const row = db
+          .prepare("SELECT record_revision FROM work_plans WHERE project_id=? AND plan_id=?")
+          .get(projectId, source.sourceId) as Row | undefined;
+        return !row || Number(row.record_revision) !== source.sourceRevision;
+      }
+      if (source.sourceType === "registered_document") {
+        const row = db
+          .prepare(
+            "SELECT d.record_revision,d.active FROM registered_project_documents d JOIN work_projects p ON p.registered_project_id=d.registered_project_id WHERE p.project_id=? AND d.document_id=?",
+          )
+          .get(projectId, source.sourceId) as Row | undefined;
+        return (
+          !row || Number(row.active) !== 1 || Number(row.record_revision) !== source.sourceRevision
+        );
+      }
+      const row = db
+        .prepare(
+          "SELECT revision FROM project_documents WHERE project_id=? AND document_id=? ORDER BY sequence DESC LIMIT 1",
+        )
+        .get(projectId, source.sourceId) as Row | undefined;
+      return !row || Number(row.revision) !== source.sourceRevision;
+    });
   }
 
   #insertDocument(
@@ -910,6 +1018,65 @@ export class ProjectContextRepository {
     db.prepare(
       "INSERT INTO work_plan_mutation_receipts(project_id,idempotency_key,request_hash,result_json,created_at) VALUES(?,?,?,?,?)",
     ).run(projectId, key, hash, JSON.stringify(result), now);
+  }
+
+  #registeredReceipt(
+    db: DatabaseSync,
+    registeredProjectId: string,
+    operationScope: "registration" | "create_work_project",
+    key: string,
+    hash: string,
+  ): unknown {
+    const row = db
+      .prepare(
+        "SELECT request_hash,result_json FROM registered_project_mutation_receipts WHERE registered_project_id=? AND operation_scope=? AND idempotency_key=?",
+      )
+      .get(registeredProjectId, operationScope, key) as Row | undefined;
+    if (!row) {
+      return undefined;
+    }
+    if (row.request_hash !== hash) {
+      throw new WorkPlanConflictError("idempotency key reused with a different request");
+    }
+    return JSON.parse(String(row.result_json));
+  }
+
+  #saveRegisteredReceipt(
+    db: DatabaseSync,
+    registeredProjectId: string,
+    operationScope: "registration" | "create_work_project",
+    key: string,
+    hash: string,
+    result: unknown,
+    now: number,
+  ): void {
+    db.prepare(
+      "INSERT INTO registered_project_mutation_receipts(registered_project_id,operation_scope,idempotency_key,request_hash,result_json,created_at) VALUES(?,?,?,?,?,?)",
+    ).run(registeredProjectId, operationScope, key, hash, JSON.stringify(result), now);
+  }
+
+  #registeredTransition(
+    db: DatabaseSync,
+    input: {
+      registeredProjectId: string;
+      action: string;
+      actorId: string;
+      hash: string;
+      payload: unknown;
+      now: number;
+    },
+  ): void {
+    db.prepare(
+      "INSERT INTO registered_project_transitions(transition_id,registered_project_id,action,actor_id,request_hash,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      randomUUID(),
+      input.registeredProjectId,
+      input.action,
+      input.actorId,
+      input.hash,
+      JSON.stringify(input.payload),
+      input.now,
+    );
   }
 
   #transition(

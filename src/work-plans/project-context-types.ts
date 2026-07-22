@@ -139,6 +139,10 @@ export type ProjectContextProjection = {
   goal: { goalId: string; objective: string; sessionGoalRef?: string; recordRevision: number };
   plans: ProjectCheckpoint["plans"];
   capsule?: Extract<ProjectDocument, { kind: "capsule" }>;
+  capsuleProvenance?: {
+    state: "current" | "stale";
+    staleRefs: ProjectDocumentProvenance[];
+  };
   latestCheckpoint?: Extract<ProjectDocument, { kind: "checkpoint" }>;
   latestHandoff?: Extract<ProjectDocument, { kind: "handoff" }>;
 };
