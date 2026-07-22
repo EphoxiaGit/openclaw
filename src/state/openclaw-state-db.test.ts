@@ -94,6 +94,51 @@ describe("openclaw state database", () => {
     expect(database.path).toBe(path.join(stateDir, "state", "openclaw.sqlite"));
   });
 
+  it("upgrades v1 work goals to the canonical non-null session anchor", () => {
+    const stateDir = createTempStateDir();
+    const databasePath = path.join(stateDir, "state", "openclaw.sqlite");
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+    const { DatabaseSync } = requireNodeSqlite();
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec(`
+      PRAGMA user_version = 1;
+      CREATE TABLE work_projects (
+        project_id TEXT NOT NULL PRIMARY KEY,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        primary_conversation_id TEXT NOT NULL,
+        record_revision INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE work_goals (
+        goal_id TEXT NOT NULL PRIMARY KEY,
+        project_id TEXT NOT NULL UNIQUE,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        objective TEXT NOT NULL,
+        record_revision INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO work_projects(project_id,primary_conversation_id,created_at,updated_at)
+      VALUES('legacy-project','legacy-session',1,1);
+      INSERT INTO work_goals(goal_id,project_id,objective,created_at,updated_at)
+      VALUES('legacy-goal','legacy-project','Legacy objective',1,1);
+    `);
+    legacy.close();
+
+    const database = openOpenClawStateDatabase({ path: databasePath });
+    const columns = database.db.prepare("PRAGMA table_info(work_goals)").all() as Array<{
+      name: string;
+      notnull: number;
+    }>;
+    expect(columns.find((column) => column.name === "origin_session_key")?.notnull).toBe(1);
+    expect(
+      database.db
+        .prepare("SELECT origin_session_key FROM work_goals WHERE goal_id='legacy-goal'")
+        .get(),
+    ).toEqual({ origin_session_key: "legacy-session" });
+  });
+
   it("creates the bounded skill curator tables", () => {
     const stateDir = createTempStateDir();
     const database = openOpenClawStateDatabase({ env: { OPENCLAW_STATE_DIR: stateDir } });

@@ -140,6 +140,56 @@ function ensureColumn(db: DatabaseSync, tableName: string, columnSql: string): b
   return true;
 }
 
+function ensureCanonicalWorkGoalsTable(db: DatabaseSync): void {
+  if (!tableExists(db, "work_goals")) {
+    return;
+  }
+  const columns = db.prepare("PRAGMA table_info(work_goals)").all() as Array<{
+    name?: unknown;
+    notnull?: unknown;
+  }>;
+  const originColumn = columns.find((column) => column.name === "origin_session_key");
+  if (originColumn?.notnull === 1 && columns.some((column) => column.name === "session_goal_id")) {
+    return;
+  }
+  const hasOrigin = columns.some((column) => column.name === "origin_session_key");
+  const hasSessionGoal = columns.some((column) => column.name === "session_goal_id");
+  const originExpression = hasOrigin
+    ? "COALESCE(origin_session_key, (SELECT primary_conversation_id FROM work_projects WHERE work_projects.project_id=work_goals.project_id))"
+    : "(SELECT primary_conversation_id FROM work_projects WHERE work_projects.project_id=work_goals.project_id)";
+  const sessionGoalExpression = hasSessionGoal ? "session_goal_id" : "NULL";
+  db.exec("PRAGMA foreign_keys = OFF;");
+  try {
+    db.exec(`
+      DROP TABLE IF EXISTS work_goals_migration_new;
+      CREATE TABLE work_goals_migration_new (
+        goal_id TEXT NOT NULL PRIMARY KEY,
+        project_id TEXT NOT NULL UNIQUE,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        origin_session_key TEXT NOT NULL,
+        session_goal_id TEXT,
+        objective TEXT NOT NULL,
+        record_revision INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES work_projects(project_id) ON DELETE CASCADE
+      );
+      INSERT INTO work_goals_migration_new (
+        goal_id, project_id, schema_version, origin_session_key, session_goal_id,
+        objective, record_revision, created_at, updated_at
+      )
+      SELECT
+        goal_id, project_id, schema_version, ${originExpression}, ${sessionGoalExpression},
+        objective, record_revision, created_at, updated_at
+      FROM work_goals;
+      DROP TABLE work_goals;
+      ALTER TABLE work_goals_migration_new RENAME TO work_goals;
+    `);
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON;");
+  }
+}
+
 function repairLegacyTaskAgentAttribution(db: DatabaseSync): void {
   if (!tableExists(db, "task_runs") || !tableHasColumn(db, "task_runs", "requester_agent_id")) {
     return;
@@ -767,13 +817,7 @@ function backfillDeliveryQueueEntriesFromEntryJson(db: DatabaseSync): void {
 }
 
 function ensureAdditiveStateColumns(db: DatabaseSync): void {
-  ensureColumn(db, "work_goals", "origin_session_key TEXT");
-  ensureColumn(db, "work_goals", "session_goal_id TEXT");
-  if (tableExists(db, "work_goals") && tableHasColumn(db, "work_goals", "origin_session_key")) {
-    db.exec(
-      "UPDATE work_goals SET origin_session_key=(SELECT primary_conversation_id FROM work_projects WHERE work_projects.project_id=work_goals.project_id) WHERE origin_session_key IS NULL;",
-    );
-  }
+  ensureCanonicalWorkGoalsTable(db);
   ensureColumn(db, "node_pairing_pending", "client_id TEXT");
   ensureColumn(db, "node_pairing_pending", "client_mode TEXT");
   ensureColumn(db, "node_pairing_paired", "client_id TEXT");

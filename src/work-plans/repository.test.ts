@@ -676,7 +676,7 @@ describe("durable work plans", () => {
 
   it("reconciles blocked flows distinctly and marks missing nonterminal authority unavailable", () => {
     const { repository, dbPath, plan } = fixture();
-    seedFlow(dbPath, "flow-blocked", "blocked");
+    seedFlow(dbPath, "flow-blocked", "waiting");
     let current = repository.mutate({
       projectId: "project-1",
       planId: "plan-1",
@@ -691,6 +691,21 @@ describe("durable work plans", () => {
         ownerId: "flow-blocked",
       },
     });
+    current = repository.mutate({
+      projectId: "project-1",
+      planId: "plan-1",
+      expectedRevision: current.recordRevision,
+      idempotencyKey: "flow-waiting-reconcile",
+      actorId: "system:recovery",
+      mutation: { action: "reconcileLocalOwners" },
+    });
+    expect(current.steps[0]).toMatchObject({
+      status: "waiting",
+      attempts: [{ ownerState: "waiting" }],
+    });
+    openOpenClawStateDatabase({ path: dbPath })
+      .db.prepare("UPDATE flow_runs SET status='blocked' WHERE flow_id='flow-blocked'")
+      .run();
     current = repository.mutate({
       projectId: "project-1",
       planId: "plan-1",

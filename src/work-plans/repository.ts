@@ -1010,36 +1010,36 @@ export class WorkPlanRepository {
           db.prepare(
             "UPDATE work_plan_step_attempts SET owner_state=?,recovery_state='reconciled-after-restart',updated_at=?,ended_at=CASE WHEN ? IN ('succeeded','failed','cancelled') THEN ? ELSE ended_at END WHERE attempt_id=?",
           ).run(ownerState, now, ownerState, now, attempt.attempt_id);
-          const target: WorkStepStatus | undefined =
-            authoritativeStepStatus ??
-            (ownerState === "pending"
-              ? "ready"
-              : ownerState === "running"
-                ? "running"
-                : ownerState === "waiting"
-                  ? "waiting"
-                  : ownerState === "succeeded"
-                    ? "succeeded"
-                    : ownerState === "failed"
-                      ? "failed"
-                      : ownerState === "cancelled"
-                        ? "cancelled"
-                        : undefined);
-          if (
-            target &&
-            !new Set<WorkStepStatus>([
-              "succeeded",
-              "failed",
-              "cancelled",
-              "skipped",
-              "superseded",
-            ]).has(current.status) &&
-            current.status !== target
-          ) {
-            db.prepare(
-              "UPDATE work_plan_steps SET status=?,record_revision=record_revision+1,updated_at=? WHERE plan_id=? AND definition_revision=? AND step_id=?",
-            ).run(target, now, before.planId, before.definitionRevision, attempt.step_id);
-          }
+        }
+        const target: WorkStepStatus | undefined =
+          authoritativeStepStatus ??
+          (ownerState === "pending"
+            ? "ready"
+            : ownerState === "running"
+              ? "running"
+              : ownerState === "waiting"
+                ? "waiting"
+                : ownerState === "succeeded"
+                  ? "succeeded"
+                  : ownerState === "failed"
+                    ? "failed"
+                    : ownerState === "cancelled"
+                      ? "cancelled"
+                      : undefined);
+        if (
+          target &&
+          !new Set<WorkStepStatus>([
+            "succeeded",
+            "failed",
+            "cancelled",
+            "skipped",
+            "superseded",
+          ]).has(current.status) &&
+          current.status !== target
+        ) {
+          db.prepare(
+            "UPDATE work_plan_steps SET status=?,record_revision=record_revision+1,updated_at=? WHERE plan_id=? AND definition_revision=? AND step_id=?",
+          ).run(target, now, before.planId, before.definitionRevision, attempt.step_id);
         }
       }
       this.#normalizeStoredReady(db, before.planId, before.definitionRevision, now);
