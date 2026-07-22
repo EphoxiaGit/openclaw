@@ -44,6 +44,7 @@
     "chat.liveWork.progress",
     "chat.liveWork.projectAmbiguous",
     "chat.liveWork.projectContextUnavailable",
+    "chat.liveWork.redactedDetail",
     "chat.liveWork.refreshFailed",
     "chat.liveWork.region",
     "chat.liveWork.registeredProject",
@@ -59,12 +60,12 @@
     "chat.liveWork.status.superseded",
     "chat.liveWork.status.waiting"
   ],
-  "generatedAt": "2026-07-22T04:04:01.757Z",
+  "generatedAt": "2026-07-22T04:34:59.710Z",
   "locale": "pt-BR",
   "model": "gpt-5.5",
   "provider": "openai",
-  "sourceHash": "a2d6c26799bdf6ca7d30f6c320e0bc054eb9f262f1fd71795a7ced0594115826",
-  "totalKeys": 1734,
+  "sourceHash": "02804127a840475c632e90f175622b9b27ba8cc9b6d516950dabb3999bafccea",
+  "totalKeys": 1735,
   "translatedKeys": 1676,
   "workflow": 1
 }

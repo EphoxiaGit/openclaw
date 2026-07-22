@@ -7,8 +7,11 @@ import {
   createLiveWorkState,
   formatLiveWorkNumber,
   formatLiveWorkPlanStatus,
+  isLiveWorkSessionArchived,
   normalizeLiveWork,
+  presentLiveWorkView,
   refreshLiveWork,
+  sanitizeLiveWorkDisplayText,
   shouldHandleChatPaneEscape,
   type LiveWorkContinueActivation,
 } from "./chat-live-work.ts";
@@ -188,6 +191,76 @@ describe("chat live work", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    "README.md",
+    "src/work/runner.ts",
+    "/private/repo/file.ts",
+    "C:\\Users\\operator\\secret.txt",
+    "\\\\server\\share\\private.docx",
+    "`cargo test --workspace`",
+    "openclaw gateway restart",
+    "pytest -q tests/private_test.py",
+    "go test ./...",
+    "pip install private-package",
+    "dotnet test private.sln",
+    "echo private | tee output.txt",
+    "550e8400-e29b-41d4-a716-446655440000",
+    "opaqueProjectIdentifier1234567890",
+  ])("collapses unsafe presentation-only text to a localized fallback: %s", (unsafeText) => {
+    expect(sanitizeLiveWorkDisplayText(unsafeText, "Safe fallback")).toBe("Safe fallback");
+  });
+
+  it("sanitizes every rendered project, capsule, goal, checkpoint, and step label", () => {
+    const unsafeContext = context();
+    unsafeContext.registeredProject.displayName = "README.md";
+    unsafeContext.goal.objective = "550e8400-e29b-41d4-a716-446655440000";
+    unsafeContext.capsule.content.summary = "Run pytest -q tests/private_test.py";
+    unsafeContext.capsule.content.currentFocus = "src/private/focus.ts";
+    unsafeContext.capsule.content.explicitNextTask = "`cargo test --workspace`";
+    Object.assign(unsafeContext, {
+      latestCheckpoint: { content: { exactNextAction: "C:\\private\\next.ps1" } },
+    });
+    const unsafeProject = project({
+      plans: [
+        {
+          ...project().plans[0],
+          goal: { objective: "openclaw gateway restart", recordRevision: 2 },
+          steps: [
+            {
+              stepId: "step-secret-a",
+              title: "\\\\server\\share\\active.txt",
+              status: "running",
+              attempts: [],
+            },
+            {
+              stepId: "step-secret-b",
+              title: "opaqueStepIdentifier1234567890",
+              status: "ready",
+              attempts: [],
+            },
+          ],
+        },
+      ],
+    });
+    const rendered = JSON.stringify(normalizeLiveWork(unsafeProject, unsafeContext));
+    for (const forbidden of [
+      "README.md",
+      "pytest",
+      "private_test.py",
+      "src/private",
+      "cargo test",
+      "550e8400",
+      "C:\\\\private",
+      "server\\\\share",
+      "opaqueStepIdentifier",
+      "openclaw gateway",
+    ]) {
+      expect(rendered).not.toContain(forbidden);
+    }
+    expect(rendered).toContain(t("chat.liveWork.registeredProject"));
+    expect(rendered).toContain(t("chat.liveWork.redactedDetail"));
+  });
+
   it("fails closed when capsule provenance is absent or unknown", () => {
     const absent = context();
     delete (absent as { capsuleProvenance?: unknown }).capsuleProvenance;
@@ -350,9 +423,11 @@ describe("chat live work", () => {
   it("clears prior-session cached work when switching while disconnected", async () => {
     const state = createLiveWorkState();
     state.sessionKey = "agent:main:first";
+    state.loading = true;
     state.view = normalizeLiveWork(project(), context());
     await refreshLiveWork(state, null, "agent:main:second", false, () => undefined);
     expect(state.view).toBeNull();
+    expect(state.loading).toBe(false);
   });
 
   it("rechecks every Continue precondition at activation time", () => {
@@ -367,6 +442,7 @@ describe("chat live work", () => {
       currentRequestVersion: 7,
       expectedClient: client,
       currentClient: client,
+      loading: false,
       connected: true,
       archived: false,
       runActive: false,
@@ -387,6 +463,7 @@ describe("chat live work", () => {
       { ...baseline, currentSessionKey: "agent:main:other" },
       { ...baseline, currentRequestVersion: 8 },
       { ...baseline, currentClient: otherClient },
+      { ...baseline, loading: true },
       { ...baseline, connected: false },
       { ...baseline, archived: true },
       { ...baseline, runActive: true },
@@ -410,6 +487,76 @@ describe("chat live work", () => {
   it("only lets the active pane handle Escape", () => {
     expect(shouldHandleChatPaneEscape(true)).toBe(true);
     expect(shouldHandleChatPaneEscape(false)).toBe(false);
+  });
+
+  it("marks retained work visibly stale and disables Continue while refresh is in flight", async () => {
+    let releaseList!: (value: unknown) => void;
+    let deferred = false;
+    const request = vi.fn(async (method: string) => {
+      if (method === "work.projects.list") {
+        if (deferred) {
+          return new Promise((resolve) => {
+            releaseList = resolve;
+          });
+        }
+        return { projects: [project()] };
+      }
+      if (method === "work.projects.get") {
+        return { project: project() };
+      }
+      if (method === "work.projectContext.get") {
+        return { context: context() };
+      }
+      throw new Error("unexpected request");
+    });
+    const client = { request } as unknown as GatewayBrowserClient;
+    const state = createLiveWorkState();
+    await refreshLiveWork(state, client, "agent:main:main", true, () => undefined);
+    const cached = state.view!;
+    deferred = true;
+    const refresh = refreshLiveWork(state, client, "agent:main:main", true, () => undefined);
+
+    expect(state.loading).toBe(true);
+    expect(state.view).toBe(cached);
+    expect(presentLiveWorkView(cached, state.loading)).toMatchObject({
+      kind: "plan",
+      stale: true,
+      message: t("chat.liveWork.loading"),
+    });
+    expect(
+      canActivateLiveWorkContinue({
+        paneActive: true,
+        paneConnected: true,
+        expectedSessionKey: state.sessionKey,
+        currentSessionKey: state.sessionKey,
+        expectedRequestVersion: state.requestVersion,
+        currentRequestVersion: state.requestVersion,
+        expectedClient: client,
+        currentClient: client,
+        loading: state.loading,
+        connected: true,
+        archived: false,
+        runActive: false,
+        sending: false,
+        composing: false,
+        stateDraft: "",
+        liveDraft: "",
+        expectedView: cached,
+        currentView: state.view,
+        draft: cached.continueDraft ?? "",
+      }),
+    ).toBe(false);
+
+    releaseList({ projects: [project()] });
+    await refresh;
+    expect(state.loading).toBe(false);
+  });
+
+  it("recomputes archive ownership after render-time state changes", () => {
+    const sessions = [{ key: "agent:main:main", archived: false }];
+    expect(isLiveWorkSessionArchived(false, sessions, "agent:main:main")).toBe(false);
+    sessions[0].archived = true;
+    expect(isLiveWorkSessionArchived(false, sessions, "agent:main:main")).toBe(true);
   });
 
   it("formats plan progress with locale-aware numerals", () => {

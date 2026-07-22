@@ -1638,6 +1638,7 @@ export const pl: TranslationMap = {
       noFocus: "No current focus is available.",
       noObjective: "No objective is available.",
       noNextTask: "No next task is available.",
+      redactedDetail: "Sensitive detail omitted.",
       continuationDraft: "Continue {project}: {task}",
       continuationPrepared: "Continuation prepared. Review and send.",
       parallel: "(+{count} parallel)",

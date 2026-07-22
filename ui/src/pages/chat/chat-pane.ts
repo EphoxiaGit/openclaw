@@ -69,6 +69,8 @@ import { renderChatControls } from "./components/chat-controls.ts";
 import {
   canActivateLiveWorkContinue,
   createLiveWorkState,
+  isLiveWorkSessionArchived,
+  presentLiveWorkView,
   refreshLiveWork,
   shouldHandleChatPaneEscape,
   type LiveWorkState,
@@ -861,11 +863,11 @@ class ChatPane extends LitElement {
     const agentDefaultModel = this.context.agents.state.agentsList?.agents.find(
       (agent) => agent.id === currentAgentId,
     )?.model?.primary;
-    const selectedSessionArchived =
-      state.selectedChatSessionArchived ||
-      state.sessionsResult?.sessions.some(
-        (row) => row.archived === true && areUiSessionKeysEquivalent(row.key, state.sessionKey),
-      ) === true;
+    const selectedSessionArchived = isLiveWorkSessionArchived(
+      state.selectedChatSessionArchived,
+      state.sessionsResult?.sessions,
+      state.sessionKey,
+    );
     const liveWorkView = this.liveWorkState.view;
     const liveWorkSessionKey = this.liveWorkState.sessionKey;
     const liveWorkRequestVersion = this.liveWorkState.requestVersion;
@@ -885,6 +887,7 @@ class ChatPane extends LitElement {
           currentRequestVersion: this.liveWorkState.requestVersion,
           expectedClient: liveWorkClient,
           currentClient: state.client,
+          loading: this.liveWorkState.loading,
           connected: state.connected,
           archived: selectedSessionArchived,
           runActive: liveWorkRunActive,
@@ -1016,7 +1019,7 @@ class ChatPane extends LitElement {
       sessionWorkspace: createSessionWorkspaceProps(state),
       liveWork: liveWorkView
         ? {
-            view: liveWorkView,
+            view: presentLiveWorkView(liveWorkView, this.liveWorkState.loading),
             canContinue: canContinueLiveWork,
             announcement: this.liveWorkAnnouncement,
             onContinue: (draft) => {
@@ -1033,8 +1036,13 @@ class ChatPane extends LitElement {
                   currentRequestVersion: this.liveWorkState.requestVersion,
                   expectedClient: liveWorkClient,
                   currentClient: state.client,
+                  loading: this.liveWorkState.loading,
                   connected: state.connected,
-                  archived: selectedSessionArchived,
+                  archived: isLiveWorkSessionArchived(
+                    state.selectedChatSessionArchived,
+                    state.sessionsResult?.sessions,
+                    state.sessionKey,
+                  ),
                   runActive:
                     hasAbortableSessionRun(state) ||
                     Boolean(state.chatRunId) ||

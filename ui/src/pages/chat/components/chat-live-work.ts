@@ -121,6 +121,7 @@ export type LiveWorkContinueActivation = {
   currentRequestVersion: number;
   expectedClient: GatewayBrowserClient | null;
   currentClient: GatewayBrowserClient | null;
+  loading: boolean;
   connected: boolean;
   archived: boolean;
   runActive: boolean;
@@ -141,6 +142,7 @@ export function canActivateLiveWorkContinue(input: LiveWorkContinueActivation): 
     input.expectedRequestVersion === input.currentRequestVersion &&
     input.expectedClient !== null &&
     input.expectedClient === input.currentClient &&
+    !input.loading &&
     input.connected &&
     !input.archived &&
     !input.runActive &&
@@ -160,6 +162,25 @@ export function shouldHandleChatPaneEscape(active: boolean): boolean {
   return active;
 }
 
+export function isLiveWorkSessionArchived(
+  selectedSessionArchived: boolean,
+  sessions: Array<{ key: string; archived?: boolean }> | undefined,
+  sessionKey: string,
+): boolean {
+  return (
+    selectedSessionArchived ||
+    sessions?.some(
+      (row) => row.archived === true && areUiSessionKeysEquivalent(row.key, sessionKey),
+    ) === true
+  );
+}
+
+export function presentLiveWorkView(view: LiveWorkView, loading: boolean): LiveWorkView {
+  return loading && view.kind !== "loading"
+    ? { ...view, stale: true, message: t("chat.liveWork.loading") }
+    : view;
+}
+
 export function formatLiveWorkNumber(value: number, locale = i18n.getLocale()): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
 }
@@ -175,26 +196,38 @@ export function formatLiveWorkPlanStatus(status: WorkPlanStatus): string {
   return t(`chat.liveWork.status.${status}`);
 }
 
-function safeText(value: unknown, fallback = ""): string {
+const COMMAND_INVOCATION =
+  /(?:^|[\s:;(])(?:\$\s*|sudo\s+)?(?:(?:bash|sh|zsh|fish|powershell|pwsh|cmd)(?:\.exe)?\b|(?:openclaw|pnpm|npm|npx|yarn|bun|git|gh|curl|wget|rm|cp|mv|cd|node|deno|python\d*|pytest|pip\d*|pipx|poetry|uv|cargo|rustc|docker|podman|wrangler|ssh|scp|rsync|kubectl|helm|terraform|ansible|gradle|mvn|dotnet|java|javac|kotlin|swift|xcodebuild|ruby|bundle|rake|gem|php|composer|perl|gcc|g\+\+|clang|cmake|meson|ninja|nix|nix-shell|brew|apt|apt-get|dnf|yum|pacman|systemctl|service)\b|go\s+(?:build|clean|env|generate|get|install|list|mod|run|test|tool|version|work)\b|make(?:\s|$))/i;
+const SHELL_SYNTAX = /(?:&&|\|\||\$\(|\${|[<>]|(?:^|\s)\|(?:\s|$))/;
+const PATH_OR_FILENAME =
+  /(?:\\\\[^\s\\/]+[\\/][^\s,;:()]+|[a-z]:[\\/][^\s,;:()]+|(?:~?[\\/]|\.\.?[\\/])[^\s,;:()]+|\b(?:[a-z0-9_.-]+[\\/])+(?:[a-z0-9_.-]+)\b|\b(?:readme|changelog|license|makefile|dockerfile)(?:\.[a-z0-9]+)?\b|\b[a-z0-9][a-z0-9_.-]{0,80}\.[a-z0-9]{1,10}\b)/gi;
+const OPAQUE_IDENTIFIER =
+  /\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,}|(?=[a-z0-9_-]{24,}\b)(?=[a-z0-9_-]*\d)[a-z0-9_-]+|(?:agent|session|project|plan|step|run):[a-z0-9:_-]{8,})\b/gi;
+
+export function sanitizeLiveWorkDisplayText(value: unknown, fallback = ""): string {
   if (typeof value !== "string") {
     return fallback;
   }
-  return redactToolDetail(value.trim())
-    .replace(/```[\s\S]*?```/g, "[command omitted]")
-    .replace(
-      /(?:\\\\[^\s\\/]+[\\/][^\s,;]+|[a-z]:[\\/][^\s,;]+|~?[\\/](?=[a-z_.-])[^\s,;]+)/gi,
-      "[path omitted]",
-    )
-    .replace(
-      /(^|\n)\s*(?:\$\s*|(?:sudo\s+)?(?:bash|sh|zsh|fish|powershell|pwsh|cmd)(?:\.exe)?\s+(?:-[a-z]+\s+)?|(?:pnpm|npm|npx|yarn|bun|git|gh|curl|wget|rm|cp|mv|cd|node|python\d*|docker|wrangler|make|ssh|scp|rsync)\s+)[^\n]+/gi,
-      "$1[command omitted]",
-    )
-    .replace(
-      /\b(?:(?:sudo\s+)?(?:bash|sh|zsh|fish|powershell|pwsh|cmd)(?:\.exe)?\s+(?:-[a-z]+\s+)?|(?:pnpm|npm|npx|yarn|bun|git|gh|curl|wget|rm|cp|mv|cd|node|python\d*|docker|wrangler|make|ssh|scp|rsync)\s+)[^.\n]+/gi,
-      "[command omitted]",
-    )
+  const redacted = t("chat.liveWork.redactedDetail");
+  const sanitized = redactToolDetail(value.trim())
+    .replace(/```[\s\S]*?```/g, redacted)
+    .replace(/`[^`\n]+`/g, redacted)
+    .split(/\r?\n/)
+    .map((line) => (COMMAND_INVOCATION.test(line) || SHELL_SYNTAX.test(line) ? redacted : line))
+    .join("\n")
+    .replace(PATH_OR_FILENAME, redacted)
+    .replace(OPAQUE_IDENTIFIER, redacted)
+    .replace(/\s+/g, " ")
+    .trim()
     .slice(0, 4_000);
+  const meaningful = sanitized
+    .replaceAll(redacted, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+  return meaningful ? sanitized : fallback;
 }
+
+const safeText = sanitizeLiveWorkDisplayText;
 
 function number(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -238,7 +271,7 @@ function stepTitles(plan: WirePlan, ids: unknown): string[] {
   return Array.isArray(plan.steps)
     ? (plan.steps as WireStep[])
         .filter((step) => typeof step.stepId === "string" && requested.has(step.stepId))
-        .map((step) => safeText(step.title))
+        .map((step) => safeText(step.title, t("chat.liveWork.redactedDetail")))
         .filter(Boolean)
     : [];
 }
@@ -382,6 +415,7 @@ export async function refreshLiveWork(
   state.sessionKey = sessionKey;
   const version = ++state.requestVersion;
   if (!client || !connected) {
+    state.loading = false;
     if (state.view) {
       state.view = {
         ...state.view,
