@@ -477,10 +477,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
         createdAt,
         updatedAt,
         endedAt,
-        durationMs:
-          createdAt && (endedAt ?? updatedAt)
-            ? Math.max(0, (endedAt ?? updatedAt)! - createdAt)
-            : null,
+        durationMs: createdAt && endedAt ? Math.max(0, endedAt - createdAt) : null,
       };
     });
   const requirements = Array.isArray(plan.requirements)

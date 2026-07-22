@@ -149,6 +149,66 @@ describe("markdown sidebar", () => {
     });
     panel.remove();
   });
+
+  it("isolates one mobile chat pane and restores the exact detail opener", async () => {
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: true,
+        media: "(max-width: 768px)",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+    const otherPaneButton = document.createElement("button");
+    const pane = document.createElement("openclaw-chat-pane");
+    const rail = document.createElement("aside");
+    const split = document.createElement("div");
+    const main = document.createElement("div");
+    const divider = document.createElement("resizable-divider");
+    const opener = document.createElement("button");
+    const panel = document.createElement("openclaw-chat-detail-panel") as HTMLElement & {
+      content: unknown;
+      activePane: boolean;
+      updateComplete?: Promise<unknown>;
+    };
+    rail.className = "chat-workspace-rail";
+    split.className = "chat-split-container";
+    main.className = "chat-main";
+    opener.textContent = "Open details";
+    panel.content = { kind: "markdown", content: "Safe details" };
+    panel.activePane = true;
+    main.append(opener);
+    split.append(main, divider);
+    pane.append(rail, split);
+    document.body.append(otherPaneButton, pane);
+    opener.focus();
+    split.append(panel);
+    panel.addEventListener("chat-detail-panel-close", () => panel.remove());
+    await panel.updateComplete;
+
+    expect(main.inert).toBe(true);
+    expect(divider.inert).toBe(true);
+    expect(rail.inert).toBe(true);
+    expect(otherPaneButton.inert).not.toBe(true);
+
+    panel.querySelector<HTMLButtonElement>(".sidebar-header button")?.click();
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(opener);
+    expect(main.inert).not.toBe(true);
+    expect(divider.inert).not.toBe(true);
+    expect(rail.inert).not.toBe(true);
+    expect(main.hasAttribute("aria-hidden")).toBe(false);
+
+    pane.remove();
+    otherPaneButton.remove();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: originalMatchMedia,
+    });
+  });
 });
 
 describe("work plan sidebar", () => {

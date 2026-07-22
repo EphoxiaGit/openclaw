@@ -33,6 +33,20 @@ function createWorkPlanPanelId(): string {
   return `work-plan-${workPlanPanelInstance}`;
 }
 
+function modalBackgroundSiblings(target: HTMLElement, boundary: HTMLElement): HTMLElement[] {
+  const siblings: HTMLElement[] = [];
+  let current = target;
+  while (current.parentElement && current !== boundary) {
+    for (const sibling of current.parentElement.children) {
+      if (sibling instanceof HTMLElement && sibling !== current) {
+        siblings.push(sibling);
+      }
+    }
+    current = current.parentElement;
+  }
+  return siblings;
+}
+
 type DetailUnavailableReason = "not_found" | "oversized" | "not_visible";
 export type DetailFullMessageResult = {
   ok?: boolean;
@@ -998,6 +1012,11 @@ class ChatDetailPanel extends LitElement {
   private copyFeedbackTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private mobileQuery: MediaQueryList | null = null;
   private readonly workPlanIdPrefix = createWorkPlanPanelId();
+  private opener: HTMLElement | null = null;
+  private isolatedBackground = new Map<
+    HTMLElement,
+    { inert: boolean; ariaHidden: string | null }
+  >();
 
   override createRenderRoot() {
     return this;
@@ -1005,6 +1024,7 @@ class ChatDetailPanel extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
+    this.opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.addEventListener("pointerdown", this.handleDocumentPointerDown);
     this.mobileQuery = window.matchMedia?.("(max-width: 768px)") ?? null;
     this.mobileQuery?.addEventListener("change", this.handleMobileChange);
@@ -1233,6 +1253,13 @@ class ChatDetailPanel extends LitElement {
   private readonly close = () => {
     this.setBackgroundIsolated(false);
     this.dispatchEvent(new CustomEvent("chat-detail-panel-close", { bubbles: true }));
+    const opener = this.opener;
+    this.opener = null;
+    queueMicrotask(() => {
+      if (opener?.isConnected) {
+        opener.focus({ preventScroll: true });
+      }
+    });
   };
 
   private readonly handleMobileChange = (event: MediaQueryListEvent) => {
@@ -1250,17 +1277,34 @@ class ChatDetailPanel extends LitElement {
   }
 
   private setBackgroundIsolated(isolated: boolean) {
-    const main =
-      this.closest(".chat-split-container")?.querySelector<HTMLElement>(":scope > .chat-main");
-    if (!main) {
+    if (!isolated) {
+      for (const [element, previous] of this.isolatedBackground) {
+        element.inert = previous.inert;
+        if (previous.ariaHidden === null) {
+          element.removeAttribute("aria-hidden");
+        } else {
+          element.setAttribute("aria-hidden", previous.ariaHidden);
+        }
+      }
+      this.isolatedBackground.clear();
       return;
     }
-    if (isolated) {
-      main.inert = true;
-      main.setAttribute("aria-hidden", "true");
-    } else {
-      main.inert = false;
-      main.removeAttribute("aria-hidden");
+    if (this.isolatedBackground.size > 0) {
+      return;
+    }
+    const boundary =
+      this.closest<HTMLElement>("openclaw-chat-pane") ??
+      this.closest<HTMLElement>(".chat-split-container");
+    if (!boundary) {
+      return;
+    }
+    for (const sibling of modalBackgroundSiblings(this, boundary)) {
+      this.isolatedBackground.set(sibling, {
+        inert: sibling.inert,
+        ariaHidden: sibling.getAttribute("aria-hidden"),
+      });
+      sibling.inert = true;
+      sibling.setAttribute("aria-hidden", "true");
     }
   }
 

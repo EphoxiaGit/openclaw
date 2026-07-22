@@ -140,11 +140,10 @@ describe("chat live work", () => {
             ownerId: "private-owner",
             attemptNumber: 1,
             ownerType: "codex",
-            ownerState: "succeeded",
+            ownerState: "running",
             recoveryState: "reconciled-after-restart",
             createdAt: 100,
             updatedAt: 200,
-            endedAt: 200,
           },
         ],
       },
@@ -190,6 +189,7 @@ describe("chat live work", () => {
       checkpointEvidence: { files: 1, tests: 1, blockers: 1 },
       handoffPresent: true,
     });
+    expect(view.details?.attempts?.[0]?.durationMs).toBeNull();
     const rendered = JSON.stringify(view);
     for (const secret of [
       "private-requirement",
@@ -700,7 +700,7 @@ describe("chat live work", () => {
   });
 
   it("disables chat-main transition and sidebar animation for reduced motion", async () => {
-    const css = await readFile("ui/src/styles/chat/sidebar.css", "utf8");
+    const css = await readFile("src/styles/chat/sidebar.css", "utf8");
     const start = css.indexOf("@media (prefers-reduced-motion: reduce)");
     const reducedMotion = css.slice(start, css.indexOf("@media", start + 1));
     expect(reducedMotion).toContain(".chat-main");
