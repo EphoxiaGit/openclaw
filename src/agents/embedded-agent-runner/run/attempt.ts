@@ -2264,6 +2264,7 @@ export async function runEmbeddedAttempt(
       await prewarmSessionFile(params.sessionFile);
       const preparedUserTurnMessage = await params.userTurnTranscriptRecorder?.resolveMessage();
       sessionManager = guardSessionManager(SessionManager.open(params.sessionFile), {
+        runId: params.runId,
         agentId: sessionAgentId,
         sessionKey: params.sessionKey,
         config: params.config,
@@ -4114,6 +4115,15 @@ export async function runEmbeddedAttempt(
           modelProviderId: params.model.provider,
           modelId: params.model.id,
           trigger: params.trigger,
+          // Lifecycle gates must receive the host-resolved window; plugin defaults
+          // otherwise misclassify runs whose model or agent cap is smaller.
+          ...(params.contextTokenBudget ? { contextTokenBudget: params.contextTokenBudget } : {}),
+          ...(params.contextWindowInfo?.source
+            ? { contextWindowSource: params.contextWindowInfo.source }
+            : {}),
+          ...(params.contextWindowInfo?.referenceTokens
+            ? { contextWindowReferenceTokens: params.contextWindowInfo.referenceTokens }
+            : {}),
           ...buildAgentHookContextChannelFields(params),
           ...buildAgentHookContextIdentityFields({
             trigger: params.trigger,

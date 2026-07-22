@@ -286,6 +286,12 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/copilot-proxy/**"
+"extensions: context-safety":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/context-safety/**"
+          - "docs/plugins/context-safety.md"
+          - "docs/plugins/reference/context-safety.md"
 "extensions: diagnostics-otel":
   - changed-files:
       - any-glob-to-any-file:

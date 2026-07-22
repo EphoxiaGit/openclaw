@@ -2063,10 +2063,29 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
       contextEngine: createContextEngineBootstrapAndAssemble(),
       sessionKey,
       tempPaths,
+      attemptOverrides: {
+        contextTokenBudget: 64_000,
+        contextWindowInfo: {
+          tokens: 64_000,
+          referenceTokens: 200_000,
+          source: "agentContextTokens",
+        },
+      },
       sessionPrompt,
     });
 
     expect(runBeforeAgentRun).toHaveBeenCalledTimes(1);
+    expectFields(
+      requireRecord(
+        mockArg(runBeforeAgentRun as MockCallSource, 0, 1, "before_agent_run context"),
+        "before_agent_run context",
+      ),
+      {
+        contextTokenBudget: 64_000,
+        contextWindowSource: "agentContextTokens",
+        contextWindowReferenceTokens: 200_000,
+      },
+    );
     expect(sessionPrompt).not.toHaveBeenCalled();
     expect(result.finalPromptText).toBeUndefined();
     expect(result.promptErrorSource).toBe("hook:before_agent_run");

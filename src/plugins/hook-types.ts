@@ -251,6 +251,7 @@ export const CONVERSATION_HOOK_NAMES = [
   "llm_output",
   "before_agent_finalize",
   "agent_end",
+  "tool_result_persist",
   "before_agent_run",
 ] as const satisfies readonly PluginHookName[];
 
@@ -682,6 +683,8 @@ export type PluginHookAfterToolCallEvent = {
 };
 
 export type PluginHookToolResultPersistContext = {
+  /** Host-authoritative run correlation. Absent when persistence is not owned by an active run. */
+  runId?: string;
   agentId?: string;
   sessionKey?: string;
   toolName?: string;

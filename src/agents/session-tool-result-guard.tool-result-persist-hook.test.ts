@@ -39,7 +39,7 @@ function writeTempPlugin(params: { dir: string; id: string; body: string }): str
   return file;
 }
 
-function appendToolCallAndResult(sm: ReturnType<typeof SessionManager.inMemory>) {
+function appendToolCallAndResult(sm: ReturnType<typeof SessionManager.inMemory>, text = "ok") {
   const appendMessage = sm.appendMessage.bind(sm) as unknown as (message: AgentMessage) => void;
   appendMessage({
     role: "assistant",
@@ -50,7 +50,7 @@ function appendToolCallAndResult(sm: ReturnType<typeof SessionManager.inMemory>)
     role: "toolResult",
     toolCallId: "call_1",
     isError: false,
-    content: [{ type: "text", text: "ok" }],
+    content: [{ type: "text", text }],
     details: { big: "x".repeat(10_000) },
   } as any);
 }
@@ -87,6 +87,9 @@ function initializeTempPlugin(params: { tmpPrefix: string; id: string; body: str
       plugins: {
         load: { paths: [plugin] },
         allow: [params.id],
+        entries: {
+          [params.id]: { hooks: { allowConversationAccess: true } },
+        },
       },
     },
   });
@@ -711,6 +714,10 @@ describe("tool_result_persist hook", () => {
         plugins: {
           load: { paths: [pluginA, pluginB] },
           allow: ["persist-a", "persist-b"],
+          entries: {
+            "persist-a": { hooks: { allowConversationAccess: true } },
+            "persist-b": { hooks: { allowConversationAccess: true } },
+          },
         },
       },
     });
@@ -754,6 +761,60 @@ describe("tool_result_persist hook", () => {
 
     appendToolCallAndResult(sm);
     expectPersistedToolResultTextCapped(sm);
+  });
+
+  it("passes raw non-synthetic content to tool_result_persist before the final cap", () => {
+    initializeTempPlugin({
+      tmpPrefix: "openclaw-toolpersist-raw-input-",
+      id: "persist-raw-input",
+      body: `export default { id: "persist-raw-input", register(api) {
+  api.on("tool_result_persist", (event) => {
+    const text = event.message.content.find((block) => block.type === "text")?.text ?? "";
+    return {
+      message: {
+        ...event.message,
+        content: [{ type: "text", text: "seen:" + text.length }],
+      },
+    };
+  });
+} };`,
+    });
+
+    const sm = guardSessionManager(SessionManager.inMemory(), {
+      agentId: "main",
+      sessionKey: "main",
+      contextWindowTokens: 100,
+    });
+
+    appendToolCallAndResult(sm, "x".repeat(5_000));
+    expect(requirePersistedToolResult(sm).content[0]?.text).toBe("seen:5000");
+  });
+
+  it("passes only the host-provided run id into tool_result_persist context", () => {
+    initializeTempPlugin({
+      tmpPrefix: "openclaw-toolpersist-run-correlation-",
+      id: "persist-run-correlation",
+      body: `export default { id: "persist-run-correlation", register(api) {
+  api.on("tool_result_persist", (event, ctx) => ({
+    message: { ...event.message, content: [{ type: "text", text: ctx.runId ?? "missing" }] },
+  }));
+} };`,
+    });
+
+    const correlated = guardSessionManager(SessionManager.inMemory(), {
+      runId: "authoritative-run",
+      agentId: "main",
+      sessionKey: "main",
+    });
+    appendToolCallAndResult(correlated);
+    expect(requirePersistedToolResult(correlated).content[0]?.text).toBe("authoritative-run");
+
+    const uncorrelated = guardSessionManager(SessionManager.inMemory(), {
+      agentId: "main",
+      sessionKey: "main",
+    });
+    appendToolCallAndResult(uncorrelated);
+    expect(requirePersistedToolResult(uncorrelated).content[0]?.text).toBe("missing");
   });
 
   it("reapplies the details cap after tool_result_persist expands details", () => {

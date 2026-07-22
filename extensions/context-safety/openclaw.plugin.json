@@ -1,0 +1,22 @@
+{
+  "id": "context-safety",
+  "name": "Context Safety Firewall",
+  "description": "Bounds tool inputs, persisted tool results, aggregate turn output, and provider preflight context.",
+  "activation": { "onStartup": true },
+  "enabledByDefault": true,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "toolResultMaxBytes": { "type": "integer", "minimum": 1, "default": 131072 },
+      "toolResultWarnBytes": { "type": "integer", "minimum": 1, "default": 65536 },
+      "turnBudgetMaxBytes": { "type": "integer", "minimum": 1, "default": 262144 },
+      "toolArgMaxBytes": { "type": "integer", "minimum": 1, "default": 65536 },
+      "searchOutputMaxBytes": { "type": "integer", "minimum": 1, "default": 10240 },
+      "preflightWarnPct": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.6 },
+      "preflightHardPct": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.85 },
+      "contextWindowTokens": { "type": "integer", "minimum": 1, "default": 1048576 },
+      "artifactsDir": { "type": "string", "minLength": 1, "default": "plugins/context-safety/artifacts" }
+    }
+  }
+}

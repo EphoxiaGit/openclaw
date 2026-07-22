@@ -782,17 +782,19 @@ export function installSessionToolResultGuard(
       // Apply hard size cap before persistence to prevent oversized tool results
       // from consuming the entire context window on subsequent LLM calls.
       const persistedToolResult = persistMessage(normalizedToolResult);
-      const capped = capToolResultForPersistence(
-        persistedToolResult,
-        maxToolResultChars,
-        redactionConfig,
-      );
-      const transformed = persistToolResult(capped, {
+      // Conversation-access-gated tool_result_persist hooks must see non-synthetic
+      // output before the legacy cap; the final cap still bounds transcript replay.
+      const transformed = persistToolResult(persistedToolResult, {
         toolCallId: id ?? undefined,
         toolName,
         isSynthetic: false,
       });
-      const persisted = applyBeforeWriteHook(transformed);
+      const cappedAfterHook = capToolResultForPersistence(
+        transformed,
+        maxToolResultChars,
+        redactionConfig,
+      );
+      const persisted = applyBeforeWriteHook(cappedAfterHook);
       if (!persisted) {
         return undefined;
       }

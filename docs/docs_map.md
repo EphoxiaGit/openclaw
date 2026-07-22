@@ -5467,6 +5467,15 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H3: Maintainer acceptance lane
   - H2: Release notes
 
+## plugins/context-safety.md
+
+- Route: /plugins/context-safety
+- Headings:
+  - H1: Context safety plugin
+  - H2: Hooks
+  - H2: Telemetry
+  - H2: Configuration
+
 ## plugins/copilot.md
 
 - Route: /plugins/copilot
@@ -5942,6 +5951,15 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
 - Route: /plugins/reference/comfy
 - Headings:
   - H1: ComfyUI plugin
+  - H2: Distribution
+  - H2: Surface
+  - H2: Related docs
+
+## plugins/reference/context-safety.md
+
+- Route: /plugins/reference/context-safety
+- Headings:
+  - H1: Context Safety plugin
   - H2: Distribution
   - H2: Surface
   - H2: Related docs
@@ -8280,6 +8298,15 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Focused reruns
   - H2: Evidence to keep
   - H2: Workflow files
+
+## reference/main-workspace-release-lane.md
+
+- Route: /reference/main-workspace-release-lane
+- Headings:
+  - H2: Capability profiles
+  - H2: Create a receipt
+  - H2: Clean-room build and validation
+  - H2: Explicit activation and rollback
 
 ## reference/memory-config.md
 

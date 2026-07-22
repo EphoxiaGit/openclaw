@@ -40,6 +40,7 @@ type GuardedSessionManager = SessionManager & {
 export function guardSessionManager(
   sessionManager: SessionManager,
   opts?: {
+    runId?: string;
     agentId?: string;
     sessionKey?: string;
     config?: OpenClawConfig;
@@ -123,6 +124,7 @@ export function guardSessionManager(
             isSynthetic: meta.isSynthetic,
           },
           {
+            runId: opts?.runId,
             agentId: opts?.agentId,
             sessionKey: opts?.sessionKey,
             toolName: meta.toolName,
