@@ -153,6 +153,76 @@ class ChatPane extends LitElement {
   private liveWorkVisible = true;
   private liveWorkShowContinueDraft = true;
   private liveWorkConfigSettled = false;
+  private personaSelection: { personaId: string; recordRevision: number } | null = null;
+  private personaSelectionLoading = true;
+  private personaSelectionGeneration = 0;
+
+  private async refreshPersonaSelection(sessionKey = this.state?.sessionKey) {
+    if (!sessionKey) {
+      return;
+    }
+    const generation = ++this.personaSelectionGeneration;
+    this.personaSelectionLoading = true;
+    this.requestUpdate();
+    try {
+      const result = (await this.context.personas.getSelection(sessionKey)) as {
+        selection?: { personaId: string; recordRevision: number };
+      };
+      if (generation === this.personaSelectionGeneration && this.state?.sessionKey === sessionKey) {
+        this.personaSelection = result.selection ?? null;
+        this.personaSelectionLoading = false;
+        this.requestUpdate();
+      }
+    } catch {
+      if (generation === this.personaSelectionGeneration) {
+        this.personaSelection = null;
+        this.personaSelectionLoading = false;
+        this.requestUpdate();
+      }
+    }
+  }
+
+  private readonly selectPersona = async (personaId: string | null) => {
+    const state = this.state;
+    if (!state || !canCreateChatSession(state)) {
+      return;
+    }
+    const previousSessionKey = state.sessionKey;
+    if (this.personaSelectionLoading) {
+      return;
+    }
+    const persona = this.context.personas.state.list?.personas.find(
+      (candidate) => candidate.personaId === personaId,
+    );
+    if (personaId && !persona) {
+      return;
+    }
+    const currentAgentId = resolveAgentIdFromSessionKey(previousSessionKey);
+    let targetSessionKey = previousSessionKey;
+    if (persona && persona.primaryAgentId !== currentAgentId) {
+      const created = await this.context.sessions.create({
+        currentSessionKey: previousSessionKey,
+        agentId: persona.primaryAgentId,
+      });
+      if (!created || state.sessionKey !== previousSessionKey || !canCreateChatSession(state)) {
+        return;
+      }
+      targetSessionKey = created;
+    }
+    await this.context.personas.setSelection({
+      sessionKey: targetSessionKey,
+      ...(personaId ? { personaId } : {}),
+      expectedRevision:
+        targetSessionKey === previousSessionKey ? (this.personaSelection?.recordRevision ?? 0) : 0,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    if (targetSessionKey !== previousSessionKey) {
+      this.chatState.captureCreatedSessionComposer(targetSessionKey);
+      this.onPaneSessionChange?.(this.paneId, targetSessionKey);
+    } else {
+      await this.refreshPersonaSelection(targetSessionKey);
+    }
+  };
 
   private markSessionRead(row: GatewaySessionRow | undefined) {
     const state = this.state;
@@ -209,6 +279,8 @@ class ChatPane extends LitElement {
     }
     const previousSessionKey = state.sessionKey;
     const previousSessionsResult = state.sessionsResult;
+    this.personaSelection = null;
+    this.personaSelectionLoading = true;
     const nextSessionRow = state.sessionsResult?.sessions.find((row) => row.key === nextSessionKey);
     const nextSessionLabel = resolveSessionDisplayName(nextSessionKey, nextSessionRow);
     resetChatStateForRouteSession(state, nextSessionKey);
@@ -219,6 +291,7 @@ class ChatPane extends LitElement {
     void state.loadAssistantIdentity();
     void refreshChatAvatar(state);
     void refreshChatMetadata(state).finally(() => state.requestUpdate?.());
+    void this.refreshPersonaSelection(nextSessionKey);
     const subscriptionSync = syncSelectedSessionMessageSubscription(state);
     const historyLoad = loadChatHistory(state);
     state.requestUpdate();
@@ -586,6 +659,14 @@ class ChatPane extends LitElement {
         this.applySessionsState(state);
       }),
     );
+    chatState.addCleanup(
+      this.context.personas.subscribe(() => {
+        void this.refreshPersonaSelection();
+        this.requestUpdate();
+      }),
+    );
+    void this.context.personas.refresh(true);
+    void this.refreshPersonaSelection();
     this.applyGatewaySnapshot(this.context.gateway.snapshot);
   }
 
@@ -1037,6 +1118,16 @@ class ChatPane extends LitElement {
           onThinkingSelect: (next, targetSessionKey) =>
             switchChatThinkingLevel(state, next, targetSessionKey),
         },
+        personas: this.context.personas.state.list?.personas ?? [],
+        selectedPersonaId: this.personaSelection?.personaId ?? null,
+        personaDisabled:
+          !state.connected ||
+          this.personaSelectionLoading ||
+          state.chatSending ||
+          state.chatStream !== null ||
+          Boolean(state.chatRunId),
+        personaAgentId: resolveAgentIdFromSessionKey(state.sessionKey),
+        onPersonaSelect: (personaId) => void this.selectPersona(personaId),
         onboarding: state.onboarding,
         runId: state.chatRunId,
         sending: state.chatSending,

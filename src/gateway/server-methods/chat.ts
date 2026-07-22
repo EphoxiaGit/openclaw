@@ -101,6 +101,7 @@ import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import { renderQrPngDataUrl } from "../../media/qr-image.js";
 import { renderQrTerminal } from "../../media/qr-terminal.js";
 import { deleteMediaBuffer, MEDIA_MAX_BYTES, type SavedMedia } from "../../media/store.js";
+import { resolvePersonaRunContext } from "../../personas/runtime-context.js";
 import { createChannelMessageReplyPipeline } from "../../plugin-sdk/channel-outbound.js";
 import type { ChannelRouteRef } from "../../plugin-sdk/channel-route.js";
 import { isPluginOwnedSessionBindingRecord } from "../../plugins/conversation-binding.js";
@@ -1891,6 +1892,7 @@ async function appendAssistantTranscriptMessage(params: {
     runId: string;
   };
   ttsSupplement?: GatewayInjectedTtsSupplementMarker;
+  persona?: { personaId: string; personaRevisionId: string; displayName: string };
   cfg?: OpenClawConfig;
 }): Promise<TranscriptAppendResult> {
   const scope = assistantTranscriptScope(params);
@@ -1912,6 +1914,7 @@ async function appendAssistantTranscriptMessage(params: {
     idempotencyKey: params.idempotencyKey,
     abortMeta: params.abortMeta,
     ttsSupplement: params.ttsSupplement,
+    persona: params.persona,
     config: params.cfg,
   });
   return appended;
@@ -4500,6 +4503,11 @@ export const chatHandlers: GatewayRequestHandlers = {
       // Body; the transient gateway stamp is removed (stamping the live turn
       // here would diverge from bare stored history and bust the prompt cache).
       // See: https://github.com/openclaw/openclaw/issues/3658
+      const personaRunContext = resolvePersonaRunContext({
+        sessionKey,
+        agentId,
+        configuredAgentIds: new Set(listAgentIds(cfg)),
+      });
       const ctx: MsgContext = {
         Body: messageForAgent,
         BodyForAgent: messageForAgent,
@@ -4542,6 +4550,7 @@ export const chatHandlers: GatewayRequestHandlers = {
             }
           : {}),
         GatewayClientScopes: client?.connect?.scopes ?? [],
+        ...(personaRunContext ? { GroupSystemPrompt: personaRunContext.systemPrompt } : {}),
       };
       const isInternalTextSlashCommandTurn =
         ctx.Provider === INTERNAL_MESSAGE_CHANNEL && ctx.CommandSource === "text";
@@ -4705,6 +4714,15 @@ export const chatHandlers: GatewayRequestHandlers = {
           createIfMissing: true,
           idempotencyKey: `${clientRunId}:assistant-media`,
           ttsSupplement: ttsSupplementMarker,
+          ...(personaRunContext
+            ? {
+                persona: {
+                  personaId: personaRunContext.personaId,
+                  personaRevisionId: personaRunContext.personaRevisionId,
+                  displayName: personaRunContext.displayName,
+                },
+              }
+            : {}),
           cfg,
         });
         if (appended.ok) {
@@ -5372,6 +5390,15 @@ export const chatHandlers: GatewayRequestHandlers = {
                       createIfMissing: true,
                       idempotencyKey: clientRunId,
                       ttsSupplement: ttsSupplementMarker,
+                      ...(personaRunContext
+                        ? {
+                            persona: {
+                              personaId: personaRunContext.personaId,
+                              personaRevisionId: personaRunContext.personaRevisionId,
+                              displayName: personaRunContext.displayName,
+                            },
+                          }
+                        : {}),
                       cfg,
                     });
                     if (appended.ok) {

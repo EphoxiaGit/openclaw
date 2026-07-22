@@ -10,6 +10,9 @@ import {
 } from "./app-navigation.ts";
 
 describe("sidebar pinned routes", () => {
+  it("places Personas immediately before Agents", () => {
+    expect(SIDEBAR_NAV_ROUTES.indexOf("personas") + 1).toBe(SIDEBAR_NAV_ROUTES.indexOf("agents"));
+  });
   it("defaults to a small pinned set drawn from the customizable routes", () => {
     expect(DEFAULT_SIDEBAR_PINNED_ROUTES.length).toBeLessThan(SIDEBAR_NAV_ROUTES.length);
     for (const routeId of DEFAULT_SIDEBAR_PINNED_ROUTES) {

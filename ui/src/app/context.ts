@@ -6,6 +6,7 @@ import type { AgentIdentityCapability } from "../lib/agents/identity.ts";
 import type { AgentCapability } from "../lib/agents/index.ts";
 import type { ChannelCapability } from "../lib/channels/index.ts";
 import type { RuntimeConfigCapability } from "../lib/config/index.ts";
+import type { PersonaCapability } from "../lib/personas/index.ts";
 import type { SessionCapability } from "../lib/sessions/index.ts";
 import type { WorkboardCapability } from "../lib/workboard/capability.ts";
 import type { AgentSelectionCapability } from "./agent-selection.ts";
@@ -61,6 +62,7 @@ export type ApplicationContext<TRouteId extends string = string> = {
   readonly basePath: string;
   readonly gateway: ApplicationGateway;
   readonly agents: AgentCapability;
+  readonly personas: PersonaCapability;
   readonly agentIdentity: AgentIdentityCapability;
   readonly agentSelection: AgentSelectionCapability;
   readonly channels: ChannelCapability;

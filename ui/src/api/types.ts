@@ -14,6 +14,13 @@ import type {
 export type { ConfigUiHint, ConfigUiHints } from "../../../src/shared/config-ui-hints-types.js";
 export type { SessionGoal } from "../../../src/config/sessions/types.js";
 export type { FastMode } from "@openclaw/normalization-core/string-coerce";
+export type {
+  PersonasCreateParams,
+  PersonasGetResult,
+  PersonasListResult,
+  PersonasSelectionGetParams,
+  PersonasSelectionSetParams,
+} from "../../../packages/gateway-protocol/src/schema/personas.js";
 
 export type ChannelsStatusSnapshot = {
   ts: number;

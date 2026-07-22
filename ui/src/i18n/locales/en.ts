@@ -494,6 +494,7 @@ export const en: TranslationMap = {
     unavailable: "The terminal is not available on this gateway.",
   },
   tabs: {
+    personas: "Personas",
     agents: "Agents",
     activity: "Activity",
     overview: "Overview",
@@ -524,6 +525,7 @@ export const en: TranslationMap = {
     plugin: "Plugin",
   },
   subtitles: {
+    personas: "Identity, personality, Agent bindings, and immutable revisions.",
     agents: "Workspaces, tools, identities.",
     activity: "Browser-local tool activity summaries.",
     overview: "Status, entry points, health.",

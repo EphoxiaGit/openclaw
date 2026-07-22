@@ -13,6 +13,7 @@ import { createAgentIdentityCapability } from "../lib/agents/identity.ts";
 import { createAgentCapability } from "../lib/agents/index.ts";
 import { createChannelCapability } from "../lib/channels/index.ts";
 import { createRuntimeConfigCapability } from "../lib/config/index.ts";
+import { createPersonaCapability } from "../lib/personas/index.ts";
 import { createSessionCapability } from "../lib/sessions/index.ts";
 import { createWorkboardCapability } from "../lib/workboard/capability.ts";
 import { createAgentSelectionCapability } from "./agent-selection.ts";
@@ -253,6 +254,7 @@ export function bootstrapApplication(): ApplicationRuntime {
   const settings = startup.settings;
   const gateway = createApplicationGateway(settings, startup.password ?? "");
   const agents = createAgentCapability(gateway);
+  const personas = createPersonaCapability(gateway);
   const agentIdentity = createAgentIdentityCapability(gateway);
   const agentSelection = createAgentSelectionCapability(gateway);
   const channels = createChannelCapability(gateway);
@@ -328,6 +330,7 @@ export function bootstrapApplication(): ApplicationRuntime {
     basePath,
     gateway,
     agents,
+    personas,
     agentIdentity,
     agentSelection,
     channels,
@@ -376,6 +379,7 @@ export function bootstrapApplication(): ApplicationRuntime {
       router.stop();
       gateway.stop();
       agents.dispose();
+      personas.dispose();
       channels.dispose();
       sessions.dispose();
       workboard.dispose();

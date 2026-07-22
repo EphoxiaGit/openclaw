@@ -150,4 +150,43 @@ describe("gateway chat.inject transcript writes", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("persists Persona attribution only when supplied", async () => {
+    const { dir, transcriptPath } = createTranscriptFixtureSync({
+      prefix: "openclaw-chat-inject-persona-",
+      sessionId: "sess-persona",
+    });
+    try {
+      await appendInjectedAssistantMessageToTranscript({ transcriptPath, message: "plain" });
+      let record = readLastTranscriptRecord(transcriptPath) as {
+        message: Record<string, unknown>;
+      };
+      expect(record.message).not.toHaveProperty("openclawPersona");
+
+      const persona = {
+        personaId: "persona-lucy",
+        personaRevisionId: "revision-2",
+        displayName: "Lucy",
+      };
+      const mediaAppend = await appendInjectedAssistantMessageToTranscript({
+        transcriptPath,
+        message: "attributed media",
+        persona,
+      });
+      record = readLastTranscriptRecord(transcriptPath) as {
+        message: Record<string, unknown>;
+      };
+      expect(record.message).toHaveProperty("openclawPersona", persona);
+      expect(mediaAppend.message).toHaveProperty("openclawPersona", persona);
+
+      const finalAppend = await appendInjectedAssistantMessageToTranscript({
+        transcriptPath,
+        message: "attributed final reply",
+        persona,
+      });
+      expect(finalAppend.message).toHaveProperty("openclawPersona", persona);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

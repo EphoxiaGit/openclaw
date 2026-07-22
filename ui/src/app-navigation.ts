@@ -22,6 +22,7 @@ export const SIDEBAR_NAV_ROUTES = [
   "usage",
   "cron",
   "tasks",
+  "personas",
   "agents",
   "skills",
   "skill-workshop",
@@ -80,6 +81,7 @@ export const SETTINGS_NAVIGATION_ROUTES = [
 ] as const satisfies readonly NavigationRouteId[];
 
 const NAVIGATION_ICONS: NavigationItem = {
+  personas: "spark",
   agents: "bot",
   activity: "activity",
   companion: "spark",
@@ -172,6 +174,7 @@ type NavigationCopy =
   | { title: string; subtitle: string };
 
 const NAVIGATION_COPY: Record<NavigationRouteId, NavigationCopy> = {
+  personas: { titleKey: "tabs.personas", subtitleKey: "subtitles.personas" },
   agents: { titleKey: "tabs.agents", subtitleKey: "subtitles.agents" },
   activity: { titleKey: "tabs.activity", subtitleKey: "subtitles.activity" },
   companion: { title: "Companion", subtitle: "Local avatar renderer (development only)." },

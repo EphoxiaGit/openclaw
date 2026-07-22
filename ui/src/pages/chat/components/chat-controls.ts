@@ -1,6 +1,10 @@
 // Chat-owned quota, settings, refresh, and display controls.
 import { html } from "lit";
-import type { AgentsListResult, SessionsListResult } from "../../../api/types.ts";
+import type {
+  AgentsListResult,
+  PersonasListResult,
+  SessionsListResult,
+} from "../../../api/types.ts";
 import {
   normalizeChatAutoScrollMode,
   normalizeChatSendShortcut,
@@ -28,6 +32,11 @@ type ChatControlsProps = {
   loading: boolean;
   manualRefreshInFlight: boolean;
   model: ChatModelControlsProps;
+  personas?: PersonasListResult["personas"];
+  selectedPersonaId?: string | null;
+  personaDisabled?: boolean;
+  personaAgentId?: string;
+  onPersonaSelect?: (personaId: string | null) => void;
   onboarding: boolean;
   runId: string | null;
   sending: boolean;
@@ -214,6 +223,26 @@ export function renderChatControls(props: ChatControlsProps) {
   const settingsPopoverId = `chat-composer-settings-popover-${encodeURIComponent(props.paneId)}`;
 
   return html`
+    <label class="chat-controls__inline-select">
+      <span>Persona</span>
+      <select
+        data-chat-persona-select="true"
+        .value=${props.selectedPersonaId ?? ""}
+        ?disabled=${props.personaDisabled}
+        @change=${(event: Event) => {
+          const value = (event.currentTarget as HTMLSelectElement).value;
+          props.onPersonaSelect?.(value || null);
+        }}
+      >
+        <option value="">No Persona</option>
+        ${(props.personas ?? [])
+          .filter((persona) => persona.status === "active" && persona.missingAgentIds.length === 0)
+          .map(
+            (persona) => html`<option value=${persona.personaId}>${persona.displayName}</option>`,
+          )}
+      </select>
+      <span class="muted">Agent: ${props.personaAgentId ?? "default"}</span>
+    </label>
     <div class="chat-settings-popover-wrapper">
       <openclaw-tooltip .content=${settingsTitle}>
         <button

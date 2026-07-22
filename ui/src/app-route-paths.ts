@@ -6,6 +6,7 @@ const APP_ROUTE_DEFINITIONS = {
   companion: { path: "/companion" },
   overview: { path: "/overview" },
   activity: { path: "/activity" },
+  personas: { path: "/personas" },
   agents: { path: "/agents" },
   channels: { path: "/settings/channels", aliases: ["/channels"] },
   config: { path: "/settings/general", aliases: ["/config"] },
