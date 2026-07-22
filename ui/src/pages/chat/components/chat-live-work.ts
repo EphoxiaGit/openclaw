@@ -5,11 +5,29 @@ import { redactToolDetail } from "../../../lib/browser-redact.ts";
 import { areUiSessionKeysEquivalent } from "../../../lib/sessions/session-key.ts";
 import type { SidebarContent, WorkPlanSidebarContent } from "./chat-sidebar.ts";
 
-type WireStep = { stepId?: unknown; title?: unknown; status?: unknown; attempts?: unknown };
+type WireAttempt = {
+  attemptNumber?: unknown;
+  ownerType?: unknown;
+  ownerState?: unknown;
+  recoveryState?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  endedAt?: unknown;
+};
+type WireStep = {
+  stepId?: unknown;
+  ordinal?: unknown;
+  title?: unknown;
+  status?: unknown;
+  dependsOn?: unknown;
+  attempts?: unknown;
+};
 type WirePlan = {
   status?: unknown;
   updatedAt?: unknown;
   recordRevision?: unknown;
+  definitionRevision?: unknown;
+  requirements?: unknown;
   goal?: { objective?: unknown; recordRevision?: unknown };
   steps?: unknown;
   projection?: {
@@ -43,7 +61,17 @@ type WireContext = {
     };
   };
   capsuleProvenance?: { state?: unknown };
-  latestCheckpoint?: { revision?: unknown; content?: { exactNextAction?: unknown } };
+  latestCheckpoint?: {
+    revision?: unknown;
+    createdAt?: unknown;
+    content?: {
+      exactNextAction?: unknown;
+      files?: unknown;
+      tests?: unknown;
+      blockers?: unknown;
+    };
+  };
+  latestHandoff?: unknown;
 };
 
 export type LiveWorkView = {
@@ -61,6 +89,10 @@ export type LiveWorkView = {
   planStatus?: WorkPlanStatus;
   currentStep?: string;
   parallelCount?: number;
+  blockerCount?: number;
+  recoveryCount?: number;
+  unresolvedRequirementCount?: number;
+  attemptCount?: number;
   progressNow?: number;
   progressMax?: number;
   continueDraft?: string;
@@ -285,6 +317,39 @@ function list(value: unknown): string[] {
     : [];
 }
 
+const STEP_STATUSES = new Set([
+  "pending",
+  "ready",
+  "running",
+  "waiting",
+  "blocked",
+  "review",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "skipped",
+  "superseded",
+]);
+const OWNER_TYPES = new Set(["task", "task_flow", "codex", "omx", "external"]);
+const OWNER_STATES = new Set([
+  "pending",
+  "running",
+  "waiting",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "lost",
+  "unknown",
+]);
+
+function allowlisted(value: unknown, values: Set<string>, fallback = "unknown"): string {
+  return typeof value === "string" && values.has(value) ? value : fallback;
+}
+
+function timestamp(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
 function selectPlan(
   plans: WirePlan[],
 ): { kind: "none" } | { kind: "ambiguous" } | { kind: "selected"; plan: WirePlan } {
@@ -374,6 +439,64 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
   const status = planStatus(plan.status);
   const progressNow = number(projection.x);
   const progressMax = Math.max(1, number(projection.n, 1));
+  const wireSteps = Array.isArray(plan.steps) ? (plan.steps as WireStep[]) : [];
+  const titleById = new Map(
+    wireSteps.flatMap((step) =>
+      typeof step.stepId === "string"
+        ? [[step.stepId, safeTitle(step.title, redactedDetail)] as const]
+        : [],
+    ),
+  );
+  const orderedSteps = wireSteps
+    .map((step, index) => ({
+      title: safeTitle(step.title, redactedDetail),
+      ordinal: Math.max(1, number(step.ordinal, index + 1)),
+      status: allowlisted(step.status, STEP_STATUSES),
+      dependencies: Array.isArray(step.dependsOn)
+        ? step.dependsOn
+            .flatMap((id) =>
+              typeof id === "string" && titleById.has(id) ? [titleById.get(id)!] : [],
+            )
+            .slice(0, 20)
+        : [],
+    }))
+    .toSorted((left, right) => left.ordinal - right.ordinal);
+  const attempts = wireSteps
+    .flatMap((step) => (Array.isArray(step.attempts) ? (step.attempts as WireAttempt[]) : []))
+    .map((attempt) => {
+      const createdAt = timestamp(attempt.createdAt);
+      const endedAt = timestamp(attempt.endedAt);
+      const updatedAt = timestamp(attempt.updatedAt);
+      return {
+        attemptNumber: Math.max(1, number(attempt.attemptNumber, 1)),
+        ownerType: allowlisted(attempt.ownerType, OWNER_TYPES),
+        ownerState: allowlisted(attempt.ownerState, OWNER_STATES),
+        recoveryState: (typeof attempt.recoveryState === "string" ? "present" : "none") as
+          | "present"
+          | "none",
+        createdAt,
+        updatedAt,
+        endedAt,
+        durationMs:
+          createdAt && (endedAt ?? updatedAt)
+            ? Math.max(0, (endedAt ?? updatedAt)! - createdAt)
+            : null,
+      };
+    });
+  const requirements = Array.isArray(plan.requirements)
+    ? (plan.requirements as Array<{ text?: unknown; disposition?: unknown }>).map(
+        (requirement) => ({
+          text: safeNarrative(requirement.text, redactedDetail),
+          disposition:
+            requirement.disposition === "mapped" ||
+            requirement.disposition === "excluded" ||
+            requirement.disposition === "unresolved"
+              ? requirement.disposition
+              : "unresolved",
+        }),
+      )
+    : [];
+  const checkpoint = context?.latestCheckpoint;
   const details: WorkPlanSidebarContent = {
     kind: "work-plan",
     title: t("chat.liveWork.detail.title", { project: projectName }),
@@ -396,19 +519,35 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
     activeSteps: active,
     readySteps: ready,
     blockedSteps: blocked,
-    evidenceCount: Array.isArray(plan.steps)
-      ? (plan.steps as WireStep[]).reduce(
-          (sum, step) => sum + (Array.isArray(step.attempts) ? step.attempts.length : 0),
-          0,
-        )
-      : 0,
+    orderedSteps,
+    attempts,
+    requirements: {
+      mapped: requirements.filter((item) => item.disposition === "mapped").map((item) => item.text),
+      excluded: requirements
+        .filter((item) => item.disposition === "excluded")
+        .map((item) => item.text),
+      unresolved: requirements
+        .filter((item) => item.disposition === "unresolved")
+        .map((item) => item.text),
+    },
+    evidenceCount: 0,
+    checkpointEvidence: {
+      files: Array.isArray(checkpoint?.content?.files) ? checkpoint.content.files.length : 0,
+      tests: Array.isArray(checkpoint?.content?.tests) ? checkpoint.content.tests.length : 0,
+      blockers: Array.isArray(checkpoint?.content?.blockers)
+        ? checkpoint.content.blockers.length
+        : 0,
+    },
     revisions: {
       project: number(project.recordRevision),
       plan: number(plan.recordRevision),
+      definition: number(plan.definitionRevision),
       goal: number(context?.goal?.recordRevision ?? plan.goal?.recordRevision),
       capsule: number(context?.capsule?.revision),
     },
+    updatedAt: timestamp(plan.updatedAt),
     checkpointPresent: Boolean(context?.latestCheckpoint),
+    handoffPresent: Boolean(context?.latestHandoff),
     nextTask: nextTask || t("chat.liveWork.noNextTask"),
     nextTaskSource: capsuleNext
       ? "capsule"
@@ -431,6 +570,12 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
     planStatus: status,
     currentStep: active[0] ?? ready[0] ?? t("chat.liveWork.noCurrentStep"),
     parallelCount: Math.max(0, active.length - 1),
+    blockerCount: blocked.length,
+    recoveryCount: attempts.filter((attempt) => attempt.recoveryState === "present").length,
+    unresolvedRequirementCount: requirements.filter(
+      (requirement) => requirement.disposition === "unresolved",
+    ).length,
+    attemptCount: attempts.length,
     progressNow,
     progressMax,
     ...(!context ? { message: t("chat.liveWork.projectContextUnavailable") } : {}),
@@ -617,6 +762,30 @@ export function renderLiveWorkStrip(
                   count: formatLiveWorkNumber(view.parallelCount),
                 })}`
               : ""}</span
+          >`
+        : nothing}${view.blockerCount
+        ? html`<span
+            >${t("chat.liveWork.detail.blockerCount", {
+              count: formatLiveWorkNumber(view.blockerCount),
+            })}</span
+          >`
+        : nothing}${view.recoveryCount
+        ? html`<span
+            >${t("chat.liveWork.detail.recoveryCount", {
+              count: formatLiveWorkNumber(view.recoveryCount),
+            })}</span
+          >`
+        : nothing}${view.unresolvedRequirementCount
+        ? html`<span
+            >${t("chat.liveWork.detail.unresolvedCount", {
+              count: formatLiveWorkNumber(view.unresolvedRequirementCount),
+            })}</span
+          >`
+        : nothing}${view.attemptCount
+        ? html`<span
+            >${t("chat.liveWork.detail.attemptCount", {
+              count: formatLiveWorkNumber(view.attemptCount),
+            })}</span
           >`
         : nothing}${view.message ? html`<span>${view.message}</span>` : nothing}
     </div>

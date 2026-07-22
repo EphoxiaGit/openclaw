@@ -27,6 +27,11 @@ import {
 } from "./chat-live-work.ts";
 
 export const CHAT_DETAIL_FULL_MESSAGE_MAX_CHARS = 500_000;
+let workPlanPanelInstance = 0;
+function createWorkPlanPanelId(): string {
+  workPlanPanelInstance = workPlanPanelInstance + 1;
+  return `work-plan-${workPlanPanelInstance}`;
+}
 
 type DetailUnavailableReason = "not_found" | "oversized" | "not_visible";
 export type DetailFullMessageResult = {
@@ -103,9 +108,29 @@ export type WorkPlanSidebarContent = {
   activeSteps: string[];
   readySteps: string[];
   blockedSteps: string[];
+  orderedSteps?: Array<{
+    title: string;
+    ordinal: number;
+    status: string;
+    dependencies: string[];
+  }>;
+  attempts?: Array<{
+    attemptNumber: number;
+    ownerType: string;
+    ownerState: string;
+    recoveryState: "present" | "none";
+    createdAt: number | null;
+    updatedAt: number | null;
+    endedAt: number | null;
+    durationMs: number | null;
+  }>;
+  requirements?: { mapped: string[]; excluded: string[]; unresolved: string[] };
   evidenceCount: number;
-  revisions: { project: number; plan: number; goal: number; capsule: number };
+  checkpointEvidence?: { files: number; tests: number; blockers: number };
+  revisions: { project: number; plan: number; definition?: number; goal: number; capsule: number };
+  updatedAt?: number | null;
   checkpointPresent: boolean;
+  handoffPresent?: boolean;
   nextTask: string;
   nextTaskSource: "capsule" | "checkpoint" | "ready-step" | "none";
   rawText?: null;
@@ -476,7 +501,65 @@ function resolveSidebarCanvasSandbox(
   return content.kind === "canvas" ? resolveEmbedSandbox(embedSandboxMode) : "allow-scripts";
 }
 
-function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
+export type WorkPlanDetailTab = "plan" | "attempts" | "context" | "evidence";
+const WORK_PLAN_TABS: WorkPlanDetailTab[] = ["plan", "attempts", "context", "evidence"];
+
+export function nextWorkPlanDetailTab(
+  current: WorkPlanDetailTab,
+  key: string,
+): WorkPlanDetailTab | null {
+  const index = WORK_PLAN_TABS.indexOf(current);
+  if (key === "Home") {
+    return WORK_PLAN_TABS[0];
+  }
+  if (key === "End") {
+    return WORK_PLAN_TABS.at(-1)!;
+  }
+  if (key === "ArrowRight") {
+    return WORK_PLAN_TABS[(index + 1) % WORK_PLAN_TABS.length];
+  }
+  if (key === "ArrowLeft") {
+    return WORK_PLAN_TABS[(index - 1 + WORK_PLAN_TABS.length) % WORK_PLAN_TABS.length];
+  }
+  return null;
+}
+
+function formatTimestamp(value: number | null): string {
+  return value
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(value)
+    : t("chat.liveWork.detail.unavailable");
+}
+
+function formatWorkToken(value: string): string {
+  const labels: Record<string, string> = {
+    pending: t("chat.liveWork.detail.token.pending"),
+    ready: t("chat.liveWork.detail.token.ready"),
+    running: t("chat.liveWork.detail.token.running"),
+    waiting: t("chat.liveWork.detail.token.waiting"),
+    blocked: t("chat.liveWork.detail.token.blocked"),
+    review: t("chat.liveWork.detail.token.review"),
+    succeeded: t("chat.liveWork.detail.token.succeeded"),
+    failed: t("chat.liveWork.detail.token.failed"),
+    skipped: t("chat.liveWork.detail.token.skipped"),
+    cancelled: t("chat.liveWork.detail.token.cancelled"),
+    superseded: t("chat.liveWork.detail.token.superseded"),
+    lost: t("chat.liveWork.detail.token.lost"),
+    unknown: t("chat.liveWork.detail.token.unknown"),
+    task: t("chat.liveWork.detail.token.task"),
+    task_flow: t("chat.liveWork.detail.token.taskFlow"),
+    codex: t("chat.liveWork.detail.token.codex"),
+    omx: t("chat.liveWork.detail.token.omx"),
+    external: t("chat.liveWork.detail.token.external"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function renderWorkPlanSidebar(
+  content: WorkPlanSidebarContent,
+  activeTab: WorkPlanDetailTab,
+  onTabChange: (tab: WorkPlanDetailTab) => void,
+  idPrefix: string,
+) {
   const provenanceLabel =
     content.provenanceStatus === "current"
       ? t("chat.liveWork.detail.current")
@@ -491,77 +574,229 @@ function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
         : content.nextTaskSource === "ready-step"
           ? t("chat.liveWork.detail.readyStep")
           : t("chat.liveWork.detail.none");
-  const steps = (label: string, values: string[]) => html` <section
-    class="work-plan-detail__section"
-  >
-    <h3>${label}</h3>
-    ${values.length
+  const tabLabel: Record<WorkPlanDetailTab, string> = {
+    plan: t("chat.liveWork.detail.tabPlan"),
+    attempts: t("chat.liveWork.detail.tabAttempts"),
+    context: t("chat.liveWork.detail.tabContext"),
+    evidence: t("chat.liveWork.detail.tabEvidence"),
+  };
+  const empty = (text: string) => html`<p class="muted work-plan-detail__empty">${text}</p>`;
+  const values = (items: string[]) =>
+    items.length
       ? html`<ul>
-          ${values.map((value) => html`<li>${value}</li>`)}
+          ${items.map((item) => html`<li>${item}</li>`)}
         </ul>`
-      : html`<p class="muted">${t("chat.liveWork.detail.none")}</p>`}
-  </section>`;
-  return html` <article class="work-plan-detail">
+      : empty(t("chat.liveWork.detail.noneRecorded"));
+  const counts = content.checkpointEvidence ?? { files: 0, tests: 0, blockers: 0 };
+  const requirements = content.requirements ?? { mapped: [], excluded: [], unresolved: [] };
+  const orderedSteps = content.orderedSteps ?? [];
+  const attempts = content.attempts ?? [];
+  return html`<article class="work-plan-detail">
     <p class="work-plan-detail__status">
       <strong>${formatLiveWorkPlanPosition(content.planPosition.x, content.planPosition.n)}</strong>
       · ${formatLiveWorkPlanStatus(content.planStatus)}
     </p>
-    <section class="work-plan-detail__section">
-      <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
-      <p>${content.summary}</p>
-      <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
-      <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
-      <dl class="work-plan-detail__counts">
-        <div>
-          <dt>${t("chat.liveWork.detail.constraints")}</dt>
-          <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
-        </div>
-        <div>
-          <dt>${t("chat.liveWork.detail.decisions")}</dt>
-          <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
-        </div>
-        <div>
-          <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
-          <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
-        </div>
-        <div>
-          <dt>${t("chat.liveWork.detail.conflicts")}</dt>
-          <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
-        </div>
-      </dl>
-    </section>
-    <section class="work-plan-detail__section">
-      <h3>${t("chat.liveWork.detail.goal")}</h3>
-      <p>${content.objective}</p>
-    </section>
-    ${steps(t("chat.liveWork.detail.activeSteps"), content.activeSteps)}${steps(
-      t("chat.liveWork.detail.readySteps"),
-      content.readySteps,
-    )}${steps(t("chat.liveWork.detail.blockedSteps"), content.blockedSteps)}
-    <section class="work-plan-detail__section">
-      <h3>${t("chat.liveWork.detail.evidence")}</h3>
-      <p>
-        ${t("chat.liveWork.detail.evidenceSummary", {
-          count: formatLiveWorkNumber(content.evidenceCount),
-          checkpoint: t(
-            content.checkpointPresent
-              ? "chat.liveWork.detail.present"
-              : "chat.liveWork.detail.notPresent",
-          ),
-        })}
-      </p>
-      <p>
-        ${t("chat.liveWork.detail.revisions", {
-          project: formatLiveWorkNumber(content.revisions.project),
-          plan: formatLiveWorkNumber(content.revisions.plan),
-          goal: formatLiveWorkNumber(content.revisions.goal),
-          capsule: formatLiveWorkNumber(content.revisions.capsule),
-        })}
-      </p>
-    </section>
-    <section class="work-plan-detail__section">
-      <h3>${t("chat.liveWork.detail.nextTask")}</h3>
-      <p><span class="work-plan-detail__source">${nextTaskSource}</span> ${content.nextTask}</p>
+    <div class="work-plan-tabs" role="tablist" aria-label=${t("chat.liveWork.detail.tablistLabel")}>
+      ${WORK_PLAN_TABS.map(
+        (tab) =>
+          html`<button
+            id=${`${idPrefix}-tab-${tab}`}
+            class="work-plan-tabs__tab"
+            type="button"
+            role="tab"
+            aria-selected=${activeTab === tab ? "true" : "false"}
+            aria-controls=${`${idPrefix}-panel-${tab}`}
+            tabindex=${activeTab === tab ? 0 : -1}
+            @click=${() => onTabChange(tab)}
+            @keydown=${(event: KeyboardEvent) => {
+              const next = nextWorkPlanDetailTab(tab, event.key);
+              if (next) {
+                event.preventDefault();
+                onTabChange(next);
+              }
+            }}
+          >
+            ${tabLabel[tab]}
+          </button>`,
+      )}
+    </div>
+    <section
+      id=${`${idPrefix}-panel-${activeTab}`}
+      class="work-plan-detail__tabpanel"
+      role="tabpanel"
+      aria-labelledby=${`${idPrefix}-tab-${activeTab}`}
+      tabindex="0"
+    >
+      ${activeTab === "plan"
+        ? html`
+            <section class="work-plan-detail__section">
+              <h3>${t("chat.liveWork.detail.goal")}</h3>
+              <p>${content.objective}</p>
+            </section>
+            <section class="work-plan-detail__section">
+              <h3>${t("chat.liveWork.detail.orderedSteps")}</h3>
+              ${orderedSteps.length
+                ? html`<ol>
+                    ${orderedSteps.map(
+                      (step) =>
+                        html`<li>
+                          <strong>${step.title}</strong> · ${formatWorkToken(step.status)}
+                          <div class="muted">
+                            ${step.dependencies.length
+                              ? t("chat.liveWork.detail.dependsOn", {
+                                  dependencies: step.dependencies.join(", "),
+                                })
+                              : t("chat.liveWork.detail.noDependencies")}
+                          </div>
+                        </li>`,
+                    )}
+                  </ol>`
+                : empty(t("chat.liveWork.detail.noSteps"))}
+            </section>
+            <section class="work-plan-detail__section">
+              <h3>${t("chat.liveWork.detail.requirements")}</h3>
+              <dl class="work-plan-detail__counts">
+                <div>
+                  <dt>${t("chat.liveWork.detail.mapped")}</dt>
+                  <dd>${formatLiveWorkNumber(requirements.mapped.length)}</dd>
+                </div>
+                <div>
+                  <dt>${t("chat.liveWork.detail.excluded")}</dt>
+                  <dd>${formatLiveWorkNumber(requirements.excluded.length)}</dd>
+                </div>
+                <div>
+                  <dt>${t("chat.liveWork.detail.unresolved")}</dt>
+                  <dd>${formatLiveWorkNumber(requirements.unresolved.length)}</dd>
+                </div>
+              </dl>
+              <h4>${t("chat.liveWork.detail.mapped")}</h4>
+              ${values(requirements.mapped)}
+              <h4>${t("chat.liveWork.detail.excluded")}</h4>
+              ${values(requirements.excluded)}
+              <h4>${t("chat.liveWork.detail.unresolved")}</h4>
+              ${values(requirements.unresolved)}
+            </section>
+            <section class="work-plan-detail__section">
+              <h3>${t("chat.liveWork.detail.revisionsAndTiming")}</h3>
+              <p>
+                ${t("chat.liveWork.detail.revisionsExtended", {
+                  definition: formatLiveWorkNumber(content.revisions.definition ?? 0),
+                  plan: formatLiveWorkNumber(content.revisions.plan),
+                  record: formatLiveWorkNumber(content.revisions.project),
+                  goal: formatLiveWorkNumber(content.revisions.goal),
+                })}
+              </p>
+              <p>
+                ${t("chat.liveWork.detail.updatedAt", {
+                  time: formatTimestamp(content.updatedAt ?? null),
+                })}
+              </p>
+            </section>
+          `
+        : activeTab === "attempts"
+          ? html`<section class="work-plan-detail__section">
+              <h3>${t("chat.liveWork.detail.attempts")}</h3>
+              ${attempts.length
+                ? html`<ol>
+                    ${attempts.map(
+                      (attempt) =>
+                        html`<li>
+                          <strong
+                            >${t("chat.liveWork.detail.attemptNumber", {
+                              number: formatLiveWorkNumber(attempt.attemptNumber),
+                            })}</strong
+                          >
+                          <div>
+                            ${formatWorkToken(attempt.ownerType)} ·
+                            ${formatWorkToken(attempt.ownerState)}${attempt.recoveryState ===
+                            "present"
+                              ? t("chat.liveWork.detail.recoveryRecorded")
+                              : ""}
+                          </div>
+                          <div class="muted">
+                            ${t("chat.liveWork.detail.attemptTiming", {
+                              started: formatTimestamp(attempt.createdAt),
+                              updated: formatTimestamp(attempt.updatedAt),
+                              ended: formatTimestamp(attempt.endedAt),
+                              duration:
+                                attempt.durationMs == null
+                                  ? t("chat.liveWork.detail.unavailable")
+                                  : t("chat.liveWork.detail.durationMs", {
+                                      duration: formatLiveWorkNumber(attempt.durationMs),
+                                    }),
+                            })}
+                          </div>
+                        </li>`,
+                    )}
+                  </ol>`
+                : empty(t("chat.liveWork.detail.noAttempts"))}
+            </section>`
+          : activeTab === "context"
+            ? html`<section class="work-plan-detail__section">
+                  <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
+                  <p>${content.summary}</p>
+                  <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
+                  <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
+                  <dl class="work-plan-detail__counts">
+                    <div>
+                      <dt>${t("chat.liveWork.detail.constraints")}</dt>
+                      <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
+                    </div>
+                    <div>
+                      <dt>${t("chat.liveWork.detail.decisions")}</dt>
+                      <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
+                    </div>
+                    <div>
+                      <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
+                      <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
+                    </div>
+                    <div>
+                      <dt>${t("chat.liveWork.detail.conflicts")}</dt>
+                      <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
+                    </div>
+                  </dl>
+                  <p>
+                    ${t("chat.liveWork.detail.contextPresence", {
+                      checkpoint: t(
+                        content.checkpointPresent
+                          ? "chat.liveWork.detail.present"
+                          : "chat.liveWork.detail.notPresent",
+                      ),
+                      handoff: t(
+                        content.handoffPresent
+                          ? "chat.liveWork.detail.present"
+                          : "chat.liveWork.detail.notPresent",
+                      ),
+                    })}
+                  </p>
+                </section>
+                <section class="work-plan-detail__section">
+                  <h3>${t("chat.liveWork.detail.nextTask")}</h3>
+                  <p>
+                    <span class="work-plan-detail__source">${nextTaskSource}</span>
+                    ${content.nextTask}
+                  </p>
+                </section>`
+            : html`<section class="work-plan-detail__section">
+                <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
+                ${content.checkpointPresent
+                  ? html`<dl class="work-plan-detail__counts">
+                        <div>
+                          <dt>${t("chat.liveWork.detail.files")}</dt>
+                          <dd>${formatLiveWorkNumber(counts.files)}</dd>
+                        </div>
+                        <div>
+                          <dt>${t("chat.liveWork.detail.tests")}</dt>
+                          <dd>${formatLiveWorkNumber(counts.tests)}</dd>
+                        </div>
+                        <div>
+                          <dt>${t("chat.liveWork.detail.blockers")}</dt>
+                          <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
+                        </div>
+                      </dl>
+                      <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
+                  : empty(t("chat.liveWork.detail.noCheckpoint"))}
+              </section>`}
     </section>
   </article>`;
 }
@@ -575,6 +810,9 @@ type MarkdownSidebarProps = {
   canvasPluginSurfaceUrl?: string | null;
   embedSandboxMode?: EmbedSandboxMode;
   allowExternalEmbedUrls?: boolean;
+  workPlanTab?: WorkPlanDetailTab;
+  onWorkPlanTabChange?: (tab: WorkPlanDetailTab) => void;
+  workPlanIdPrefix?: string;
 };
 
 export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
@@ -636,7 +874,12 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
             `
           : content
             ? content.kind === "work-plan"
-              ? renderWorkPlanSidebar(content)
+              ? renderWorkPlanSidebar(
+                  content,
+                  props.workPlanTab ?? "plan",
+                  props.onWorkPlanTabChange ?? (() => undefined),
+                  props.workPlanIdPrefix ?? "work-plan",
+                )
               : content.kind === "file"
                 ? renderFileSidebarContent(content, props.onViewRawText, props.fileView)
                 : content.kind === "canvas"
@@ -728,6 +971,7 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
 
 class ChatDetailPanel extends LitElement {
   @property({ attribute: false }) content: SidebarContent | null = null;
+  @property({ type: Boolean }) activePane = true;
   @property({ attribute: false }) loadFullMessage?:
     | ((request: SidebarFullMessageRequest) => Promise<DetailFullMessageResult | null | undefined>)
     | null = null;
@@ -746,10 +990,14 @@ class ChatDetailPanel extends LitElement {
   @state() private fileSearchMatchIndex = 0;
   @state() private fileEditorMenuOpen = false;
   @state() private fileContentsCopied = false;
+  @state() private workPlanTab: WorkPlanDetailTab = "plan";
+  @state() private mobileModal = false;
 
   private requestVersion = 0;
   private showingRawText = false;
   private copyFeedbackTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private mobileQuery: MediaQueryList | null = null;
+  private readonly workPlanIdPrefix = createWorkPlanPanelId();
 
   override createRenderRoot() {
     return this;
@@ -758,10 +1006,15 @@ class ChatDetailPanel extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     document.addEventListener("pointerdown", this.handleDocumentPointerDown);
+    this.mobileQuery = window.matchMedia?.("(max-width: 768px)") ?? null;
+    this.mobileQuery?.addEventListener("change", this.handleMobileChange);
+    this.updateMobileMode(this.mobileQuery?.matches === true);
   }
 
   override disconnectedCallback() {
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
+    this.mobileQuery?.removeEventListener("change", this.handleMobileChange);
+    this.setBackgroundIsolated(false);
     if (this.copyFeedbackTimer) {
       globalThis.clearTimeout(this.copyFeedbackTimer);
       this.copyFeedbackTimer = null;
@@ -782,6 +1035,8 @@ class ChatDetailPanel extends LitElement {
     this.fileSearchMatchIndex = 0;
     this.fileEditorMenuOpen = false;
     this.fileContentsCopied = false;
+    this.workPlanTab = "plan";
+    this.setBackgroundIsolated(false);
     if (this.copyFeedbackTimer) {
       globalThis.clearTimeout(this.copyFeedbackTimer);
       this.copyFeedbackTimer = null;
@@ -789,6 +1044,17 @@ class ChatDetailPanel extends LitElement {
   }
 
   protected override updated(changed: Map<string, unknown>) {
+    if (changed.has("mobileModal") && this.mobileModal) {
+      this.setBackgroundIsolated(true);
+      void this.updateComplete.then(() =>
+        this.querySelector<HTMLButtonElement>(".sidebar-header button")?.focus({
+          preventScroll: true,
+        }),
+      );
+    }
+    if (changed.has("content") && this.mobileModal) {
+      this.setBackgroundIsolated(true);
+    }
     if (changed.has("content")) {
       const content = this.visibleContent;
       if (content?.kind === "file" && content.line != null) {
@@ -965,7 +1231,78 @@ class ChatDetailPanel extends LitElement {
   }
 
   private readonly close = () => {
+    this.setBackgroundIsolated(false);
     this.dispatchEvent(new CustomEvent("chat-detail-panel-close", { bubbles: true }));
+  };
+
+  private readonly handleMobileChange = (event: MediaQueryListEvent) => {
+    this.updateMobileMode(event.matches);
+  };
+
+  private updateMobileMode(mobile: boolean) {
+    if (mobile === this.mobileModal) {
+      return;
+    }
+    if (!mobile) {
+      this.setBackgroundIsolated(false);
+    }
+    this.mobileModal = mobile;
+  }
+
+  private setBackgroundIsolated(isolated: boolean) {
+    const main =
+      this.closest(".chat-split-container")?.querySelector<HTMLElement>(":scope > .chat-main");
+    if (!main) {
+      return;
+    }
+    if (isolated) {
+      main.inert = true;
+      main.setAttribute("aria-hidden", "true");
+    } else {
+      main.inert = false;
+      main.removeAttribute("aria-hidden");
+    }
+  }
+
+  private readonly handleModalKeydown = (event: KeyboardEvent) => {
+    if (!this.mobileModal || event.isComposing) {
+      return;
+    }
+    if (event.key === "Escape" && this.activePane) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.close();
+      return;
+    }
+    if (event.key !== "Tab") {
+      return;
+    }
+    const focusable = Array.from(
+      this.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    if (!focusable.length) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable.at(-1)!;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  private readonly changeWorkPlanTab = (tab: WorkPlanDetailTab) => {
+    this.workPlanTab = tab;
+    void this.updateComplete.then(() =>
+      this.querySelector<HTMLButtonElement>(`#${this.workPlanIdPrefix}-tab-${tab}`)?.focus({
+        preventScroll: true,
+      }),
+    );
   };
 
   private readonly showRawText = () => {
@@ -993,7 +1330,13 @@ class ChatDetailPanel extends LitElement {
       ? Math.min(this.fileSearchMatchIndex, matches.length - 1)
       : 0;
     return html`
-      <div @click=${this.handlePanelClick}>
+      <div
+        @click=${this.handlePanelClick}
+        @keydown=${this.handleModalKeydown}
+        role=${this.mobileModal ? "dialog" : nothing}
+        aria-modal=${this.mobileModal ? "true" : nothing}
+        aria-label=${this.mobileModal ? t("chat.liveWork.detail.modalLabel") : nothing}
+      >
         ${renderMarkdownSidebar({
           content: this.visibleContent,
           error: this.error,
@@ -1021,6 +1364,9 @@ class ChatDetailPanel extends LitElement {
           allowExternalEmbedUrls: this.allowExternalEmbedUrls,
           onClose: this.close,
           onViewRawText: this.showRawText,
+          workPlanTab: this.workPlanTab,
+          onWorkPlanTabChange: this.changeWorkPlanTab,
+          workPlanIdPrefix: this.workPlanIdPrefix,
         })}
       </div>
     `;

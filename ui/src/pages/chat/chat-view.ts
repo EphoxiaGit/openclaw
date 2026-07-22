@@ -84,6 +84,7 @@ export type ChatProps = {
   ) => Promise<DetailFullMessageResult | null | undefined>;
   sidebarOpen?: boolean;
   sidebarContent?: SidebarContent | null;
+  activePane?: boolean;
   splitRatio?: number;
   canvasPluginSurfaceUrl?: string | null;
   embedSandboxMode?: EmbedSandboxMode;
@@ -359,6 +360,7 @@ export function renderChat(props: ChatProps) {
                   ></resizable-divider>
                   <openclaw-chat-detail-panel
                     class="chat-sidebar"
+                    .activePane=${props.activePane ?? true}
                     .content=${props.sidebarContent ?? null}
                     .loadFullMessage=${props.onLoadSidebarFullMessage ?? null}
                     .canvasPluginSurfaceUrl=${props.canvasPluginSurfaceUrl ?? null}

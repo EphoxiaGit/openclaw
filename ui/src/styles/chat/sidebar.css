@@ -99,6 +99,46 @@
   font-size: 0.875em;
 }
 
+.work-plan-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.work-plan-tabs__tab {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.work-plan-tabs__tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.work-plan-tabs__tab:focus-visible,
+.work-plan-detail__tabpanel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.work-plan-detail__tabpanel,
+.work-plan-detail__section,
+.work-plan-detail__section li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.work-plan-detail__section ol {
+  padding-inline-start: 24px;
+}
+
 @media (max-width: 480px) {
   .work-plan-detail__counts {
     grid-template-columns: minmax(0, 1fr);
@@ -106,7 +146,9 @@
 }
 
 @media (forced-colors: active) {
-  .work-plan-detail__counts div {
+  .work-plan-detail__counts div,
+  .work-plan-tabs,
+  .work-plan-tabs__tab[aria-selected="true"] {
     border-color: CanvasText;
   }
 }
@@ -1331,5 +1373,20 @@
     width: 100%;
     min-width: 0;
     border-left: none;
+  }
+
+  .chat-split-container--open resizable-divider {
+    display: none;
+  }
+
+  .chat-split-container--open .sidebar-panel {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .chat-split-container--open .sidebar-header button,
+  .chat-split-container--open .work-plan-tabs__tab {
+    min-width: 44px;
+    min-height: 44px;
   }
 }

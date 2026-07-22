@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   computeFileSearchMatches,
   editorOpenUrl,
+  nextWorkPlanDetailTab,
   renderMarkdownSidebar,
   splitHighlightedHtmlIntoLines,
 } from "./chat-sidebar.ts";
@@ -151,7 +152,7 @@ describe("markdown sidebar", () => {
 });
 
 describe("work plan sidebar", () => {
-  it("localizes plan position, status, provenance, source, and numeric details", () => {
+  it("renders an instance-scoped, keyboard-navigable plan tab without invented evidence", () => {
     const container = document.createElement("div");
     render(
       renderMarkdownSidebar({
@@ -170,6 +171,10 @@ describe("work plan sidebar", () => {
           readySteps: ["Review the slice"],
           blockedSteps: [],
           evidenceCount: 4,
+          orderedSteps: [
+            { title: "Review the slice", ordinal: 1, status: "review", dependencies: [] },
+          ],
+          requirements: { mapped: ["Keep chat authoritative"], excluded: [], unresolved: [] },
           revisions: { project: 5, plan: 6, goal: 7, capsule: 8 },
           checkpointPresent: true,
           nextTask: "Review the slice",
@@ -178,6 +183,7 @@ describe("work plan sidebar", () => {
         error: null,
         onClose: () => undefined,
         onViewRawText: () => undefined,
+        workPlanIdPrefix: "pane-a-work",
       }),
       container,
     );
@@ -185,8 +191,16 @@ describe("work plan sidebar", () => {
     const text = container.textContent ?? "";
     expect(text).toContain("Plan 1/3");
     expect(text).toContain("In review");
-    expect(text).toContain("Provenance: Unavailable");
-    expect(text).toContain("Ready step");
-    expect(text).toContain("4 attempt records");
+    expect(text).toContain("Ordered steps");
+    expect(text).toContain("Review the slice");
+    expect(text).not.toContain("Plan evidence");
+    expect(container.querySelector('[role="tab"]')?.id).toBe("pane-a-work-tab-plan");
+    expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(
+      "pane-a-work-tab-plan",
+    );
+    expect(nextWorkPlanDetailTab("plan", "ArrowRight")).toBe("attempts");
+    expect(nextWorkPlanDetailTab("plan", "ArrowLeft")).toBe("evidence");
+    expect(nextWorkPlanDetailTab("context", "Home")).toBe("plan");
+    expect(nextWorkPlanDetailTab("context", "End")).toBe("evidence");
   });
 });

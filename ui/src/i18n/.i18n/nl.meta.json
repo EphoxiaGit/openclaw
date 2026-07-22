@@ -63,12 +63,12 @@
     "subtitles.workspace",
     "tabs.security"
   ],
-  "generatedAt": "2026-07-22T05:32:07.644Z",
+  "generatedAt": "2026-07-22T07:11:07.022Z",
   "locale": "nl",
   "model": "gpt-5.5",
   "provider": "openai",
-  "sourceHash": "52aefa154aa547ee4cfef5cc87d7dc66e0966bf10c14a3deb25adcf66f1fbfbe",
-  "totalKeys": 1739,
-  "translatedKeys": 1677,
+  "sourceHash": "5371688a60156bf5ef196e87eb2413ad2f2f73814dcc02e36f2acd2e9b5cab42",
+  "totalKeys": 1792,
+  "translatedKeys": 1730,
   "workflow": 1
 }

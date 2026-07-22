@@ -57,12 +57,12 @@
     "subtitles.security",
     "subtitles.workspace"
   ],
-  "generatedAt": "2026-07-22T05:32:08.677Z",
+  "generatedAt": "2026-07-22T07:11:08.297Z",
   "locale": "ru",
   "model": "gpt-5.5",
   "provider": "openai",
-  "sourceHash": "52aefa154aa547ee4cfef5cc87d7dc66e0966bf10c14a3deb25adcf66f1fbfbe",
-  "totalKeys": 1739,
-  "translatedKeys": 1683,
+  "sourceHash": "5371688a60156bf5ef196e87eb2413ad2f2f73814dcc02e36f2acd2e9b5cab42",
+  "totalKeys": 1792,
+  "translatedKeys": 1736,
   "workflow": 1
 }

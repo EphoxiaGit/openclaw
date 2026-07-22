@@ -1191,6 +1191,7 @@ class ChatPane extends LitElement {
       },
       sidebarOpen: state.sidebarOpen,
       sidebarContent: state.sidebarContent,
+      activePane: this.active,
       splitRatio: state.splitRatio,
       canvasPluginSurfaceUrl: state.hello?.pluginSurfaceUrls?.canvas ?? null,
       onOpenSidebar: state.handleOpenSidebar,

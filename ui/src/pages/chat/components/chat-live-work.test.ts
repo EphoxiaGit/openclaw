@@ -110,6 +110,102 @@ describe("chat live work", () => {
     expect(rendered).not.toContain("step-secret");
   });
 
+  it("projects dependencies, requirements, attempts, and checkpoint counts without identifiers", () => {
+    const source = project();
+    const plan = source.plans[0] as Record<string, unknown>;
+    plan.definitionRevision = 9;
+    plan.requirements = [
+      {
+        requirementId: "private-requirement",
+        text: "Keep chat authoritative",
+        disposition: "mapped",
+        mappedStepId: "step-secret-a",
+      },
+      {
+        requirementId: "private-unresolved",
+        text: "Confirm the visual state",
+        disposition: "unresolved",
+      },
+    ];
+    plan.steps = [
+      {
+        stepId: "step-secret-a",
+        ordinal: 1,
+        title: "Inspect the safe projection",
+        status: "succeeded",
+        dependsOn: [],
+        attempts: [
+          {
+            attemptId: "private-attempt",
+            ownerId: "private-owner",
+            attemptNumber: 1,
+            ownerType: "codex",
+            ownerState: "succeeded",
+            recoveryState: "reconciled-after-restart",
+            createdAt: 100,
+            updatedAt: 200,
+            endedAt: 200,
+          },
+        ],
+      },
+      {
+        stepId: "step-secret-b",
+        ordinal: 2,
+        title: "Implement the next slice",
+        status: "ready",
+        dependsOn: ["step-secret-a"],
+        attempts: [],
+      },
+    ];
+    const sourceContext = context();
+    Object.assign(sourceContext, {
+      latestCheckpoint: {
+        revision: 3,
+        createdAt: 300,
+        content: {
+          exactNextAction: "Prepare the focused UI change",
+          files: ["private-path"],
+          tests: ["private-command"],
+          blockers: ["private-error"],
+        },
+      },
+      latestHandoff: { handoffId: "private-handoff" },
+    });
+
+    const view = normalizeLiveWork(source, sourceContext);
+    expect(view).toMatchObject({
+      attemptCount: 1,
+      recoveryCount: 1,
+      unresolvedRequirementCount: 1,
+    });
+    expect(view.details).toMatchObject({
+      orderedSteps: [
+        { title: "Inspect the safe projection", dependencies: [] },
+        { title: "Implement the next slice", dependencies: ["Inspect the safe projection"] },
+      ],
+      requirements: {
+        mapped: ["Keep chat authoritative"],
+        unresolved: ["Confirm the visual state"],
+      },
+      checkpointEvidence: { files: 1, tests: 1, blockers: 1 },
+      handoffPresent: true,
+    });
+    const rendered = JSON.stringify(view);
+    for (const secret of [
+      "private-requirement",
+      "private-unresolved",
+      "private-attempt",
+      "private-owner",
+      "private-path",
+      "private-command",
+      "private-error",
+      "private-handoff",
+      "step-secret",
+    ]) {
+      expect(rendered).not.toContain(secret);
+    }
+  });
+
   it("fails closed for project and active-plan ambiguity", async () => {
     expect(
       normalizeLiveWork(
@@ -604,7 +700,7 @@ describe("chat live work", () => {
   });
 
   it("disables chat-main transition and sidebar animation for reduced motion", async () => {
-    const css = await readFile("src/styles/chat/sidebar.css", "utf8");
+    const css = await readFile("ui/src/styles/chat/sidebar.css", "utf8");
     const start = css.indexOf("@media (prefers-reduced-motion: reduce)");
     const reducedMotion = css.slice(start, css.indexOf("@media", start + 1));
     expect(reducedMotion).toContain(".chat-main");
