@@ -32,6 +32,8 @@ import { redactToolDetail } from "../../logging/redact.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
 import { cancelDetachedTaskRunById } from "../../tasks/detached-task-runtime.js";
 import { listTaskRecords } from "../../tasks/runtime-internal.js";
+import type { TaskFlowRecord } from "../../tasks/task-flow-registry.types.js";
+import { listTaskFlowRecords } from "../../tasks/task-flow-runtime-internal.js";
 import type { TaskRecord } from "../../tasks/task-registry.types.js";
 import { ProjectContextRepository } from "../../work-plans/project-context-repository.js";
 import { WorkPlanRepository } from "../../work-plans/repository.js";
@@ -265,6 +267,114 @@ export function projectWorkPlanWorkers(params: {
       elapsedMs !== undefined ? { elapsedMs } : {},
     );
   });
+}
+
+type OrchestrationPattern = "planner_reviewer" | "diagnostic_handoff" | "sequential" | "custom";
+
+function orchestrationPattern(flow: TaskFlowRecord | undefined): OrchestrationPattern {
+  const state = flow?.stateJson;
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return "custom";
+  }
+  const pattern = state.pattern;
+  return pattern === "planner_reviewer" ||
+    pattern === "diagnostic_handoff" ||
+    pattern === "sequential" ||
+    pattern === "custom"
+    ? pattern
+    : "custom";
+}
+
+function orchestrationWait(flow: TaskFlowRecord | undefined) {
+  const wait = flow?.waitJson;
+  if (!wait || typeof wait !== "object" || Array.isArray(wait)) {
+    return { kind: "none" as const, resumable: false };
+  }
+  const kind = wait.kind;
+  if (kind === "lobster_approval") {
+    return {
+      kind: "approval" as const,
+      resumable: typeof wait.resumeToken === "string" || typeof wait.approvalId === "string",
+    };
+  }
+  if (kind === "input_request") {
+    return { kind: "input" as const, resumable: false };
+  }
+  return { kind: "other" as const, resumable: false };
+}
+
+function orchestrationDelivery(tasks: readonly TaskRecord[]) {
+  if (tasks.length === 0 || tasks.every((task) => task.deliveryStatus === "not_applicable")) {
+    return "not_applicable" as const;
+  }
+  if (
+    tasks.some(
+      (task) => task.deliveryStatus === "failed" || task.deliveryStatus === "parent_missing",
+    )
+  ) {
+    return "failed" as const;
+  }
+  if (
+    tasks.some(
+      (task) => task.deliveryStatus === "pending" || task.deliveryStatus === "session_queued",
+    )
+  ) {
+    return "pending" as const;
+  }
+  return tasks.some((task) => task.deliveryStatus === "delivered")
+    ? ("delivered" as const)
+    : ("unknown" as const);
+}
+
+export function projectWorkPlanOrchestration(params: {
+  plan: WorkPlanSnapshot;
+  flows: readonly TaskFlowRecord[];
+  tasks: readonly TaskRecord[];
+}) {
+  const flowById = new Map(params.flows.map((flow) => [flow.flowId, flow]));
+  return params.plan.steps
+    .flatMap((step) =>
+      step.attempts
+        .filter((attempt) => attempt.ownerType === "task_flow")
+        .map((attempt) => ({ attempt, step, flow: flowById.get(attempt.ownerId) })),
+    )
+    .slice(0, 100)
+    .map(({ attempt, step, flow }) => {
+      const tasks = flow ? params.tasks.filter((task) => task.parentFlowId === flow.flowId) : [];
+      const wait = orchestrationWait(flow);
+      const state = flow?.status ?? "unknown";
+      const active =
+        state === "queued" || state === "running" || state === "waiting" || state === "blocked";
+      const phase = boundedNarrative(flow?.currentStep);
+      const goal = boundedNarrative(flow?.goal);
+      const result = tasks
+        .toSorted((left, right) => (right.endedAt ?? 0) - (left.endedAt ?? 0))
+        .map((task) => boundedNarrative(task.terminalSummary))
+        .find((summary): summary is string => Boolean(summary));
+      return {
+        key: `orchestration-${step.ordinal}-${attempt.attemptNumber}`,
+        label: boundedNarrative(step.title) ?? "Durable job",
+        ...(goal ? { goal } : {}),
+        pattern: orchestrationPattern(flow),
+        ...(phase ? { phase } : {}),
+        state,
+        waitKind: wait.kind,
+        attemptNumber: attempt.attemptNumber,
+        taskCount: tasks.length,
+        activeTaskCount: tasks.filter(
+          (task) => task.status === "queued" || task.status === "running",
+        ).length,
+        failureCount: tasks.filter(
+          (task) =>
+            task.status === "failed" || task.status === "timed_out" || task.status === "lost",
+        ).length,
+        completionDelivery: orchestrationDelivery(tasks),
+        notifyPolicy: flow?.notifyPolicy ?? "unknown",
+        ...(result ? { result } : {}),
+        canResume: (state === "waiting" || state === "blocked") && wait.resumable,
+        canCancel: active && flow?.cancelRequestedAt == null,
+      };
+    });
 }
 
 function worktreeCommitState(inspection: ManagedWorktreeInspection) {
@@ -520,6 +630,7 @@ export function createWorkPlansHandlers(
     projectContextRepository?: ProjectContextRepository;
     cancelTask?: typeof cancelDetachedTaskRunById;
     listTasks?: typeof listTaskRecords;
+    listFlows?: typeof listTaskFlowRecords;
     inspectWorktree?: (id: string) => Promise<ManagedWorktreeInspection>;
   } = {},
 ): GatewayRequestHandlers {
@@ -527,6 +638,7 @@ export function createWorkPlansHandlers(
   const projectContextRepository = input.projectContextRepository ?? new ProjectContextRepository();
   const cancelTask = input.cancelTask ?? cancelDetachedTaskRunById;
   const listTasks = input.listTasks ?? listTaskRecords;
+  const listFlows = input.listFlows ?? listTaskFlowRecords;
   const inspectWorktree = input.inspectWorktree ?? ((id) => managedWorktrees.inspect(id));
   return {
     "work.registeredProjects.list": ({ params, respond }) => {
@@ -656,6 +768,7 @@ export function createWorkPlansHandlers(
       await executeAsync(respond, async () => {
         const project = repository.getProject(params.projectId);
         const tasks = listTasks();
+        const flows = listFlows();
         const selectedPlan = currentWorkPlan(project);
         let sessionContext:
           | { cfg: OpenClawConfig; store: Record<string, SessionEntry> }
@@ -680,6 +793,10 @@ export function createWorkPlansHandlers(
               project.plans.map(async (plan) =>
                 Object.assign({}, plan, {
                   workers: projectWorkPlanWorkers({ plan, tasks, resolveSessionFacts }),
+                  orchestration:
+                    selectedPlan?.planId === plan.planId
+                      ? projectWorkPlanOrchestration({ plan, flows, tasks })
+                      : [],
                   worktrees:
                     selectedPlan?.planId === plan.planId
                       ? await projectWorkPlanWorktrees({ plan, inspect: inspectWorktree })

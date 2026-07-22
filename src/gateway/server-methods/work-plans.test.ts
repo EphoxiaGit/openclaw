@@ -6,6 +6,7 @@ import {
   closeOpenClawStateDatabaseForTest,
   openOpenClawStateDatabase,
 } from "../../state/openclaw-state-db.js";
+import type { TaskFlowRecord } from "../../tasks/task-flow-registry.types.js";
 import type { TaskRecord } from "../../tasks/task-registry.types.js";
 import { ProjectContextRepository } from "../../work-plans/project-context-repository.js";
 import { WorkPlanRepository } from "../../work-plans/repository.js";
@@ -13,6 +14,7 @@ import type { WorkPlanSnapshot } from "../../work-plans/types.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
 import {
   createWorkPlansHandlers,
+  projectWorkPlanOrchestration,
   projectWorkPlanWorkers,
   projectWorkPlanWorktrees,
 } from "./work-plans.js";
@@ -285,6 +287,170 @@ describe("work-plan worker projection", () => {
       taskId: "private-task-id",
       reason: "Stopped from Assistant.",
     });
+  });
+});
+
+describe("work-plan orchestration projection", () => {
+  const plan = {
+    schemaVersion: 1,
+    projectId: "project",
+    primaryConversationId: "conversation",
+    projectRecordRevision: 1,
+    goal: { goalId: "goal", objective: "Ship", recordRevision: 1 },
+    planId: "plan",
+    status: "running",
+    definitionRevision: 1,
+    recordRevision: 1,
+    createdAt: 10,
+    updatedAt: 20,
+    steps: [
+      {
+        stepId: "private-step",
+        title: "Review durable work",
+        ordinal: 1,
+        status: "running",
+        recordRevision: 1,
+        dependsOn: [],
+        taskLinks: [],
+        worktreeLinks: [],
+        attempts: [
+          {
+            attemptId: "private-attempt",
+            stepId: "private-step",
+            attemptNumber: 2,
+            ownerType: "task_flow",
+            ownerId: "private-flow",
+            ownerState: "running",
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      },
+    ],
+    requirements: [],
+    projection: {
+      display: "Plan 0/1",
+      x: 0,
+      n: 1,
+      activeStepIds: ["private-step"],
+      readyStepIds: [],
+      statusCounts: { running: 1 },
+    },
+  } satisfies WorkPlanSnapshot;
+  const flow = (overrides: Partial<TaskFlowRecord> = {}): TaskFlowRecord => ({
+    flowId: "private-flow",
+    syncMode: "managed",
+    ownerKey: "private-owner",
+    revision: 1,
+    status: "succeeded",
+    notifyPolicy: "state_changes",
+    goal: "Deliver reviewed work",
+    currentStep: "Reviewer complete",
+    stateJson: { pattern: "planner_reviewer" },
+    createdAt: 100,
+    updatedAt: 300,
+    endedAt: 300,
+    ...overrides,
+  });
+  const task = (overrides: Partial<TaskRecord>): TaskRecord => ({
+    taskId: "private-task",
+    runtime: "subagent",
+    requesterSessionKey: "private-requester",
+    ownerKey: "private-owner",
+    scopeKind: "session",
+    parentFlowId: "private-flow",
+    task: "private prompt",
+    status: "succeeded",
+    deliveryStatus: "delivered",
+    notifyPolicy: "done_only",
+    createdAt: 100,
+    ...overrides,
+  });
+
+  it("projects declared orchestration state, task counts, delivery, and result", () => {
+    const projected = projectWorkPlanOrchestration({
+      plan,
+      flows: [flow()],
+      tasks: [
+        task({ endedAt: 250, terminalSummary: "Planner completed the proposed change." }),
+        task({
+          taskId: "private-review-task",
+          status: "failed",
+          endedAt: 300,
+          terminalSummary: "Reviewer found a required correction.",
+        }),
+      ],
+    });
+
+    expect(projected).toEqual([
+      expect.objectContaining({
+        label: "Review durable work",
+        goal: "Deliver reviewed work",
+        pattern: "planner_reviewer",
+        phase: "Reviewer complete",
+        state: "succeeded",
+        attemptNumber: 2,
+        taskCount: 2,
+        activeTaskCount: 0,
+        failureCount: 1,
+        completionDelivery: "delivered",
+        notifyPolicy: "state_changes",
+        result: "Reviewer found a required correction.",
+        canResume: false,
+        canCancel: false,
+      }),
+    ]);
+  });
+
+  it("fails closed when the referenced flow is missing", () => {
+    const projected = projectWorkPlanOrchestration({ plan, flows: [], tasks: [task({})] });
+
+    expect(projected).toEqual([
+      expect.objectContaining({
+        pattern: "custom",
+        state: "unknown",
+        waitKind: "none",
+        taskCount: 0,
+        activeTaskCount: 0,
+        failureCount: 0,
+        completionDelivery: "not_applicable",
+        notifyPolicy: "unknown",
+        canResume: false,
+        canCancel: false,
+      }),
+    ]);
+    expect(JSON.stringify(projected)).not.toContain("private-flow");
+  });
+
+  it("marks Lobster approvals resumable without exposing flow authority", () => {
+    const projected = projectWorkPlanOrchestration({
+      plan,
+      flows: [
+        flow({
+          status: "waiting",
+          waitJson: {
+            kind: "lobster_approval",
+            approvalId: "private-approval-id",
+            resumeToken: "private-resume-token",
+          },
+          endedAt: undefined,
+        }),
+      ],
+      tasks: [],
+    });
+
+    expect(projected).toEqual([
+      expect.objectContaining({
+        state: "waiting",
+        waitKind: "approval",
+        canResume: true,
+        canCancel: true,
+      }),
+    ]);
+    const rendered = JSON.stringify(projected);
+    expect(rendered).not.toContain("private-flow");
+    expect(rendered).not.toContain("private-approval-id");
+    expect(rendered).not.toContain("private-resume-token");
   });
 });
 

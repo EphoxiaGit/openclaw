@@ -31,6 +31,7 @@ type WirePlan = {
   requirements?: unknown;
   workers?: unknown;
   worktrees?: unknown;
+  orchestration?: unknown;
   goal?: { objective?: unknown; recordRevision?: unknown };
   steps?: unknown;
   projection?: {
@@ -63,6 +64,24 @@ type WireWorktree = {
   canResolveConflicts?: unknown;
   canResume?: unknown;
   canRollback?: unknown;
+};
+type WireOrchestration = {
+  key?: unknown;
+  label?: unknown;
+  goal?: unknown;
+  pattern?: unknown;
+  phase?: unknown;
+  state?: unknown;
+  waitKind?: unknown;
+  attemptNumber?: unknown;
+  taskCount?: unknown;
+  activeTaskCount?: unknown;
+  failureCount?: unknown;
+  completionDelivery?: unknown;
+  notifyPolicy?: unknown;
+  result?: unknown;
+  canResume?: unknown;
+  canCancel?: unknown;
 };
 type WireProject = {
   projectId?: unknown;
@@ -434,6 +453,32 @@ const WORKTREE_COMMIT_STATES = new Set([
   "restorable",
   "unavailable",
 ]);
+const ORCHESTRATION_PATTERNS = new Set([
+  "planner_reviewer",
+  "diagnostic_handoff",
+  "sequential",
+  "custom",
+]);
+const ORCHESTRATION_STATES = new Set([
+  "queued",
+  "running",
+  "waiting",
+  "blocked",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "lost",
+  "unknown",
+]);
+const ORCHESTRATION_WAIT_KINDS = new Set(["approval", "input", "other", "none"]);
+const ORCHESTRATION_DELIVERY_STATES = new Set([
+  "delivered",
+  "pending",
+  "failed",
+  "not_applicable",
+  "unknown",
+]);
+const ORCHESTRATION_NOTIFY_POLICIES = new Set(["done_only", "state_changes", "silent", "unknown"]);
 const TECHNICAL_TEXT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
 
 function allowlisted(value: unknown, values: Set<string>, fallback = "unknown"): string {
@@ -548,6 +593,35 @@ function normalizeWorktrees(plan: WirePlan): NonNullable<WorkPlanSidebarContent[
     canResolveConflicts: worktree.canResolveConflicts === true,
     canResume: worktree.canResume === true,
     canRollback: worktree.canRollback === true,
+  }));
+}
+
+function normalizeOrchestration(
+  plan: WirePlan,
+): NonNullable<WorkPlanSidebarContent["orchestration"]> {
+  const orchestration = Array.isArray(plan.orchestration)
+    ? (plan.orchestration as WireOrchestration[]).slice(0, 100)
+    : [];
+  return orchestration.map((job, index) => ({
+    label:
+      safeTitle(job.label) ||
+      t("chat.liveWork.detail.orchestrationNumber", {
+        number: formatLiveWorkNumber(index + 1),
+      }),
+    goal: safeNarrative(job.goal),
+    pattern: allowlisted(job.pattern, ORCHESTRATION_PATTERNS, "custom"),
+    phase: safeTitle(job.phase),
+    state: allowlisted(job.state, ORCHESTRATION_STATES),
+    waitKind: allowlisted(job.waitKind, ORCHESTRATION_WAIT_KINDS, "none"),
+    attemptNumber: Math.max(1, Math.floor(number(job.attemptNumber, 1))),
+    taskCount: Math.max(0, Math.floor(number(job.taskCount))),
+    activeTaskCount: Math.max(0, Math.floor(number(job.activeTaskCount))),
+    failureCount: Math.max(0, Math.floor(number(job.failureCount))),
+    completionDelivery: allowlisted(job.completionDelivery, ORCHESTRATION_DELIVERY_STATES),
+    notifyPolicy: allowlisted(job.notifyPolicy, ORCHESTRATION_NOTIFY_POLICIES),
+    result: safeNarrative(job.result),
+    canResume: job.canResume === true,
+    canCancel: job.canCancel === true,
   }));
 }
 
@@ -721,6 +795,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
     attempts,
     workers: normalizeWorkers(plan),
     worktrees: normalizeWorktrees(plan),
+    orchestration: normalizeOrchestration(plan),
     requirements: {
       mapped: requirements.filter((item) => item.disposition === "mapped").map((item) => item.text),
       excluded: requirements

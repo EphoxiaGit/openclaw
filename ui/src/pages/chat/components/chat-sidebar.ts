@@ -190,6 +190,23 @@ export type WorkPlanSidebarContent = {
     canResume: boolean;
     canRollback: boolean;
   }>;
+  orchestration?: Array<{
+    label: string;
+    goal: string;
+    pattern: string;
+    phase: string;
+    state: string;
+    waitKind: string;
+    attemptNumber: number;
+    taskCount: number;
+    activeTaskCount: number;
+    failureCount: number;
+    completionDelivery: string;
+    notifyPolicy: string;
+    result: string;
+    canResume: boolean;
+    canCancel: boolean;
+  }>;
   requirements?: { mapped: string[]; excluded: string[]; unresolved: string[] };
   evidenceCount: number;
   checkpointEvidence?: { files: number; tests: number; blockers: number };
@@ -573,6 +590,7 @@ export type WorkPlanDetailTab =
   | "changes"
   | "validation"
   | "routing"
+  | "orchestration"
   | "attempts"
   | "context";
 const WORK_PLAN_TABS: WorkPlanDetailTab[] = [
@@ -581,6 +599,7 @@ const WORK_PLAN_TABS: WorkPlanDetailTab[] = [
   "changes",
   "validation",
   "routing",
+  "orchestration",
   "attempts",
   "context",
 ];
@@ -751,6 +770,141 @@ function renderWorkPlanRouting(workers: NonNullable<WorkPlanSidebarContent["work
           : nothing}
       </article>`;
     })}
+  </div>`;
+}
+
+function formatOrchestrationPattern(value: string): string {
+  const labels: Record<string, string> = {
+    planner_reviewer: t("chat.liveWork.detail.patternPlannerReviewer"),
+    diagnostic_handoff: t("chat.liveWork.detail.patternDiagnosticHandoff"),
+    sequential: t("chat.liveWork.detail.patternSequential"),
+    custom: t("chat.liveWork.detail.patternCustom"),
+  };
+  return labels[value] ?? labels.custom;
+}
+
+function formatOrchestrationWait(value: string): string {
+  const labels: Record<string, string> = {
+    approval: t("chat.liveWork.detail.waitApproval"),
+    input: t("chat.liveWork.detail.waitInput"),
+    other: t("chat.liveWork.detail.waitOther"),
+    none: t("chat.liveWork.detail.none"),
+  };
+  return labels[value] ?? labels.none;
+}
+
+function formatCompletionDelivery(value: string): string {
+  const labels: Record<string, string> = {
+    delivered: t("chat.liveWork.detail.deliveryDelivered"),
+    pending: t("chat.liveWork.detail.deliveryPending"),
+    failed: t("chat.liveWork.detail.deliveryFailed"),
+    not_applicable: t("chat.liveWork.detail.deliveryNotApplicable"),
+    unknown: t("chat.liveWork.detail.unknown"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function formatNotifyPolicy(value: string): string {
+  const labels: Record<string, string> = {
+    done_only: t("chat.liveWork.detail.notifyDoneOnly"),
+    state_changes: t("chat.liveWork.detail.notifyStateChanges"),
+    silent: t("chat.liveWork.detail.notifySilent"),
+    unknown: t("chat.liveWork.detail.unknown"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function renderWorkPlanOrchestration(
+  orchestration: NonNullable<WorkPlanSidebarContent["orchestration"]>,
+  onPrepareAction: ((draft: string) => void) | undefined,
+) {
+  if (orchestration.length === 0) {
+    return html`<p class="muted work-plan-detail__empty">
+      ${t("chat.liveWork.detail.noOrchestration")}
+    </p>`;
+  }
+  return html`<div class="work-plan-workers">
+    ${orchestration.map(
+      (job) => html`<article class="work-plan-worker">
+        <h4>${job.label}</h4>
+        ${job.goal ? html`<p>${job.goal}</p>` : nothing}
+        <dl class="work-plan-detail__counts">
+          <div>
+            <dt>${t("chat.liveWork.detail.pattern")}</dt>
+            <dd>${formatOrchestrationPattern(job.pattern)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.phase")}</dt>
+            <dd>${job.phase || t("chat.liveWork.detail.unavailable")}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.state")}</dt>
+            <dd>${formatWorkToken(job.state)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.waitReason")}</dt>
+            <dd>${formatOrchestrationWait(job.waitKind)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.attempts")}</dt>
+            <dd>${formatLiveWorkNumber(job.attemptNumber)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.tasks")}</dt>
+            <dd>
+              ${t("chat.liveWork.detail.taskCounts", {
+                active: formatLiveWorkNumber(job.activeTaskCount),
+                total: formatLiveWorkNumber(job.taskCount),
+              })}
+            </dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.failures")}</dt>
+            <dd>${formatLiveWorkNumber(job.failureCount)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.completionDelivery")}</dt>
+            <dd>${formatCompletionDelivery(job.completionDelivery)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.notifyPolicy")}</dt>
+            <dd>${formatNotifyPolicy(job.notifyPolicy)}</dd>
+          </div>
+        </dl>
+        ${job.result
+          ? html`<h5>${t("chat.liveWork.detail.result")}</h5>
+              <p>${job.result}</p>`
+          : nothing}
+        ${onPrepareAction && (job.canResume || job.canCancel)
+          ? html`<div class="row" style="gap: 8px; flex-wrap: wrap;">
+              ${job.canResume
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.resumeOrchestrationDraft", { job: job.label }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.resumeOrchestration")}
+                  </button>`
+                : nothing}
+              ${job.canCancel
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.cancelOrchestrationDraft", { job: job.label }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.cancelOrchestration")}
+                  </button>`
+                : nothing}
+            </div>`
+          : nothing}
+      </article>`,
+    )}
   </div>`;
 }
 
@@ -952,6 +1106,7 @@ function renderWorkPlanSidebar(
     changes: t("chat.liveWork.detail.tabChanges"),
     validation: t("chat.liveWork.detail.tabValidation"),
     routing: t("chat.liveWork.detail.tabRouting"),
+    orchestration: t("chat.liveWork.detail.tabOrchestration"),
     attempts: t("chat.liveWork.detail.tabAttempts"),
     context: t("chat.liveWork.detail.tabContext"),
   };
@@ -968,6 +1123,7 @@ function renderWorkPlanSidebar(
   const attempts = content.attempts ?? [];
   const workers = content.workers ?? [];
   const worktrees = content.worktrees ?? [];
+  const orchestration = content.orchestration ?? [];
   return html`<article class="work-plan-detail">
     <p class="work-plan-detail__status">
       <strong>${formatLiveWorkPlanPosition(content.planPosition.x, content.planPosition.n)}</strong>
@@ -1286,10 +1442,17 @@ function renderWorkPlanSidebar(
                             </div>`
                         : nothing}
                     </section>`
-                  : html`<section class="work-plan-detail__section">
-                      <h3>${t("chat.liveWork.detail.routing")}</h3>
-                      ${renderWorkPlanRouting(workers)}
-                    </section>`}
+                  : activeTab === "routing"
+                    ? html`<section class="work-plan-detail__section">
+                        <h3>${t("chat.liveWork.detail.routing")}</h3>
+                        ${renderWorkPlanRouting(workers)}
+                      </section>`
+                    : activeTab === "orchestration"
+                      ? html`<section class="work-plan-detail__section">
+                          <h3>${t("chat.liveWork.detail.orchestration")}</h3>
+                          ${renderWorkPlanOrchestration(orchestration, onPrepareAction)}
+                        </section>`
+                      : nothing}
     </section>
   </article>`;
 }

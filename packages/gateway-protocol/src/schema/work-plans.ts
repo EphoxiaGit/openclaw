@@ -484,6 +484,58 @@ const WorkPlanWorktreeSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const WorkPlanOrchestrationSchema = Type.Object(
+  {
+    key: NonEmptyString,
+    label: NonEmptyString,
+    goal: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
+    pattern: Type.Union([
+      Type.Literal("planner_reviewer"),
+      Type.Literal("diagnostic_handoff"),
+      Type.Literal("sequential"),
+      Type.Literal("custom"),
+    ]),
+    phase: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
+    state: Type.Union([
+      Type.Literal("queued"),
+      Type.Literal("running"),
+      Type.Literal("waiting"),
+      Type.Literal("blocked"),
+      Type.Literal("succeeded"),
+      Type.Literal("failed"),
+      Type.Literal("cancelled"),
+      Type.Literal("lost"),
+      Type.Literal("unknown"),
+    ]),
+    waitKind: Type.Union([
+      Type.Literal("approval"),
+      Type.Literal("input"),
+      Type.Literal("other"),
+      Type.Literal("none"),
+    ]),
+    attemptNumber: Type.Integer({ minimum: 1 }),
+    taskCount: Type.Integer({ minimum: 0 }),
+    activeTaskCount: Type.Integer({ minimum: 0 }),
+    failureCount: Type.Integer({ minimum: 0 }),
+    completionDelivery: Type.Union([
+      Type.Literal("delivered"),
+      Type.Literal("pending"),
+      Type.Literal("failed"),
+      Type.Literal("not_applicable"),
+      Type.Literal("unknown"),
+    ]),
+    notifyPolicy: Type.Union([
+      Type.Literal("done_only"),
+      Type.Literal("state_changes"),
+      Type.Literal("silent"),
+      Type.Literal("unknown"),
+    ]),
+    result: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
+    canResume: Type.Boolean(),
+    canCancel: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
 export const WorkPlanSnapshotSchema = Type.Object(
   {
     schemaVersion: Type.Literal(1),
@@ -510,6 +562,7 @@ export const WorkPlanSnapshotSchema = Type.Object(
     projection: ProjectionSchema,
     workers: Type.Optional(Type.Array(WorkPlanWorkerSchema, { maxItems: 100 })),
     worktrees: Type.Optional(Type.Array(WorkPlanWorktreeSchema, { maxItems: 100 })),
+    orchestration: Type.Optional(Type.Array(WorkPlanOrchestrationSchema, { maxItems: 100 })),
   },
   { additionalProperties: false },
 );

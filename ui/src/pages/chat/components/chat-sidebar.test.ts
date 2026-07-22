@@ -488,4 +488,132 @@ describe("work plan sidebar", () => {
     expect(onPrepareAction).toHaveBeenCalledWith(expect.stringContaining("implementation"));
     expect(onPrepareAction).toHaveBeenCalledWith(expect.stringContaining("Do not push or deploy"));
   });
+
+  it("renders durable orchestration and prepares resume and cancel drafts", () => {
+    const container = document.createElement("div");
+    const onPrepareAction = vi.fn();
+    render(
+      renderMarkdownSidebar({
+        content: {
+          kind: "work-plan",
+          title: "Northstar work details",
+          projectName: "Northstar",
+          planPosition: { x: 1, n: 3 },
+          planStatus: "waiting",
+          summary: "Bounded work.",
+          focus: "Review",
+          capsuleCounts: { constraints: 0, decisions: 0, openQuestions: 0, conflicts: 0 },
+          provenanceStatus: "current",
+          objective: "Ship the slice",
+          activeSteps: ["Review the slice"],
+          readySteps: [],
+          blockedSteps: [],
+          orchestration: [
+            {
+              label: "Review durable work",
+              goal: "Deliver the reviewed change.",
+              pattern: "planner_reviewer",
+              phase: "Waiting for approval",
+              state: "waiting",
+              waitKind: "approval",
+              attemptNumber: 2,
+              taskCount: 3,
+              activeTaskCount: 1,
+              failureCount: 0,
+              completionDelivery: "delivered",
+              notifyPolicy: "state_changes",
+              result: "Planner output is ready for review.",
+              canResume: true,
+              canCancel: true,
+            },
+          ],
+          evidenceCount: 0,
+          revisions: { project: 1, plan: 1, goal: 1, capsule: 1 },
+          checkpointPresent: false,
+          nextTask: "Review the slice",
+          nextTaskSource: "ready-step",
+        },
+        error: null,
+        onClose: () => undefined,
+        onViewRawText: () => undefined,
+        onPrepareWorkPlanAction: onPrepareAction,
+        workPlanTab: "orchestration",
+        workPlanIdPrefix: "pane-orchestration-work",
+      }),
+      container,
+    );
+
+    const panelText = container.querySelector('[role="tabpanel"]')?.textContent ?? "";
+    expect(panelText).toContain("Durable orchestration");
+    expect(panelText).toContain("Planner and reviewer");
+    expect(panelText).toContain("Waiting");
+    expect(panelText).toContain("Approval");
+    expect(panelText).toContain("Tasks");
+    expect(panelText).toContain("1 active / 3 total");
+    expect(panelText).toContain("Delivered");
+    expect(panelText).toContain("Planner output is ready for review.");
+
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>("button")];
+    buttons.find((button) => button.textContent?.includes("Resume checkpoint"))?.click();
+    buttons.find((button) => button.textContent?.includes("Cancel job"))?.click();
+    expect(onPrepareAction).toHaveBeenNthCalledWith(
+      1,
+      'Resume durable orchestration "Review durable work" from its existing checkpoint. Preserve the current plan and continue the same attempt.',
+    );
+    expect(onPrepareAction).toHaveBeenNthCalledWith(
+      2,
+      'Cancel durable orchestration "Review durable work" through its current owner, preserving its latest checkpoint and completion record.',
+    );
+  });
+
+  it("routes every detail tab to its own section", () => {
+    const tabs = [
+      ["plan", "Goal"],
+      ["agents", "Agents and workers"],
+      ["changes", "Managed worktrees and changes"],
+      ["validation", "Checkpoint evidence"],
+      ["routing", "Model routing"],
+      ["orchestration", "Durable orchestration"],
+      ["attempts", "Attempts"],
+      ["context", "Capsule summary"],
+    ] as const;
+
+    for (const [tab, heading] of tabs) {
+      const container = document.createElement("div");
+      render(
+        renderMarkdownSidebar({
+          content: {
+            kind: "work-plan",
+            title: "Northstar work details",
+            projectName: "Northstar",
+            planPosition: { x: 1, n: 1 },
+            planStatus: "running",
+            summary: "Bounded work.",
+            focus: "Implementation",
+            capsuleCounts: { constraints: 0, decisions: 0, openQuestions: 0, conflicts: 0 },
+            provenanceStatus: "current",
+            objective: "Ship the slice",
+            activeSteps: [],
+            readySteps: [],
+            blockedSteps: [],
+            evidenceCount: 0,
+            revisions: { project: 1, plan: 1, goal: 1, capsule: 1 },
+            checkpointPresent: false,
+            nextTask: "Implement the slice",
+            nextTaskSource: "ready-step",
+          },
+          error: null,
+          onClose: () => undefined,
+          onViewRawText: () => undefined,
+          workPlanTab: tab,
+          workPlanIdPrefix: `pane-${tab}-work`,
+        }),
+        container,
+      );
+
+      const panel = container.querySelector<HTMLElement>('[role="tabpanel"]');
+      expect(panel?.getAttribute("aria-labelledby")).toBe(`pane-${tab}-work-tab-${tab}`);
+      expect(panel?.textContent).toContain(heading);
+    }
+  });
 });

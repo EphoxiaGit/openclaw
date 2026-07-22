@@ -345,6 +345,91 @@ describe("chat live work", () => {
     expect(rendered).not.toContain("/private/rejected.ts");
   });
 
+  it("allowlists orchestration state and redacts authority-bearing text", () => {
+    const source = project();
+    const plan = source.plans[0] as Record<string, unknown>;
+    plan.orchestration = [
+      {
+        key: "private-orchestration-key",
+        label: "/private/flow.json",
+        goal: "Use /private/repo and SECRET_TOKEN=sk-1234567890abcdef",
+        pattern: "future-pattern",
+        phase: "C:\\private\\phase.txt",
+        state: "paused",
+        waitKind: "private-wait-token",
+        attemptNumber: -2,
+        taskCount: -4,
+        activeTaskCount: -1,
+        failureCount: -3,
+        completionDelivery: "forwarded",
+        notifyPolicy: "always",
+        result: "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+        canResume: true,
+        canCancel: true,
+      },
+      {
+        label: "Review durable work",
+        goal: "Deliver the reviewed change.",
+        pattern: "sequential",
+        phase: "Waiting for approval",
+        state: "waiting",
+        waitKind: "approval",
+        attemptNumber: 2,
+        taskCount: 3,
+        activeTaskCount: 1,
+        failureCount: 0,
+        completionDelivery: "pending",
+        notifyPolicy: "silent",
+        result: "Review remains paused.",
+        canResume: true,
+        canCancel: false,
+      },
+    ];
+
+    const view = normalizeLiveWork(source, context());
+
+    expect(view.details?.orchestration).toEqual([
+      {
+        label: t("chat.liveWork.detail.orchestrationNumber", { number: "1" }),
+        goal: "",
+        pattern: "custom",
+        phase: "",
+        state: "unknown",
+        waitKind: "none",
+        attemptNumber: 1,
+        taskCount: 0,
+        activeTaskCount: 0,
+        failureCount: 0,
+        completionDelivery: "unknown",
+        notifyPolicy: "unknown",
+        result: "",
+        canResume: true,
+        canCancel: true,
+      },
+      expect.objectContaining({
+        label: "Review durable work",
+        pattern: "sequential",
+        state: "waiting",
+        waitKind: "approval",
+        completionDelivery: "pending",
+        notifyPolicy: "silent",
+        result: "Review remains paused.",
+      }),
+    ]);
+    const rendered = JSON.stringify(view);
+    for (const secret of [
+      "private-orchestration-key",
+      "/private/flow.json",
+      "/private/repo",
+      "sk-1234567890abcdef",
+      "C:\\\\private",
+      "private-wait-token",
+      "abcdefghijklmnopqrstuvwxyz",
+    ]) {
+      expect(rendered).not.toContain(secret);
+    }
+  });
+
   it("fails closed for project and active-plan ambiguity", async () => {
     expect(
       normalizeLiveWork(
