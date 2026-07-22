@@ -139,6 +139,7 @@ export type WorkPlanSidebarContent = {
     durationMs: number | null;
   }>;
   workers?: Array<{
+    actionKey: string;
     label: string;
     parentLabel: string | null;
     ownerKind: string;
@@ -153,6 +154,7 @@ export type WorkPlanSidebarContent = {
     result: string;
     contextPercent: number | null;
     elapsedMs: number | null;
+    canCancel: boolean;
   }>;
   requirements?: { mapped: string[]; excluded: string[]; unresolved: string[] };
   evidenceCount: number;
@@ -608,6 +610,7 @@ function renderWorkPlanSidebar(
   content: WorkPlanSidebarContent,
   activeTab: WorkPlanDetailTab,
   onTabChange: (tab: WorkPlanDetailTab) => void,
+  onCancelWorker: ((workerKey: string) => void) | undefined,
   idPrefix: string,
 ) {
   const provenanceLabel =
@@ -811,6 +814,18 @@ function renderWorkPlanSidebar(
                           ? html`<h5>${t("chat.liveWork.detail.workerResult")}</h5>
                               <p>${worker.result}</p>`
                           : nothing}
+                        ${worker.canCancel && worker.actionKey && onCancelWorker
+                          ? html`<button
+                              class="btn btn--sm"
+                              type="button"
+                              aria-label=${t("chat.liveWork.detail.cancelWorker", {
+                                worker: worker.label,
+                              })}
+                              @click=${() => onCancelWorker(worker.actionKey)}
+                            >
+                              ${t("chat.liveWork.detail.cancel")}
+                            </button>`
+                          : nothing}
                       </article>`,
                     )}
                   </div>`
@@ -935,6 +950,7 @@ type MarkdownSidebarProps = {
   allowExternalEmbedUrls?: boolean;
   workPlanTab?: WorkPlanDetailTab;
   onWorkPlanTabChange?: (tab: WorkPlanDetailTab) => void;
+  onCancelWorkPlanWorker?: (workerKey: string) => void;
   workPlanIdPrefix?: string;
 };
 
@@ -1001,6 +1017,7 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                   content,
                   props.workPlanTab ?? "plan",
                   props.onWorkPlanTabChange ?? (() => undefined),
+                  props.onCancelWorkPlanWorker,
                   props.workPlanIdPrefix ?? "work-plan",
                 )
               : content.kind === "file"
@@ -1105,6 +1122,8 @@ class ChatDetailPanel extends LitElement {
     | ((target: { path: string; line?: number | null }) => void)
     | null = null;
   @property({ attribute: false }) onRevealInWorkspace?: ((path: string) => void) | null = null;
+  @property({ attribute: false }) onCancelWorkPlanWorker?: ((workerKey: string) => void) | null =
+    null;
 
   @state() private visibleContent: SidebarContent | null = null;
   @state() private error: string | null = null;
@@ -1519,6 +1538,7 @@ class ChatDetailPanel extends LitElement {
           onViewRawText: this.showRawText,
           workPlanTab: this.workPlanTab,
           onWorkPlanTabChange: this.changeWorkPlanTab,
+          onCancelWorkPlanWorker: this.onCancelWorkPlanWorker ?? undefined,
           workPlanIdPrefix: this.workPlanIdPrefix,
         })}
       </div>

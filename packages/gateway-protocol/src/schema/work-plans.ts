@@ -184,6 +184,13 @@ export const WorkProjectsGetParamsSchema = Type.Object(
   { projectId: IdentifierSchema },
   { additionalProperties: false },
 );
+export const WorkWorkersCancelParamsSchema = Type.Object(
+  {
+    sessionKey: NonEmptyString,
+    workerKey: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
 export const WorkRegisteredProjectsListParamsSchema = Type.Object(
   {},
   { additionalProperties: false },
@@ -460,6 +467,13 @@ export const WorkProjectsGetResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+export const WorkWorkersCancelResultSchema = Type.Object(
+  {
+    found: Type.Boolean(),
+    cancelled: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
 const RegisteredProjectSchema = Type.Object(
   {
     registeredProjectId: NonEmptyString,
@@ -729,6 +743,7 @@ export const WorkPlansProjectionResultSchema = Type.Object(
 export type WorkProjectsCreateParams = Static<typeof WorkProjectsCreateParamsSchema>;
 export type WorkProjectsListParams = Static<typeof WorkProjectsListParamsSchema>;
 export type WorkProjectsGetParams = Static<typeof WorkProjectsGetParamsSchema>;
+export type WorkWorkersCancelParams = Static<typeof WorkWorkersCancelParamsSchema>;
 export type WorkRegisteredProjectsListParams = Static<
   typeof WorkRegisteredProjectsListParamsSchema
 >;
@@ -750,6 +765,7 @@ export type WorkPlansProjectionParams = Static<typeof WorkPlansProjectionParamsS
 export type WorkProjectsCreateResult = Static<typeof WorkProjectsCreateResultSchema>;
 export type WorkProjectsListResult = Static<typeof WorkProjectsListResultSchema>;
 export type WorkProjectsGetResult = Static<typeof WorkProjectsGetResultSchema>;
+export type WorkWorkersCancelResult = Static<typeof WorkWorkersCancelResultSchema>;
 export type WorkRegisteredProjectsListResult = Static<
   typeof WorkRegisteredProjectsListResultSchema
 >;

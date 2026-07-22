@@ -113,6 +113,7 @@ export const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "work.handoffs.create", scope: "operator.write" },
   { name: "work.projects.list", scope: "operator.read" },
   { name: "work.projects.get", scope: "operator.read" },
+  { name: "work.workers.cancel", scope: "operator.write" },
   { name: "work.plans.create", scope: "operator.write" },
   { name: "work.plans.get", scope: "operator.read" },
   { name: "work.plans.mutate", scope: "operator.write" },

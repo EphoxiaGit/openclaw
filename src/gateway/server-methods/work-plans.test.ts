@@ -1,5 +1,5 @@
 import path from "node:path";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupTempDirs, makeTempDir } from "../../../test/helpers/temp-dir.js";
 import {
   closeOpenClawStateDatabaseForTest,
@@ -25,7 +25,7 @@ function options(
     client: { connect: { device: { id: "trusted-device" } } },
     isWebchatConnect: () => false,
     respond,
-    context: {},
+    context: { getRuntimeConfig: () => ({}) },
   } as unknown as GatewayRequestHandlerOptions;
 }
 
@@ -197,6 +197,73 @@ describe("work-plan worker projection", () => {
     ]) {
       expect(rendered).not.toContain(privateValue);
     }
+  });
+
+  it("cancels the authoritative task through an opaque worker key", async () => {
+    const dbPath = path.join(makeTempDir(dirs, "work-plan-worker-cancel-"), "state.sqlite");
+    const repository = new WorkPlanRepository({ path: dbPath, now: () => 100 });
+    const project = repository.createProject({
+      projectId: "project-cancel",
+      primaryConversationId: "agent:main:main",
+      goalId: "goal-cancel",
+      objective: "Ship",
+      idempotencyKey: "create-project",
+      actorId: "test",
+    });
+    const plan = repository.createPlan({
+      projectId: project.projectId,
+      planId: "plan-cancel",
+      goalId: project.goalId,
+      expectedRevision: project.recordRevision,
+      idempotencyKey: "create-plan",
+      actorId: "test",
+      status: "running",
+      steps: [{ stepId: "step-cancel", title: "Run task" }],
+    });
+    repository.mutate({
+      projectId: project.projectId,
+      planId: plan.planId,
+      expectedRevision: plan.recordRevision,
+      idempotencyKey: "start-attempt",
+      actorId: "test",
+      mutation: {
+        action: "startAttempt",
+        stepId: "step-cancel",
+        attemptId: "attempt-cancel",
+        ownerType: "task",
+        ownerId: "private-task-id",
+      },
+    });
+    const task: TaskRecord = {
+      taskId: "private-task-id",
+      runtime: "subagent",
+      requesterSessionKey: "agent:main:main",
+      ownerKey: "private-owner",
+      scopeKind: "session",
+      task: "private prompt",
+      status: "running",
+      deliveryStatus: "pending",
+      notifyPolicy: "done_only",
+      createdAt: 100,
+    };
+    const cancelTask = vi.fn(async () => ({ found: true, cancelled: true, task }));
+    const handlers = createWorkPlansHandlers({
+      repository,
+      listTasks: () => [task],
+      cancelTask,
+    });
+
+    expect(
+      await invoke(handlers, "work.workers.cancel", {
+        sessionKey: "agent:main:main",
+        workerKey: "worker-0-1",
+      }),
+    ).toEqual({ ok: true, payload: { found: true, cancelled: true } });
+    expect(cancelTask).toHaveBeenCalledWith({
+      cfg: {},
+      taskId: "private-task-id",
+      reason: "Stopped from Assistant.",
+    });
   });
 });
 

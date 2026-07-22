@@ -19,11 +19,13 @@ import {
   validateWorkProjectContextGetParams,
   validateWorkRegisteredProjectsGetParams,
   validateWorkRegisteredProjectsListParams,
+  validateWorkWorkersCancelParams,
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { redactToolDetail } from "../../logging/redact.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
+import { cancelDetachedTaskRunById } from "../../tasks/detached-task-runtime.js";
 import { listTaskRecords } from "../../tasks/runtime-internal.js";
 import type { TaskRecord } from "../../tasks/task-registry.types.js";
 import { ProjectContextRepository } from "../../work-plans/project-context-repository.js";
@@ -114,6 +116,42 @@ function taskIdentifiers(task: TaskRecord): string[] {
   );
 }
 
+function matchWorkPlanAttempts(plan: WorkPlanSnapshot, tasks: readonly TaskRecord[]) {
+  const taskByIdentifier = new Map<string, TaskRecord>();
+  for (const task of tasks) {
+    for (const identifier of taskIdentifiers(task)) {
+      taskByIdentifier.set(identifier, task);
+    }
+  }
+  return plan.steps.flatMap((step) =>
+    step.attempts.map((attempt) => ({
+      attempt,
+      step,
+      task: taskByIdentifier.get(attempt.ownerId),
+    })),
+  );
+}
+
+function currentWorkPlan(project: ReturnType<WorkPlanRepository["getProject"]>) {
+  const active = project.plans.filter(
+    (plan) => !["completed", "failed", "cancelled", "superseded"].includes(plan.status),
+  );
+  if (active.length > 1) {
+    return undefined;
+  }
+  return active[0] ?? project.plans[0];
+}
+
+function resolveWorkPlanWorkerTask(params: {
+  plan: WorkPlanSnapshot;
+  tasks: readonly TaskRecord[];
+  workerKey: string;
+}): TaskRecord | undefined {
+  return matchWorkPlanAttempts(params.plan, params.tasks).find(
+    ({ attempt, step }) => `worker-${step.ordinal}-${attempt.attemptNumber}` === params.workerKey,
+  )?.task;
+}
+
 function workerOwnerKind(ownerType: string, task: TaskRecord | undefined) {
   if (ownerType === "omx" || ownerType === "task_flow" || task?.runtime === "cron") {
     return "durable_job" as const;
@@ -146,19 +184,7 @@ export function projectWorkPlanWorkers(params: {
   now?: number;
   resolveSessionFacts?: (task: TaskRecord) => WorkerSessionFacts;
 }) {
-  const taskByIdentifier = new Map<string, TaskRecord>();
-  for (const task of params.tasks) {
-    for (const identifier of taskIdentifiers(task)) {
-      taskByIdentifier.set(identifier, task);
-    }
-  }
-  const matches = params.plan.steps.flatMap((step) =>
-    step.attempts.map((attempt) => ({
-      attempt,
-      step,
-      task: taskByIdentifier.get(attempt.ownerId),
-    })),
-  );
+  const matches = matchWorkPlanAttempts(params.plan, params.tasks);
   const keyByTaskId = new Map(
     matches.flatMap(({ attempt, step, task }) =>
       task ? [[task.taskId, `worker-${step.ordinal}-${attempt.attemptNumber}`] as const] : [],
@@ -279,10 +305,14 @@ export function createWorkPlansHandlers(
   input: {
     repository?: WorkPlanRepository;
     projectContextRepository?: ProjectContextRepository;
+    cancelTask?: typeof cancelDetachedTaskRunById;
+    listTasks?: typeof listTaskRecords;
   } = {},
 ): GatewayRequestHandlers {
   const repository = input.repository ?? new WorkPlanRepository();
   const projectContextRepository = input.projectContextRepository ?? new ProjectContextRepository();
+  const cancelTask = input.cancelTask ?? cancelDetachedTaskRunById;
+  const listTasks = input.listTasks ?? listTaskRecords;
   return {
     "work.registeredProjects.list": ({ params, respond }) => {
       if (!validateWorkRegisteredProjectsListParams(params)) {
@@ -410,7 +440,7 @@ export function createWorkPlansHandlers(
       }
       execute(respond, () => {
         const project = repository.getProject(params.projectId);
-        const tasks = listTaskRecords();
+        const tasks = listTasks();
         let sessionContext:
           | { cfg: OpenClawConfig; store: Record<string, SessionEntry> }
           | undefined;
@@ -438,6 +468,37 @@ export function createWorkPlansHandlers(
           },
         };
       });
+    },
+    "work.workers.cancel": async ({ params, respond, context }) => {
+      if (!validateWorkWorkersCancelParams(params)) {
+        return invalid(respond, "work.workers.cancel", validateWorkWorkersCancelParams.errors);
+      }
+      const matches = repository
+        .listProjects()
+        .filter((project) => project.primaryConversationId === params.sessionKey);
+      if (matches.length !== 1) {
+        respond(true, { found: false, cancelled: false });
+        return;
+      }
+      const project = repository.getProject(matches[0].projectId);
+      const plan = currentWorkPlan(project);
+      const task = plan
+        ? resolveWorkPlanWorkerTask({
+            plan,
+            tasks: listTasks(),
+            workerKey: params.workerKey,
+          })
+        : undefined;
+      if (!task) {
+        respond(true, { found: false, cancelled: false });
+        return;
+      }
+      const result = await cancelTask({
+        cfg: context.getRuntimeConfig(),
+        taskId: task.taskId,
+        reason: "Stopped from Assistant.",
+      });
+      respond(true, { found: result.found, cancelled: result.cancelled });
     },
     "work.plans.create": ({ params, respond, client }) => {
       if (!validateWorkPlansCreateParams(params)) {

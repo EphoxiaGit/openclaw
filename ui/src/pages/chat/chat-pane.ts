@@ -273,6 +273,32 @@ class ChatPane extends LitElement {
     );
   }
 
+  private cancelWorkPlanWorker(workerKey: string) {
+    const state = this.state;
+    if (
+      !state?.client ||
+      !state.connected ||
+      isGatewayMethodAdvertised(this.context.gateway.snapshot, "work.workers.cancel") !== true
+    ) {
+      return;
+    }
+    void state.client
+      .request<{ found?: boolean; cancelled?: boolean }>("work.workers.cancel", {
+        sessionKey: state.sessionKey,
+        workerKey,
+      })
+      .then((result) => {
+        if (result.found !== true || result.cancelled !== true) {
+          state.error = t("chat.liveWork.detail.cancelFailed");
+        }
+        this.refreshLiveWork();
+      })
+      .catch(() => {
+        state.error = t("chat.liveWork.detail.cancelFailed");
+        state.requestUpdate?.();
+      });
+  }
+
   private readonly handleCommandPaletteSlashCommand = (command: string) => {
     const state = this.state;
     if (!state) {
@@ -1215,6 +1241,7 @@ class ChatPane extends LitElement {
           );
         }
       },
+      onCancelWorkPlanWorker: (workerKey) => this.cancelWorkPlanWorker(workerKey),
       onSplitRatioChange: state.handleSplitRatioChange,
       assistantName: state.assistantName,
       assistantAvatar: state.assistantAvatar,

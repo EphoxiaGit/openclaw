@@ -137,6 +137,7 @@ export type ChatProps = {
   onOpenWorkspaceFile?: (target: { path: string; line?: number | null }) => void;
   onRevealWorkspaceFile?: (path: string) => void;
   onCloseSidebar?: () => void;
+  onCancelWorkPlanWorker?: (workerKey: string) => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
   basePath?: string;
@@ -368,6 +369,7 @@ export function renderChat(props: ChatProps) {
                     .allowExternalEmbedUrls=${props.allowExternalEmbedUrls ?? false}
                     .onOpenWorkspaceFile=${props.onOpenWorkspaceFile ?? null}
                     .onRevealInWorkspace=${props.onRevealWorkspaceFile ?? null}
+                    .onCancelWorkPlanWorker=${props.onCancelWorkPlanWorker ?? null}
                     @chat-detail-panel-close=${() => props.onCloseSidebar?.()}
                   ></openclaw-chat-detail-panel>
                 `

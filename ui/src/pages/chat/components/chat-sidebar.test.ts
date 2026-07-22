@@ -266,6 +266,7 @@ describe("work plan sidebar", () => {
 
   it("renders observed worker state in the Agents tab", () => {
     const container = document.createElement("div");
+    const onCancelWorker = vi.fn();
     render(
       renderMarkdownSidebar({
         content: {
@@ -284,6 +285,7 @@ describe("work plan sidebar", () => {
           blockedSteps: [],
           workers: [
             {
+              actionKey: "worker-1-1",
               label: "Research worker",
               parentLabel: "Main assistant",
               ownerKind: "isolated",
@@ -298,6 +300,7 @@ describe("work plan sidebar", () => {
               result: "",
               contextPercent: 42,
               elapsedMs: 1250,
+              canCancel: true,
             },
           ],
           evidenceCount: 0,
@@ -309,6 +312,7 @@ describe("work plan sidebar", () => {
         error: null,
         onClose: () => undefined,
         onViewRawText: () => undefined,
+        onCancelWorkPlanWorker: onCancelWorker,
         workPlanTab: "agents",
         workPlanIdPrefix: "pane-agents-work",
       }),
@@ -324,5 +328,7 @@ describe("work plan sidebar", () => {
     expect(text).toContain("openai");
     expect(text).toContain("gpt-5.6-terra");
     expect(text).toContain("42%");
+    container.querySelector<HTMLButtonElement>('[aria-label="Cancel Research worker"]')?.click();
+    expect(onCancelWorker).toHaveBeenCalledWith("worker-1-1");
   });
 });

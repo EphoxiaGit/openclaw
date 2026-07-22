@@ -229,7 +229,7 @@ describe("chat live work", () => {
     ];
     plan.workers = [
       {
-        key: "private-worker-key",
+        key: "worker-1-1",
         label: "Research worker",
         ownerKind: "isolated",
         role: "Researcher",
@@ -242,6 +242,7 @@ describe("chat live work", () => {
         progress: "Comparing existing implementation seams.",
         contextPercent: 42,
         elapsedMs: 1250,
+        canCancel: true,
       },
     ];
 
@@ -250,6 +251,7 @@ describe("chat live work", () => {
     expect(view.details?.workers).toEqual([
       expect.objectContaining({
         label: "Research worker",
+        actionKey: "worker-1-1",
         ownerKind: "isolated",
         role: "Researcher",
         lane: "subagent",
@@ -261,12 +263,12 @@ describe("chat live work", () => {
         progress: "Comparing existing implementation seams.",
         contextPercent: 42,
         elapsedMs: 1250,
+        canCancel: true,
       }),
     ]);
     const rendered = JSON.stringify(view);
     expect(rendered).not.toContain("private-task");
     expect(rendered).not.toContain("private-child-session");
-    expect(rendered).not.toContain("private-worker-key");
     expect(rendered).not.toContain("private-attempt");
     expect(rendered).not.toContain("private-step");
   });

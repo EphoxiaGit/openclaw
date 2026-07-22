@@ -660,6 +660,10 @@ import {
   WorkProjectsListParamsSchema,
   type WorkProjectsListResult,
   WorkProjectsListResultSchema,
+  type WorkWorkersCancelParams,
+  WorkWorkersCancelParamsSchema,
+  type WorkWorkersCancelResult,
+  WorkWorkersCancelResultSchema,
   type WorkRegisteredProjectsGetParams,
   WorkRegisteredProjectsGetParamsSchema,
   type WorkRegisteredProjectsGetResult,
@@ -915,6 +919,9 @@ export const validateWorkProjectsListParams = lazyCompile<WorkProjectsListParams
 export const validateWorkProjectsGetParams = lazyCompile<WorkProjectsGetParams>(
   WorkProjectsGetParamsSchema,
 );
+export const validateWorkWorkersCancelParams = lazyCompile<WorkWorkersCancelParams>(
+  WorkWorkersCancelParamsSchema,
+);
 export const validateWorkRegisteredProjectsListParams =
   lazyCompile<WorkRegisteredProjectsListParams>(WorkRegisteredProjectsListParamsSchema);
 export const validateWorkRegisteredProjectsGetParams = lazyCompile<WorkRegisteredProjectsGetParams>(
@@ -961,6 +968,9 @@ export const validateWorkProjectsListResult = lazyCompile<WorkProjectsListResult
 );
 export const validateWorkProjectsGetResult = lazyCompile<WorkProjectsGetResult>(
   WorkProjectsGetResultSchema,
+);
+export const validateWorkWorkersCancelResult = lazyCompile<WorkWorkersCancelResult>(
+  WorkWorkersCancelResultSchema,
 );
 export const validateWorkRegisteredProjectsListResult =
   lazyCompile<WorkRegisteredProjectsListResult>(WorkRegisteredProjectsListResultSchema);

@@ -62,6 +62,7 @@ type WireWorker = {
   result?: unknown;
   contextPercent?: unknown;
   elapsedMs?: unknown;
+  canCancel?: unknown;
 };
 type WireContext = {
   project?: { recordRevision?: unknown };
@@ -406,6 +407,7 @@ function normalizeWorkers(plan: WirePlan): NonNullable<WorkPlanSidebarContent["w
     ),
   );
   return workers.map((worker, index) => ({
+    actionKey: technicalText(worker.key),
     label:
       safeTitle(worker.label) ||
       t("chat.liveWork.detail.workerNumber", { number: formatLiveWorkNumber(index + 1) }),
@@ -432,6 +434,7 @@ function normalizeWorkers(plan: WirePlan): NonNullable<WorkPlanSidebarContent["w
       typeof worker.elapsedMs === "number" && Number.isFinite(worker.elapsedMs)
         ? Math.max(0, worker.elapsedMs)
         : null,
+    canCancel: worker.canCancel === true,
   }));
 }
 
