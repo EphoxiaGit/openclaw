@@ -45,6 +45,7 @@ const mocks = vi.hoisted(() => ({
   fsRealpath: vi.fn(async (p: string) => p),
   fsReadlink: vi.fn(async () => ""),
   fsOpen: vi.fn(async () => ({}) as unknown),
+  listPersonaAgentReferences: vi.fn((_agentId?: string) => [] as string[]),
   rootRead: vi.fn(async (_params?: unknown) => ({
     buffer: Buffer.from(""),
     realPath: "/workspace/test-agent/AGENTS.md",
@@ -63,6 +64,14 @@ const mocks = vi.hoisted(() => ({
     size: 0,
   })),
   rootWrite: vi.fn(async (_params?: unknown) => {}),
+}));
+
+vi.mock("../../personas/repository.js", () => ({
+  PersonaRepository: class {
+    listAgentReferences(agentId: string) {
+      return mocks.listPersonaAgentReferences(agentId);
+    }
+  },
 }));
 
 vi.mock("../../config/config.js", async () => {
@@ -1109,6 +1118,7 @@ describe("agents.delete", () => {
     mocks.loadConfigReturn = {};
     mocks.findAgentEntryIndex.mockReturnValue(0);
     mocks.pruneAgentConfig.mockReturnValue({ config: {}, removedBindings: 2 });
+    mocks.listPersonaAgentReferences.mockReturnValue([]);
   });
 
   it("deletes an existing agent and trashes files by default", async () => {
@@ -1125,6 +1135,31 @@ describe("agents.delete", () => {
     expect(mocks.writeConfigFile).toHaveBeenCalled();
     // moveToTrashBestEffort calls fs.access then movePathToTrash for each dir
     expect(mocks.movePathToTrash).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["primary", "persona-primary"],
+    ["delegate", "persona-delegate"],
+    ["archived", "persona-archived"],
+  ])("rejects an Agent referenced by a %s Persona", async (_kind, personaId) => {
+    mocks.listPersonaAgentReferences.mockReturnValue([personaId]);
+
+    const { respond, promise } = makeCall("agents.delete", { agentId: "test-agent" });
+    await promise;
+
+    expectRespondErrorContaining(respond, personaId);
+    expectRespondErrorContaining(respond, "rebind or remove");
+    expect(mocks.writeConfigFile).not.toHaveBeenCalled();
+  });
+
+  it("deletes an Agent with no Persona references", async () => {
+    mocks.listPersonaAgentReferences.mockReturnValue([]);
+
+    const { respond, promise } = makeCall("agents.delete", { agentId: "test-agent" });
+    await promise;
+
+    expectRespondOk(respond, { ok: true });
+    expect(mocks.writeConfigFile).toHaveBeenCalled();
   });
 
   it("trashes workspace attestations when deleting the last workspace owner", async () => {

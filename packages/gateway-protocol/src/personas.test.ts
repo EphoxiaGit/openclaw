@@ -1,0 +1,43 @@
+import { Value } from "typebox/value";
+import { describe, expect, it } from "vitest";
+import {
+  PersonaChangedEventSchema,
+  PersonasCreateParamsSchema,
+  PersonasListResultSchema,
+} from "./schema/personas.js";
+
+describe("Persona gateway schemas", () => {
+  it("accepts bounded creation input and rejects unknown properties", () => {
+    const input = {
+      slug: "lucy",
+      displayName: "Lucy",
+      description: "Companion",
+      primaryAgentId: "main",
+      allowedDelegateAgentIds: ["delegate"],
+      revision: {
+        identity: "A careful collaborator.",
+        relationship: "A trusted working partner.",
+        communicationStyle: "Clear and concise.",
+        behaviorGuidance: "Ask only when authority is required.",
+        traits: { warmth: 0.8, directness: 0.7, playfulness: 0.2, formality: 0.4 },
+      },
+      idempotencyKey: "create-lucy",
+    };
+    expect(Value.Check(PersonasCreateParamsSchema, input)).toBe(true);
+    expect(Value.Check(PersonasCreateParamsSchema, { ...input, secret: "no" })).toBe(false);
+  });
+
+  it("keeps summaries and change events metadata-only", () => {
+    expect(Value.Check(PersonasListResultSchema, { personas: [] })).toBe(true);
+    expect(
+      Value.Check(PersonaChangedEventSchema, {
+        action: "revise",
+        personaId: "persona-1",
+        status: "active",
+        recordRevision: 2,
+        activeRevisionId: "revision-2",
+        content: "must not cross the event boundary",
+      }),
+    ).toBe(false);
+  });
+});

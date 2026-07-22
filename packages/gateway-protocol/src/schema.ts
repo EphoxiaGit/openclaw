@@ -36,3 +36,4 @@ export * from "./schema/plugins.js";
 export * from "./schema/wizard.js";
 export * from "./schema/worktrees.js";
 export * from "./schema/work-plans.js";
+export * from "./schema/personas.js";

@@ -45,6 +45,7 @@ import {
 import type { IdentityConfig } from "../../config/types.base.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { root, FsSafeError, type ReadResult } from "../../infra/fs-safe.js";
+import { PersonaRepository } from "../../personas/repository.js";
 import { movePathToTrash } from "../../plugin-sdk/browser-maintenance.js";
 import { DEFAULT_AGENT_ID, normalizeAgentId } from "../../routing/session-key.js";
 import { resolveUserPath } from "../../utils.js";
@@ -714,6 +715,19 @@ export const agentsHandlers: GatewayRequestHandlers = {
     }
     if (!isConfiguredAgent(cfg, agentId)) {
       respondAgentNotFound(respond, agentId);
+      return;
+    }
+
+    const personaReferences = new PersonaRepository().listAgentReferences(agentId);
+    if (personaReferences.length > 0) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Agent is referenced by Personas ${personaReferences.slice(0, 20).join(", ")}; rebind or remove those references first`,
+        ),
+      );
       return;
     }
 

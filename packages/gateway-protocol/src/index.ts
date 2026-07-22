@@ -9,6 +9,7 @@ export {
   type ClawHubTrustErrorDetails,
 } from "./clawhub-trust-error-details.js";
 export * from "./schema/work-plans.js";
+export * from "./schema/personas.js";
 import { Compile, type Validator as TypeBoxValidator } from "typebox/compile";
 import {
   type WorkCapsulesUpdateParams,

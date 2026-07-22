@@ -764,6 +764,64 @@ export interface OfficialExternalPluginCatalogSnapshots {
   updated_at_ms: number;
 }
 
+export interface PersonaDelegateAgents {
+  agent_id: string;
+  ordinal: number;
+  persona_id: string;
+}
+
+export interface PersonaMutationReceipts {
+  created_at: number;
+  idempotency_key: string;
+  request_hash: string;
+  result_json: string;
+  scope_key: string;
+}
+
+export interface PersonaRevisions {
+  author_id: string;
+  content_json: string;
+  created_at: number;
+  parent_revision_id: string | null;
+  persona_id: string;
+  provenance: string | null;
+  reason: string;
+  revision_id: string | null;
+  revision_number: number;
+}
+
+export interface PersonaSessionSelections {
+  created_at: number;
+  persona_id: string;
+  record_revision: number;
+  session_key: string | null;
+  updated_at: number;
+}
+
+export interface PersonaTransitions {
+  action: string;
+  actor_id: string;
+  created_at: number;
+  payload_json: string;
+  persona_id: string;
+  request_hash: string;
+  sequence: Generated<number>;
+  transition_id: string;
+}
+
+export interface Personas {
+  active_revision_id: string;
+  created_at: number;
+  description: string;
+  display_name: string;
+  persona_id: string | null;
+  primary_agent_id: string;
+  record_revision: number;
+  slug: string;
+  status: string;
+  updated_at: number;
+}
+
 export interface PluginBindingApprovals {
   account_id: string;
   approved_at: number;
@@ -1307,6 +1365,12 @@ export interface DB {
   node_pairing_paired: NodePairingPaired;
   node_pairing_pending: NodePairingPending;
   official_external_plugin_catalog_snapshots: OfficialExternalPluginCatalogSnapshots;
+  persona_delegate_agents: PersonaDelegateAgents;
+  persona_mutation_receipts: PersonaMutationReceipts;
+  persona_revisions: PersonaRevisions;
+  persona_session_selections: PersonaSessionSelections;
+  persona_transitions: PersonaTransitions;
+  personas: Personas;
   plugin_binding_approvals: PluginBindingApprovals;
   plugin_blob_entries: PluginBlobEntries;
   plugin_state_entries: PluginStateEntries;

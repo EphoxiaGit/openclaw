@@ -260,6 +260,28 @@ import {
   NodeRenameParamsSchema,
 } from "./nodes.js";
 import {
+  PersonaChangedEventSchema,
+  PersonaSelectionChangedEventSchema,
+  PersonasCreateParamsSchema,
+  PersonasCreateResultSchema,
+  PersonasDeleteResultSchema,
+  PersonasGetParamsSchema,
+  PersonasGetResultSchema,
+  PersonasHistoryParamsSchema,
+  PersonasHistoryResultSchema,
+  PersonasLifecycleParamsSchema,
+  PersonasListParamsSchema,
+  PersonasListResultSchema,
+  PersonasReviseParamsSchema,
+  PersonasReviseResultSchema,
+  PersonasSelectionGetParamsSchema,
+  PersonasSelectionGetResultSchema,
+  PersonasSelectionSetParamsSchema,
+  PersonasSelectionSetResultSchema,
+  PersonasUpdateParamsSchema,
+  PersonasUpdateResultSchema,
+} from "./personas.js";
+import {
   PluginApprovalRequestParamsSchema,
   PluginApprovalResolveParamsSchema,
 } from "./plugin-approvals.js";
@@ -409,6 +431,26 @@ import {
 
 /** Public schema registry keyed by stable protocol schema name. */
 export const ProtocolSchemas = {
+  PersonasListParams: PersonasListParamsSchema,
+  PersonasListResult: PersonasListResultSchema,
+  PersonasGetParams: PersonasGetParamsSchema,
+  PersonasGetResult: PersonasGetResultSchema,
+  PersonasCreateParams: PersonasCreateParamsSchema,
+  PersonasCreateResult: PersonasCreateResultSchema,
+  PersonasUpdateParams: PersonasUpdateParamsSchema,
+  PersonasUpdateResult: PersonasUpdateResultSchema,
+  PersonasReviseParams: PersonasReviseParamsSchema,
+  PersonasReviseResult: PersonasReviseResultSchema,
+  PersonasLifecycleParams: PersonasLifecycleParamsSchema,
+  PersonasDeleteResult: PersonasDeleteResultSchema,
+  PersonasSelectionGetParams: PersonasSelectionGetParamsSchema,
+  PersonasSelectionGetResult: PersonasSelectionGetResultSchema,
+  PersonasSelectionSetParams: PersonasSelectionSetParamsSchema,
+  PersonasSelectionSetResult: PersonasSelectionSetResultSchema,
+  PersonasHistoryParams: PersonasHistoryParamsSchema,
+  PersonasHistoryResult: PersonasHistoryResultSchema,
+  PersonaChangedEvent: PersonaChangedEventSchema,
+  PersonaSelectionChangedEvent: PersonaSelectionChangedEventSchema,
   // Handshake, transport frames, state snapshots, and shared error envelopes.
   ConnectParams: ConnectParamsSchema,
   HelloOk: HelloOkSchema,

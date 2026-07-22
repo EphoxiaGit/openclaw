@@ -1623,4 +1623,75 @@ CREATE TABLE IF NOT EXISTS work_plan_mutation_receipts (
   result_json TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   PRIMARY KEY (project_id, idempotency_key)
-);\n`;
+);
+
+CREATE TABLE IF NOT EXISTS personas (
+  persona_id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+  primary_agent_id TEXT NOT NULL,
+  active_revision_id TEXT NOT NULL,
+  record_revision INTEGER NOT NULL CHECK (record_revision >= 1),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS persona_revisions (
+  revision_id TEXT PRIMARY KEY,
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  revision_number INTEGER NOT NULL CHECK (revision_number >= 1),
+  parent_revision_id TEXT,
+  content_json TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  provenance TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE (persona_id, revision_number)
+);
+
+CREATE TRIGGER IF NOT EXISTS persona_revisions_immutable
+BEFORE UPDATE ON persona_revisions
+BEGIN
+  SELECT RAISE(ABORT, 'persona revisions are immutable');
+END;
+
+CREATE TABLE IF NOT EXISTS persona_delegate_agents (
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  PRIMARY KEY (persona_id, agent_id),
+  UNIQUE (persona_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS persona_session_selections (
+  session_key TEXT PRIMARY KEY,
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  record_revision INTEGER NOT NULL CHECK (record_revision >= 1),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS persona_mutation_receipts (
+  scope_key TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_key, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS persona_transitions (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  transition_id TEXT NOT NULL UNIQUE,
+  persona_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_persona_transitions_persona
+  ON persona_transitions(persona_id, sequence);\n`;
