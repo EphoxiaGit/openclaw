@@ -857,10 +857,10 @@ export class ProjectContextRepository {
       }
       const row = db
         .prepare(
-          "SELECT revision FROM project_documents WHERE project_id=? AND document_id=? ORDER BY sequence DESC LIMIT 1",
+          "SELECT 1 AS ok FROM project_documents WHERE project_id=? AND document_id=? AND revision=?",
         )
-        .get(projectId, source.sourceId) as Row | undefined;
-      return !row || Number(row.revision) !== source.sourceRevision;
+        .get(projectId, source.sourceId, source.sourceRevision) as Row | undefined;
+      return !row;
     });
   }
 

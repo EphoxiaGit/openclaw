@@ -565,7 +565,7 @@ describe("registered project context", () => {
     ).toThrow(/stale, foreign, or unknown/);
   });
 
-  it("treats historical project-document revisions as stale provenance", () => {
+  it("keeps exact immutable project-document revisions current and rejects foreign or missing refs", () => {
     const { context, project } = fixture();
     const first = context.updateCapsule({
       projectId: project.projectId,
@@ -584,17 +584,56 @@ describe("registered project context", () => {
       provenance: [{ sourceType: "project_document", sourceId: "capsule", sourceRevision: 1 }],
     });
     expect(context.getProjectContext(project.projectId).capsuleProvenance).toEqual({
-      state: "stale",
-      staleRefs: [{ sourceType: "project_document", sourceId: "capsule", sourceRevision: 1 }],
+      state: "current",
+      staleRefs: [],
     });
-    expect(() =>
-      context.createCheckpoint({
-        projectId: project.projectId,
-        expectedRevision: second.projectRecordRevision,
-        idempotencyKey: "historical-document-checkpoint",
-        actorId: "operator:test",
-      }),
-    ).toThrow(/stale provenance/);
+    const checkpoint = context.createCheckpoint({
+      projectId: project.projectId,
+      expectedRevision: second.projectRecordRevision,
+      idempotencyKey: "derived-capsule-checkpoint",
+      actorId: "operator:test",
+    });
+    expect(checkpoint.document.kind).toBe("checkpoint");
+
+    const other = context.createRegisteredWorkProject({
+      registeredProjectId: "glass",
+      objective: "Other project",
+      idempotencyKey: "other-exact-project",
+      actorId: "operator:test",
+    });
+    const otherCheckpoint = context.createCheckpoint({
+      projectId: other.projectId,
+      expectedRevision: 1,
+      idempotencyKey: "other-exact-checkpoint",
+      actorId: "operator:test",
+    });
+    for (const [idempotencyKey, provenance] of [
+      [
+        "foreign-project-document",
+        [
+          {
+            sourceType: "project_document" as const,
+            sourceId: otherCheckpoint.document.documentId,
+            sourceRevision: 1,
+          },
+        ],
+      ],
+      [
+        "missing-project-document-revision",
+        [{ sourceType: "project_document" as const, sourceId: "capsule", sourceRevision: 99 }],
+      ],
+    ] as const) {
+      expect(() =>
+        context.updateCapsule({
+          projectId: project.projectId,
+          expectedRevision: checkpoint.projectRecordRevision,
+          idempotencyKey,
+          actorId: "operator:test",
+          content: capsule("Rejected"),
+          provenance: [...provenance],
+        }),
+      ).toThrow(/stale, foreign, or unknown/);
+    }
   });
 
   it("bounds checkpoint plans, progress, and provenance to the same 50 most-recent plans", () => {
