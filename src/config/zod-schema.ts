@@ -538,8 +538,8 @@ const CommitmentsSchema = z
 const WorkspaceSchemaShape = {
   liveWork: z
     .object({
-      visible: z.boolean().optional(),
-      showContinueDraft: z.boolean().optional(),
+      visible: z.boolean().optional().meta({ default: true }),
+      showContinueDraft: z.boolean().optional().meta({ default: true }),
     })
     .strict()
     .optional(),

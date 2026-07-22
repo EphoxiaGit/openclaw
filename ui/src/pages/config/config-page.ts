@@ -669,14 +669,24 @@ export class ConfigPage extends LitElement {
 
   private async saveConfig(): Promise<void> {
     if (await this.context.runtimeConfig.save()) {
-      await this.context.config.refresh();
+      await this.refreshApplicationConfig();
     }
   }
 
   private async applyConfig(): Promise<void> {
     if (await this.context.runtimeConfig.apply()) {
-      await this.context.config.refresh();
+      await this.refreshApplicationConfig();
     }
+  }
+
+  private refreshApplicationConfig(): Promise<void> {
+    return this.context.config.refresh({
+      auth: {
+        hello: this.context.gateway.snapshot.hello,
+        settings: { token: this.context.gateway.connection.token },
+        password: this.context.gateway.connection.password,
+      },
+    });
   }
 
   private renderAdvancedConfig(configObject: Record<string, unknown>) {

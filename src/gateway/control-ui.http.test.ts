@@ -16,7 +16,10 @@ import {
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { withEnvAsync } from "../test-utils/env.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
-import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "./control-ui-contract.js";
+import {
+  CONTROL_UI_BOOTSTRAP_CONFIG_PATH,
+  type ControlUiBootstrapConfig,
+} from "./control-ui-contract.js";
 import {
   handleControlUiAssistantMediaRequest,
   handleControlUiAvatarRequest,
@@ -40,17 +43,7 @@ describe("handleControlUiHttpRequest", () => {
   }
 
   function parseBootstrapPayload(end: ReturnType<typeof makeMockHttpResponse>["end"]) {
-    return JSON.parse(responseBody(end)) as {
-      basePath: string;
-      assistantName: string;
-      assistantAvatar: string;
-      assistantAgentId: string;
-      localMediaPreviewRoots?: string[];
-      chatMessageMaxWidth?: string;
-      seamColor?: string;
-      timeFormat?: "auto" | "12" | "24";
-      terminalEnabled: boolean;
-    };
+    return JSON.parse(responseBody(end)) as ControlUiBootstrapConfig;
   }
 
   function responseBody(end: ReturnType<typeof makeMockHttpResponse>["end"]) {

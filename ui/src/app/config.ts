@@ -45,6 +45,7 @@ type ApplicationConfig = {
   terminalEnabled: boolean;
   workspaceLiveWorkVisible: boolean;
   workspaceLiveWorkShowContinueDraft: boolean;
+  workspaceLiveWorkSettled: boolean;
 };
 
 export type ApplicationConfigCapability = {
@@ -81,6 +82,7 @@ const DEFAULT_APPLICATION_CONFIG: ApplicationConfig = {
   terminalEnabled: readDocumentTerminalEnabled() ?? false,
   workspaceLiveWorkVisible: true,
   workspaceLiveWorkShowContinueDraft: true,
+  workspaceLiveWorkSettled: false,
 };
 
 function normalizeSeamColor(value: unknown): string | null {
@@ -158,16 +160,22 @@ function normalizeApplicationConfig(parsed: ControlUiBootstrapConfig): Applicati
     terminalEnabled: parsed.terminalEnabled === true,
     workspaceLiveWorkVisible: parsed.workspaceLiveWorkVisible !== false,
     workspaceLiveWorkShowContinueDraft: parsed.workspaceLiveWorkShowContinueDraft !== false,
+    workspaceLiveWorkSettled: true,
   };
 }
+
+type ApplicationConfigLoadResult = {
+  attempted: boolean;
+  config: ApplicationConfig | null;
+};
 
 async function loadApplicationConfig(params: {
   basePath: string;
   auth?: ApplicationConfigAuthSource;
   skipWithoutAuthCandidate?: boolean;
-}): Promise<ApplicationConfig | null> {
+}): Promise<ApplicationConfigLoadResult> {
   if (typeof window === "undefined" || typeof fetch !== "function") {
-    return null;
+    return { attempted: false, config: null };
   }
 
   const basePath = normalizeRouteBasePath(params.basePath);
@@ -180,7 +188,7 @@ async function loadApplicationConfig(params: {
     const sameOrigin = resolvedUrl.origin === window.location.origin;
     const authCandidates = sameOrigin ? resolveControlUiAuthCandidates(params.auth ?? {}) : [];
     if (params.skipWithoutAuthCandidate && sameOrigin && authCandidates.length === 0) {
-      return null;
+      return { attempted: false, config: null };
     }
     const attempts = authCandidates.length > 0 ? authCandidates : [""];
     let res: Response | null = null;
@@ -194,18 +202,18 @@ async function loadApplicationConfig(params: {
         break;
       }
       if (res.status !== 401 && res.status !== 403) {
-        return null;
+        return { attempted: true, config: null };
       }
     }
     if (!res || !res.ok) {
-      return null;
+      return { attempted: true, config: null };
     }
     const parsed = (await res.json()) as ControlUiBootstrapConfig;
     setUiTimeFormatPreference(parsed.timeFormat);
     applyControlUiSeamColor(parsed.seamColor);
-    return normalizeApplicationConfig(parsed);
+    return { attempted: true, config: normalizeApplicationConfig(parsed) };
   } catch {
-    return null;
+    return { attempted: true, config: null };
   }
 }
 
@@ -230,11 +238,12 @@ export function createApplicationConfigCapability(params: {
     },
     async refresh(options) {
       const version = ++refreshVersion;
-      const next = await loadApplicationConfig({
+      const result = await loadApplicationConfig({
         basePath: params.basePath,
         auth: options?.auth ?? params.auth,
         skipWithoutAuthCandidate: options?.skipWithoutAuthCandidate,
       });
+      const next = result.config;
       if (next && version === refreshVersion) {
         const documentTerminalEnabled = readDocumentTerminalEnabled();
         if (documentTerminalEnabled !== null && next.terminalEnabled !== documentTerminalEnabled) {
@@ -244,6 +253,12 @@ export function createApplicationConfigCapability(params: {
           return;
         }
         publish(next);
+      } else if (
+        result.attempted &&
+        !options?.skipWithoutAuthCandidate &&
+        version === refreshVersion
+      ) {
+        publish({ ...current, workspaceLiveWorkSettled: true });
       }
     },
     subscribe(listener) {

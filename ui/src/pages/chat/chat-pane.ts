@@ -152,6 +152,7 @@ class ChatPane extends LitElement {
   private liveWorkAnnouncement = "";
   private liveWorkVisible = true;
   private liveWorkShowContinueDraft = true;
+  private liveWorkConfigSettled = false;
 
   private markSessionRead(row: GatewaySessionRow | undefined) {
     const state = this.state;
@@ -259,7 +260,7 @@ class ChatPane extends LitElement {
       state.sessionKey,
       state.connected,
       () => state.requestUpdate?.(),
-      this.liveWorkVisible,
+      this.liveWorkConfigSettled && this.liveWorkVisible,
     );
   }
 
@@ -664,8 +665,10 @@ class ChatPane extends LitElement {
     const liveWorkVisibilityChanged = this.liveWorkVisible !== config.workspaceLiveWorkVisible;
     const liveWorkDraftChanged =
       this.liveWorkShowContinueDraft !== config.workspaceLiveWorkShowContinueDraft;
+    const liveWorkSettledChanged = this.liveWorkConfigSettled !== config.workspaceLiveWorkSettled;
     this.liveWorkVisible = config.workspaceLiveWorkVisible;
     this.liveWorkShowContinueDraft = config.workspaceLiveWorkShowContinueDraft;
+    this.liveWorkConfigSettled = config.workspaceLiveWorkSettled;
     state.terminalAvailable =
       config.terminalEnabled &&
       state.connected &&
@@ -683,7 +686,8 @@ class ChatPane extends LitElement {
       state.allowExternalEmbedUrls === config.allowExternalEmbedUrls &&
       state.chatMessageMaxWidth === config.chatMessageMaxWidth &&
       !liveWorkVisibilityChanged &&
-      !liveWorkDraftChanged
+      !liveWorkDraftChanged &&
+      !liveWorkSettledChanged
     ) {
       return;
     }
@@ -691,7 +695,7 @@ class ChatPane extends LitElement {
     state.embedSandboxMode = config.embedSandboxMode;
     state.allowExternalEmbedUrls = config.allowExternalEmbedUrls;
     state.chatMessageMaxWidth = config.chatMessageMaxWidth;
-    if (liveWorkVisibilityChanged) {
+    if (liveWorkVisibilityChanged || liveWorkSettledChanged) {
       if (!this.liveWorkVisible && state.sidebarContent?.kind === "work-plan") {
         state.handleCloseSidebar();
       }
@@ -888,7 +892,8 @@ class ChatPane extends LitElement {
       state.sessionsResult?.sessions,
       state.sessionKey,
     );
-    const liveWorkView = this.liveWorkVisible ? this.liveWorkState.view : null;
+    const liveWorkView =
+      this.liveWorkConfigSettled && this.liveWorkVisible ? this.liveWorkState.view : null;
     const liveWorkSessionKey = this.liveWorkState.sessionKey;
     const liveWorkRequestVersion = this.liveWorkState.requestVersion;
     const liveWorkClient = this.liveWorkState.client;

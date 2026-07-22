@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SystemInfoResult } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { ApplicationGatewaySnapshot } from "../../app/context.ts";
@@ -75,4 +75,69 @@ describe("ConfigPage system info", () => {
 
     expect(state.systemInfo).toBeNull();
   });
+});
+
+describe("ConfigPage application config refresh", () => {
+  type ConfigPageRefreshHarness = {
+    context: {
+      runtimeConfig: Record<"save" | "apply", () => Promise<boolean>>;
+      config: { refresh: (options: unknown) => Promise<void> };
+      gateway: {
+        snapshot: { hello: { auth: { deviceToken: string } } };
+        connection: { token: string; password: string };
+      };
+    };
+    saveConfig: () => Promise<void>;
+    applyConfig: () => Promise<void>;
+  };
+
+  function createRefreshHarness(result: boolean) {
+    const refresh = vi.fn(async (_options: unknown) => undefined);
+    const page = new ConfigPage() as unknown as ConfigPageRefreshHarness;
+    page.context = {
+      runtimeConfig: {
+        save: vi.fn(async () => result),
+        apply: vi.fn(async () => result),
+      },
+      config: { refresh },
+      gateway: {
+        snapshot: { hello: { auth: { deviceToken: "live-device-token" } } },
+        connection: { token: "latest-token", password: "latest-password" },
+      },
+    };
+    return { page, refresh };
+  }
+
+  it.each([
+    ["saveConfig", "save"],
+    ["applyConfig", "apply"],
+  ] as const)("refreshes the bootstrap projection after successful %s", async (method, action) => {
+    const { page, refresh } = createRefreshHarness(true);
+
+    await page[method]();
+
+    expect(page.context.runtimeConfig[action]).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledWith({
+      auth: {
+        hello: { auth: { deviceToken: "live-device-token" } },
+        settings: { token: "latest-token" },
+        password: "latest-password",
+      },
+    });
+  });
+
+  it.each([
+    ["saveConfig", "save"],
+    ["applyConfig", "apply"],
+  ] as const)(
+    "does not refresh the bootstrap projection after failed %s",
+    async (method, action) => {
+      const { page, refresh } = createRefreshHarness(false);
+
+      await page[method]();
+
+      expect(page.context.runtimeConfig[action]).toHaveBeenCalledOnce();
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
 });
