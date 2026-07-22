@@ -204,10 +204,23 @@ describe("chat live work", () => {
     "pip install private-package",
     "dotnet test private.sln",
     "echo private | tee output.txt",
+    "echo private",
+    "cat secrets",
+    "ls -la",
+    ".env",
+    "project-abc12345",
     "550e8400-e29b-41d4-a716-446655440000",
     "opaqueProjectIdentifier1234567890",
   ])("collapses unsafe presentation-only text to a localized fallback: %s", (unsafeText) => {
     expect(sanitizeLiveWorkDisplayText(unsafeText, "Safe fallback")).toBe("Safe fallback");
+  });
+
+  it.each([
+    ["OpenClaw Main Workspace", "title" as const],
+    ["Implement native live work strip", "title" as const],
+    ["Current work is bounded and ready for review.", "narrative" as const],
+  ])("preserves safe typed presentation text: %s", (safeText, kind) => {
+    expect(sanitizeLiveWorkDisplayText(safeText, "Safe fallback", kind)).toBe(safeText);
   });
 
   it("sanitizes every rendered project, capsule, goal, checkpoint, and step label", () => {
@@ -273,6 +286,15 @@ describe("chat live work", () => {
     const unknownView = normalizeLiveWork(project(), unknown);
     expect(unknownView.details?.provenanceStatus).toBe("unavailable");
     expect(unknownView.continueDraft).toBeUndefined();
+  });
+
+  it("never turns an unsafe explicit next task into an actionable redacted placeholder", () => {
+    const unsafe = context();
+    unsafe.capsule.content.explicitNextTask = "echo private";
+    const view = normalizeLiveWork(project(), unsafe);
+    expect(view.details?.nextTask).toBe(t("chat.liveWork.redactedDetail"));
+    expect(view.details?.nextTaskSource).toBe("capsule");
+    expect(view.continueDraft).toBeUndefined();
   });
 
   it.each([

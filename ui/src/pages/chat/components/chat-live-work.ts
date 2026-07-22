@@ -196,38 +196,74 @@ export function formatLiveWorkPlanStatus(status: WorkPlanStatus): string {
   return t(`chat.liveWork.status.${status}`);
 }
 
-const COMMAND_INVOCATION =
-  /(?:^|[\s:;(])(?:\$\s*|sudo\s+)?(?:(?:bash|sh|zsh|fish|powershell|pwsh|cmd)(?:\.exe)?\b|(?:openclaw|pnpm|npm|npx|yarn|bun|git|gh|curl|wget|rm|cp|mv|cd|node|deno|python\d*|pytest|pip\d*|pipx|poetry|uv|cargo|rustc|docker|podman|wrangler|ssh|scp|rsync|kubectl|helm|terraform|ansible|gradle|mvn|dotnet|java|javac|kotlin|swift|xcodebuild|ruby|bundle|rake|gem|php|composer|perl|gcc|g\+\+|clang|cmake|meson|ninja|nix|nix-shell|brew|apt|apt-get|dnf|yum|pacman|systemctl|service)\b|go\s+(?:build|clean|env|generate|get|install|list|mod|run|test|tool|version|work)\b|make(?:\s|$))/i;
-const SHELL_SYNTAX = /(?:&&|\|\||\$\(|\${|[<>]|(?:^|\s)\|(?:\s|$))/;
-const PATH_OR_FILENAME =
-  /(?:\\\\[^\s\\/]+[\\/][^\s,;:()]+|[a-z]:[\\/][^\s,;:()]+|(?:~?[\\/]|\.\.?[\\/])[^\s,;:()]+|\b(?:[a-z0-9_.-]+[\\/])+(?:[a-z0-9_.-]+)\b|\b(?:readme|changelog|license|makefile|dockerfile)(?:\.[a-z0-9]+)?\b|\b[a-z0-9][a-z0-9_.-]{0,80}\.[a-z0-9]{1,10}\b)/gi;
-const OPAQUE_IDENTIFIER =
-  /\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,}|(?=[a-z0-9_-]{24,}\b)(?=[a-z0-9_-]*\d)[a-z0-9_-]+|(?:agent|session|project|plan|step|run):[a-z0-9:_-]{8,})\b/gi;
+export type LiveWorkPresentationKind = "title" | "narrative";
 
-export function sanitizeLiveWorkDisplayText(value: unknown, fallback = ""): string {
+const PRESENTATION_LIMITS: Record<LiveWorkPresentationKind, { chars: number; words: number }> = {
+  title: { chars: 160, words: 24 },
+  narrative: { chars: 2_000, words: 240 },
+};
+const NATURAL_LANGUAGE_PRESENTATION = /^\p{L}[\p{L}\p{M}\p{N}\p{Zs}.,!?…:'’"“”()\-–—]*$/u;
+const NATURAL_LANGUAGE_TOKEN_PUNCTUATION = /[.,!?…:'’"“”()\-–—]/gu;
+
+function hasUppercaseNaturalLanguageLead(value: string): boolean {
+  const first = value[0];
+  const lower = first.toLocaleLowerCase();
+  const upper = first.toLocaleUpperCase();
+  return lower === upper || first === upper;
+}
+
+export function sanitizeLiveWorkDisplayText(
+  value: unknown,
+  fallback = "",
+  kind: LiveWorkPresentationKind = "narrative",
+): string {
   if (typeof value !== "string") {
     return fallback;
   }
-  const redacted = t("chat.liveWork.redactedDetail");
-  const sanitized = redactToolDetail(value.trim())
-    .replace(/```[\s\S]*?```/g, redacted)
-    .replace(/`[^`\n]+`/g, redacted)
-    .split(/\r?\n/)
-    .map((line) => (COMMAND_INVOCATION.test(line) || SHELL_SYNTAX.test(line) ? redacted : line))
-    .join("\n")
-    .replace(PATH_OR_FILENAME, redacted)
-    .replace(OPAQUE_IDENTIFIER, redacted)
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 4_000);
-  const meaningful = sanitized
-    .replaceAll(redacted, "")
-    .replace(/[^\p{L}\p{N}]+/gu, "")
-    .trim();
-  return meaningful ? sanitized : fallback;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const limits = PRESENTATION_LIMITS[kind];
+  if (
+    !normalized ||
+    normalized.length > limits.chars ||
+    normalized.split(" ").length > limits.words ||
+    redactToolDetail(normalized) !== normalized ||
+    !NATURAL_LANGUAGE_PRESENTATION.test(normalized) ||
+    !hasUppercaseNaturalLanguageLead(normalized) ||
+    /\p{L}\.\p{L}/u.test(normalized)
+  ) {
+    return fallback;
+  }
+  for (const token of normalized.split(" ")) {
+    const lexical = token.replace(NATURAL_LANGUAGE_TOKEN_PUNCTUATION, "");
+    if (lexical.length > 40) {
+      return fallback;
+    }
+    if (/\p{N}/u.test(lexical) && !/^\p{N}+$/u.test(lexical)) {
+      return fallback;
+    }
+  }
+  return normalized;
 }
 
-const safeText = sanitizeLiveWorkDisplayText;
+const safeTitle = (value: unknown, fallback = "") =>
+  sanitizeLiveWorkDisplayText(value, fallback, "title");
+const safeNarrative = (value: unknown, fallback = "") =>
+  sanitizeLiveWorkDisplayText(value, fallback, "narrative");
+type OptionalTitle = { display: string; accepted: string; rejected: boolean };
+
+function safeOptionalTitle(value: unknown): OptionalTitle {
+  if (typeof value !== "string" || !value.trim()) {
+    return { display: "", accepted: "", rejected: false };
+  }
+  const accepted = safeTitle(value);
+  return accepted
+    ? { display: accepted, accepted, rejected: false }
+    : { display: t("chat.liveWork.redactedDetail"), accepted: "", rejected: true };
+}
+
+function machineText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
 
 function number(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -242,7 +278,7 @@ function planStatus(value: unknown): WorkPlanStatus {
 function list(value: unknown): string[] {
   return Array.isArray(value)
     ? value
-        .map((entry) => safeText(entry))
+        .map((entry) => safeNarrative(entry))
         .filter(Boolean)
         .slice(0, 50)
     : [];
@@ -251,7 +287,7 @@ function list(value: unknown): string[] {
 function selectPlan(
   plans: WirePlan[],
 ): { kind: "none" } | { kind: "ambiguous" } | { kind: "selected"; plan: WirePlan } {
-  const active = plans.filter((plan) => !TERMINAL.has(safeText(plan.status)));
+  const active = plans.filter((plan) => !TERMINAL.has(machineText(plan.status)));
   if (active.length > 1) {
     return { kind: "ambiguous" };
   }
@@ -259,19 +295,19 @@ function selectPlan(
     return { kind: "selected", plan: active[0] };
   }
   const terminal = plans
-    .filter((plan) => safeText(plan.status) !== "superseded")
+    .filter((plan) => machineText(plan.status) !== "superseded")
     .toSorted((left, right) => number(right.updatedAt) - number(left.updatedAt));
   return terminal[0] ? { kind: "selected", plan: terminal[0] } : { kind: "none" };
 }
 
-function stepTitles(plan: WirePlan, ids: unknown): string[] {
+function stepTitles(plan: WirePlan, ids: unknown, fallback: string): string[] {
   const requested = new Set(
     Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [],
   );
   return Array.isArray(plan.steps)
     ? (plan.steps as WireStep[])
         .filter((step) => typeof step.stepId === "string" && requested.has(step.stepId))
-        .map((step) => safeText(step.title, t("chat.liveWork.redactedDetail")))
+        .map((step) => safeTitle(step.title, fallback))
         .filter(Boolean)
     : [];
 }
@@ -280,7 +316,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
   const plans = Array.isArray(project.plans) ? (project.plans as WirePlan[]) : [];
   const selected = selectPlan(plans);
   const projectName = context
-    ? safeText(context.registeredProject?.displayName, t("chat.liveWork.registeredProject"))
+    ? safeTitle(context.registeredProject?.displayName, t("chat.liveWork.registeredProject"))
     : t("chat.liveWork.registeredProject");
   if (selected.kind === "ambiguous") {
     return {
@@ -300,12 +336,14 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
   }
   const plan = selected.plan;
   const projection = plan.projection ?? {};
-  const active = stepTitles(plan, projection.activeStepIds);
-  const ready = stepTitles(plan, projection.readyStepIds);
+  const redactedDetail = t("chat.liveWork.redactedDetail");
+  const active = stepTitles(plan, projection.activeStepIds, redactedDetail);
+  const ready = stepTitles(plan, projection.readyStepIds, redactedDetail);
+  const acceptedReady = stepTitles(plan, projection.readyStepIds, "");
   const blocked = Array.isArray(plan.steps)
     ? (plan.steps as WireStep[])
-        .filter((step) => safeText(step.status) === "blocked")
-        .map((step) => safeText(step.title))
+        .filter((step) => machineText(step.status) === "blocked")
+        .map((step) => safeTitle(step.title, redactedDetail))
         .filter(Boolean)
     : [];
   const provenanceStatus = !context?.capsule
@@ -316,9 +354,22 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
         ? "stale"
         : "unavailable";
   const capsuleFresh = provenanceStatus === "current";
-  const capsuleNext = capsuleFresh ? safeText(context?.capsule?.content?.explicitNextTask) : "";
-  const checkpointNext = safeText(context?.latestCheckpoint?.content?.exactNextAction);
+  const capsuleCandidate = capsuleFresh
+    ? safeOptionalTitle(context?.capsule?.content?.explicitNextTask)
+    : { display: "", accepted: "", rejected: false };
+  const checkpointCandidate = safeOptionalTitle(
+    context?.latestCheckpoint?.content?.exactNextAction,
+  );
+  const capsuleNext = capsuleCandidate.display;
+  const checkpointNext = checkpointCandidate.display;
   const nextTask = capsuleNext || checkpointNext || ready[0] || "";
+  const actionCandidateRejected =
+    capsuleCandidate.rejected ||
+    (!capsuleCandidate.accepted && checkpointCandidate.rejected) ||
+    acceptedReady.length !== ready.length;
+  const actionableNextTask = actionCandidateRejected
+    ? ""
+    : capsuleCandidate.accepted || checkpointCandidate.accepted || acceptedReady[0] || "";
   const status = planStatus(plan.status);
   const progressNow = number(projection.x);
   const progressMax = Math.max(1, number(projection.n, 1));
@@ -328,8 +379,8 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
     projectName,
     planPosition: { x: progressNow, n: progressMax },
     planStatus: status,
-    summary: safeText(context?.capsule?.content?.summary, t("chat.liveWork.noSummary")),
-    focus: safeText(context?.capsule?.content?.currentFocus, t("chat.liveWork.noFocus")),
+    summary: safeNarrative(context?.capsule?.content?.summary, t("chat.liveWork.noSummary")),
+    focus: safeTitle(context?.capsule?.content?.currentFocus, t("chat.liveWork.noFocus")),
     capsuleCounts: {
       constraints: list(context?.capsule?.content?.constraints).length,
       decisions: list(context?.capsule?.content?.decisions).length,
@@ -337,7 +388,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
       conflicts: list(context?.capsule?.content?.conflicts).length,
     },
     provenanceStatus,
-    objective: safeText(
+    objective: safeNarrative(
       context?.goal?.objective ?? plan.goal?.objective,
       t("chat.liveWork.noObjective"),
     ),
@@ -369,8 +420,8 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
   const continueAllowed =
     Boolean(context?.registeredProject?.enabled) &&
     capsuleFresh &&
-    ready.length > 0 &&
-    Boolean(nextTask) &&
+    acceptedReady.length > 0 &&
+    Boolean(actionableNextTask) &&
     CONTINUE_ALLOWED.has(status);
   return {
     kind: "plan",
@@ -386,7 +437,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
       ? {
           continueDraft: t("chat.liveWork.continuationDraft", {
             project: projectName,
-            task: nextTask,
+            task: actionableNextTask,
           }).slice(0, 1_000),
         }
       : {}),
