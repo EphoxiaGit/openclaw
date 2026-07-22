@@ -23,7 +23,7 @@ async function readShellStyles(): Promise<string> {
   ).join("\n");
 }
 
-describe("Project Northstar shell styles", () => {
+describe("shell style contracts", () => {
   it("uses explicit selectors instead of wildcard theme hooks", async () => {
     const css = await readShellStyles();
 
