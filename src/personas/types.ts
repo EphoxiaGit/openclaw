@@ -41,6 +41,7 @@ export type Persona = {
   createdAt: number;
   updatedAt: number;
   missingAgentIds: string[];
+  ttsPersonaId?: string;
 };
 
 export type PersonaSelection = {

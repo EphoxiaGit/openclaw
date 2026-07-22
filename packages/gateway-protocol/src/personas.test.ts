@@ -40,4 +40,35 @@ describe("Persona gateway schemas", () => {
       }),
     ).toBe(false);
   });
+
+  it("exposes effective named TTS binding metadata without provider credentials", () => {
+    expect(
+      Value.Check(PersonasListResultSchema, {
+        personas: [
+          {
+            personaId: "persona-1",
+            slug: "lucy",
+            displayName: "Lucy",
+            description: "Companion",
+            status: "active",
+            primaryAgentId: "main",
+            allowedDelegateAgentIds: [],
+            activeRevisionId: "revision-1",
+            recordRevision: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            missingAgentIds: [],
+            voiceBinding: {
+              status: "ready",
+              ttsPersonaId: "lucy-voice",
+              provider: "elevenlabs",
+              model: "multilingual-v2",
+              voice: "lucy",
+              providerBinding: "applied",
+            },
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
 });

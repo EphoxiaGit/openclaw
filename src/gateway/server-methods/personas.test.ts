@@ -18,6 +18,7 @@ const persona = {
   updatedAt: 1,
   missingAgentIds: [],
 };
+const projectedPersona = { ...persona, voiceBinding: { status: "unbound" as const } };
 const revision = {
   identity: "A careful collaborator.",
   relationship: "A trusted working partner.",
@@ -133,7 +134,7 @@ describe("Persona gateway handlers", () => {
       },
     );
 
-    expect(respond).toHaveBeenCalledWith(true, { persona }, undefined);
+    expect(respond).toHaveBeenCalledWith(true, { persona: projectedPersona }, undefined);
     expect(broadcast).toHaveBeenCalledWith(
       "persona.changed",
       {

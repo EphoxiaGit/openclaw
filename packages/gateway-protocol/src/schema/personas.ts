@@ -4,7 +4,24 @@ import { NonEmptyString } from "./primitives.js";
 
 const Id = Type.String({ minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$" });
 const AgentId = Type.String({ minLength: 1, maxLength: 64, pattern: "^[a-z0-9][a-z0-9_-]*$" });
+const TtsPersonaId = Type.String({ minLength: 1, maxLength: 128 });
 const Status = Type.Union([Type.Literal("active"), Type.Literal("archived")]);
+const VoiceBindingSchema = Type.Object(
+  {
+    status: Type.Union([
+      Type.Literal("unbound"),
+      Type.Literal("missing"),
+      Type.Literal("unavailable"),
+      Type.Literal("ready"),
+    ]),
+    ttsPersonaId: Type.Optional(TtsPersonaId),
+    provider: Type.Optional(NonEmptyString),
+    model: Type.Optional(NonEmptyString),
+    voice: Type.Optional(NonEmptyString),
+    providerBinding: Type.Optional(Type.Union([Type.Literal("applied"), Type.Literal("missing")])),
+  },
+  { additionalProperties: false },
+);
 const Traits = Type.Object(
   {
     warmth: Type.Number({ minimum: 0, maximum: 1 }),
@@ -38,6 +55,7 @@ const PersonaSchema = Type.Object(
     createdAt: Type.Integer(),
     updatedAt: Type.Integer(),
     missingAgentIds: Type.Array(AgentId, { maxItems: 17, uniqueItems: true }),
+    voiceBinding: VoiceBindingSchema,
   },
   { additionalProperties: false },
 );
@@ -97,6 +115,7 @@ export const PersonasCreateParamsSchema = Type.Object(
     description: Type.String({ maxLength: 1_000 }),
     primaryAgentId: AgentId,
     allowedDelegateAgentIds: Type.Array(AgentId, { maxItems: 16, uniqueItems: true }),
+    ttsPersonaId: Type.Optional(TtsPersonaId),
     revision: PersonaRevisionContentSchema,
     idempotencyKey: Type.String({ minLength: 1, maxLength: 128 }),
   },
@@ -122,6 +141,7 @@ export const PersonasUpdateParamsSchema = Type.Object(
     allowedDelegateAgentIds: Type.Optional(
       Type.Array(AgentId, { maxItems: 16, uniqueItems: true }),
     ),
+    ttsPersonaId: Type.Optional(Type.Union([TtsPersonaId, Type.Null()])),
   },
   { additionalProperties: false },
 );

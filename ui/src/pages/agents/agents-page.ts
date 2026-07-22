@@ -95,6 +95,7 @@ class AgentsPage extends LitElement implements AgentsState {
   private routeDataInitialized = false;
   private stopGatewaySubscription?: () => void;
   private stopAgentsSubscription?: () => void;
+  private stopPersonasSubscription?: () => void;
   private stopAgentIdentitySubscription?: () => void;
   private stopChannelsSubscription?: () => void;
   private stopConfigSubscription?: () => void;
@@ -130,6 +131,8 @@ class AgentsPage extends LitElement implements AgentsState {
       this.loadActivePanelData();
       this.requestUpdate();
     });
+    this.stopPersonasSubscription = this.context.personas.subscribe(() => this.requestUpdate());
+    void this.context.personas.refresh(true);
     this.stopAgentIdentitySubscription = this.context.agentIdentity.subscribe(() =>
       this.requestUpdate(),
     );
@@ -154,6 +157,8 @@ class AgentsPage extends LitElement implements AgentsState {
     this.stopGatewaySubscription = undefined;
     this.stopAgentsSubscription?.();
     this.stopAgentsSubscription = undefined;
+    this.stopPersonasSubscription?.();
+    this.stopPersonasSubscription = undefined;
     this.stopAgentIdentitySubscription?.();
     this.stopAgentIdentitySubscription = undefined;
     this.stopChannelsSubscription?.();
@@ -512,6 +517,7 @@ class AgentsPage extends LitElement implements AgentsState {
           loading: this.agentsLoading,
           error: this.agentsError,
           agentsList: this.agentsList,
+          personas: this.context.personas.state.list,
           selectedAgentId,
           activePanel: this.agentsPanel,
           config: {

@@ -5,6 +5,7 @@ import type {
   AgentsFilesListResult,
   AgentsListResult,
   ModelCatalogEntry,
+  PersonasListResult,
 } from "../../api/types.ts";
 import { t } from "../../i18n/index.ts";
 import "../../components/tooltip.ts";
@@ -22,6 +23,7 @@ import type { AgentsPanel } from "../../lib/agents/index.ts";
 
 export function renderAgentOverview(params: {
   agent: AgentsListResult["agents"][number];
+  personas: PersonasListResult["personas"];
   basePath: string;
   defaultId: string | null;
   configForm: Record<string, unknown> | null;
@@ -141,6 +143,24 @@ export function renderAgentOverview(params: {
           <div class="label">Skills Filter</div>
           <div>${skillFilter ? `${skillCount} selected` : "all skills"}</div>
         </div>
+      </div>
+
+      <div class="agent-model-select" style="margin-top: 20px;">
+        <div class="label">Bound Personas</div>
+        ${params.personas.length === 0
+          ? html`<div class="muted">No Personas use this Agent as their primary Agent.</div>`
+          : html`<div class="agents-overview-grid" style="margin-top: 8px;">
+              ${params.personas.map(
+                (persona) => html`<div class="agent-kv">
+                  <div class="label">${persona.displayName}</div>
+                  <div>
+                    ${persona.voiceBinding.status} ·
+                    ${persona.voiceBinding.ttsPersonaId ?? "no TTS persona"} ·
+                    ${persona.voiceBinding.provider ?? "no provider"}
+                  </div>
+                </div>`,
+              )}
+            </div>`}
       </div>
 
       ${configDirty

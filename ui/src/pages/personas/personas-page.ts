@@ -10,8 +10,17 @@ import { subtitleForRoute, titleForRoute } from "../../app-navigation.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 
 type Persona = PersonasListResult["personas"][number];
-type PersonasPanel = "overview" | "identity" | "agents" | "revisions";
+type PersonasPanel = "overview" | "identity" | "agents" | "voice" | "revisions";
 type PersonasMode = "browse" | "create" | "import";
+type TtsPersonaOption = { id: string; label?: string; description?: string; provider?: string };
+type TtsPersonasResult = { personas: TtsPersonaOption[] };
+type TtsSpeakResult = {
+  audioBase64: string;
+  mimeType?: string;
+  provider: string;
+  providerModel?: string;
+  providerVoice?: string;
+};
 
 const DEFAULT_REVISION = {
   identity: "A helpful assistant identity.",
@@ -32,24 +41,72 @@ export class PersonasPage extends LitElement {
   @state() private panel: PersonasPanel = "overview";
   @state() private mode: PersonasMode = "browse";
   @state() private busy = false;
+  @state() private voiceBusy = false;
   @state() private error: string | null = null;
   @state() private lucyPreview: { agentId: string; identity: string; soul: string } | null = null;
   @state() private lucyAgentId = "";
+  @state() private ttsPersonas: TtsPersonaOption[] = [];
   private selectionRequest = 0;
+  private ttsPersonasRequest = 0;
+  private voiceGeneration = 0;
+  private voiceAudio: HTMLAudioElement | null = null;
+  private voiceAudioUrl: string | null = null;
   private stop?: () => void;
   private stopAgents?: () => void;
+  private stopGateway?: () => void;
 
   override connectedCallback() {
     super.connectedCallback();
     this.stop = this.context.personas.subscribe(() => this.requestUpdate());
     this.stopAgents = this.context.agents.subscribe(() => this.requestUpdate());
+    this.stopGateway = this.context.gateway.subscribe((snapshot) => {
+      if (snapshot.connected) {
+        void this.loadTtsPersonas(this.detail?.persona.primaryAgentId);
+      }
+    });
     void this.context.personas.refresh(true);
     void this.context.agents.ensureList();
+    void this.loadTtsPersonas();
   }
   override disconnectedCallback() {
     this.stop?.();
     this.stopAgents?.();
+    this.stopGateway?.();
+    this.interruptVoice();
     super.disconnectedCallback();
+  }
+
+  private async loadTtsPersonas(agentId?: string) {
+    const request = ++this.ttsPersonasRequest;
+    const client = this.context.gateway.snapshot.client;
+    if (!client) {
+      return;
+    }
+    try {
+      const result = await client.request<TtsPersonasResult>("tts.personas", {
+        ...(agentId ? { agentId } : {}),
+      });
+      if (request === this.ttsPersonasRequest) {
+        this.ttsPersonas = result.personas;
+      }
+    } catch {
+      if (request === this.ttsPersonasRequest) {
+        this.ttsPersonas = [];
+      }
+    }
+  }
+
+  // Each stop invalidates pending synthesis and revokes the prior object URL.
+  // This keeps playback generation-owned and prevents browser-side voice retention.
+  private interruptVoice() {
+    this.voiceGeneration += 1;
+    this.voiceAudio?.pause();
+    this.voiceAudio = null;
+    if (this.voiceAudioUrl) {
+      URL.revokeObjectURL(this.voiceAudioUrl);
+    }
+    this.voiceAudioUrl = null;
+    this.voiceBusy = false;
   }
 
   private get selected(): Persona | undefined {
@@ -68,6 +125,7 @@ export class PersonasPage extends LitElement {
       const detail = await this.context.personas.get(personaId);
       if (request === this.selectionRequest && this.selectedId === personaId) {
         this.detail = detail;
+        void this.loadTtsPersonas(detail.persona.primaryAgentId);
       }
     } catch (error) {
       if (request === this.selectionRequest && this.selectedId === personaId) {
@@ -245,6 +303,72 @@ export class PersonasPage extends LitElement {
     }
   }
 
+  private async bindVoice(event: SubmitEvent) {
+    event.preventDefault();
+    if (!this.detail) {
+      return;
+    }
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    const ttsPersonaId = String(form.get("ttsPersonaId") || "");
+    this.busy = true;
+    this.error = null;
+    try {
+      await this.context.personas.update({
+        personaId: this.detail.persona.personaId,
+        expectedRevision: this.detail.persona.recordRevision,
+        idempotencyKey: crypto.randomUUID(),
+        ttsPersonaId: ttsPersonaId || null,
+      });
+      await this.context.personas.refresh(true);
+      await this.select(this.detail.persona.personaId);
+    } catch (error) {
+      this.error = String(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async previewVoice(event: SubmitEvent) {
+    event.preventDefault();
+    if (!this.detail?.persona.voiceBinding.ttsPersonaId) {
+      return;
+    }
+    const client = this.context.gateway.snapshot.client;
+    if (!client) {
+      return;
+    }
+    const text = String(new FormData(event.currentTarget as HTMLFormElement).get("preview") || "");
+    this.interruptVoice();
+    const generation = this.voiceGeneration;
+    this.voiceBusy = true;
+    this.error = null;
+    try {
+      const result = await client.request<TtsSpeakResult>("tts.speak", {
+        text,
+        persona: this.detail.persona.voiceBinding.ttsPersonaId,
+        agentId: this.detail.persona.primaryAgentId,
+      });
+      if (generation !== this.voiceGeneration) {
+        return;
+      }
+      const bytes = Uint8Array.from(atob(result.audioBase64), (value) => value.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: result.mimeType ?? "audio/mpeg" }));
+      const audio = new Audio(url);
+      this.voiceAudio = audio;
+      this.voiceAudioUrl = url;
+      audio.addEventListener("ended", () => this.interruptVoice(), { once: true });
+      await audio.play();
+    } catch (error) {
+      if (generation === this.voiceGeneration) {
+        this.error = String(error);
+      }
+    } finally {
+      if (generation === this.voiceGeneration) {
+        this.voiceBusy = false;
+      }
+    }
+  }
+
   private async rollback(sourceRevisionId: string) {
     if (!this.detail) {
       return;
@@ -302,6 +426,7 @@ export class PersonasPage extends LitElement {
         label: "Agent Binding",
         count: detail.persona.allowedDelegateAgentIds.length + 1,
       },
+      { id: "voice", label: "Voice" },
       { id: "revisions", label: "Revisions", count: detail.revisions.length },
     ];
     return html`<div class="agent-tabs" role="tablist" aria-label="Persona settings">
@@ -450,6 +575,14 @@ ${activeRevision.content.behaviorGuidance}</textarea
       <div class="card-sub">
         Choose the primary execution Agent and the Agents this Persona may delegate to.
       </div>
+      <div class="agent-kv personas-page__form">
+        <div class="label">Effective voice</div>
+        <div>
+          ${persona.voiceBinding.status === "unbound"
+            ? "Not bound"
+            : `${persona.voiceBinding.ttsPersonaId} · ${persona.voiceBinding.status}`}
+        </div>
+      </div>
       ${persona.missingAgentIds.length
         ? html`<div class="callout warn personas-page__form">
             Missing Agents: ${persona.missingAgentIds.join(", ")}
@@ -483,6 +616,88 @@ ${activeRevision.content.behaviorGuidance}</textarea
           <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
             Save Agent binding
           </button>
+        </div>
+      </form>
+    </section>`;
+  }
+
+  private renderVoice(detail: PersonasGetResult) {
+    const binding = detail.persona.voiceBinding;
+    return html`<section class="card">
+      <div class="card-title">Voice</div>
+      <div class="card-sub">Bind this Persona to an existing server-owned named TTS persona.</div>
+      ${binding.status === "missing"
+        ? html`<div class="callout warn personas-page__form">
+            Named TTS persona “${binding.ttsPersonaId}” is no longer configured.
+          </div>`
+        : binding.status === "unavailable"
+          ? html`<div class="callout warn personas-page__form">
+              ${binding.ttsPersonaId} cannot currently synthesize with
+              ${binding.provider ?? "the configured provider"}.
+            </div>`
+          : nothing}
+      <form class="stack personas-page__form" @submit=${this.bindVoice}>
+        <label class="field personas-page__bounded-field">
+          <span>Named TTS persona</span>
+          <select name="ttsPersonaId">
+            <option value="" ?selected=${binding.status === "unbound"}>No voice binding</option>
+            ${binding.ttsPersonaId &&
+            !this.ttsPersonas.some((persona) => persona.id === binding.ttsPersonaId)
+              ? html`<option value=${binding.ttsPersonaId} selected>
+                  ${binding.ttsPersonaId}${binding.status === "missing"
+                    ? " (missing)"
+                    : " (current binding)"}
+                </option>`
+              : nothing}
+            ${this.ttsPersonas.map(
+              (persona) => html`<option
+                value=${persona.id}
+                ?selected=${persona.id === binding.ttsPersonaId}
+              >
+                ${persona.label ?? persona.id}${persona.provider ? ` · ${persona.provider}` : ""}
+              </option>`,
+            )}
+          </select>
+        </label>
+        ${this.ttsPersonas.length === 0
+          ? html`<div class="muted">No named TTS personas are configured on this server.</div>`
+          : nothing}
+        <div class="personas-page__actions personas-page__actions--start">
+          <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+            Save voice binding
+          </button>
+        </div>
+      </form>
+      <div class="agents-overview-grid personas-page__summary">
+        <div class="agent-kv">
+          <div class="label">Status</div>
+          <div>${binding.status}</div>
+        </div>
+        <div class="agent-kv">
+          <div class="label">Provider</div>
+          <div>${binding.provider ?? "Not resolved"}</div>
+        </div>
+        <div class="agent-kv">
+          <div class="label">Model / voice</div>
+          <div>
+            ${[binding.model, binding.voice].filter(Boolean).join(" · ") || "Provider default"}
+          </div>
+        </div>
+      </div>
+      <form class="stack personas-page__form" @submit=${this.previewVoice}>
+        <label class="field full">
+          <span>Preview phrase</span>
+          <input name="preview" value="Hello. This is my configured voice." required />
+        </label>
+        <div class="personas-page__actions personas-page__actions--start">
+          <button
+            type="submit"
+            class="btn btn--sm"
+            ?disabled=${this.voiceBusy || binding.status !== "ready"}
+          >
+            Play preview
+          </button>
+          <button type="button" class="btn btn--sm" @click=${this.interruptVoice}>Stop</button>
         </div>
       </form>
     </section>`;
@@ -524,7 +739,9 @@ ${activeRevision.content.behaviorGuidance}</textarea
         ? this.renderIdentity(detail)
         : this.panel === "agents"
           ? this.renderAgentBinding(detail)
-          : this.renderRevisions(detail)}`;
+          : this.panel === "voice"
+            ? this.renderVoice(detail)
+            : this.renderRevisions(detail)}`;
   }
 
   private renderCreate() {

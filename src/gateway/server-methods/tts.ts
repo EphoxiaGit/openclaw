@@ -175,9 +175,10 @@ export const ttsHandlers: GatewayRequestHandlers = {
     }
     try {
       const cfg = context.getRuntimeConfig();
+      const agentId = normalizeOptionalString(params.agentId);
       // synthesizeSpeech enforces the same messages.tts.maxTextLength bound but
       // reports it as a synthesis failure; pre-check to return a request error.
-      const maxTextLength = resolveTtsConfig(cfg).maxTextLength;
+      const maxTextLength = resolveTtsConfig(cfg, { agentId }).maxTextLength;
       if (text.length > maxTextLength) {
         respond(
           false,
@@ -189,7 +190,12 @@ export const ttsHandlers: GatewayRequestHandlers = {
         );
         return;
       }
-      const result = await synthesizeSpeech({ text, cfg });
+      const result = await synthesizeSpeech({
+        text,
+        cfg,
+        ...(params.persona ? { personaId: params.persona } : {}),
+        ...(agentId ? { agentId } : {}),
+      });
       const provider = normalizeOptionalString(result.provider);
       if (!result.success || !result.audioBuffer || result.audioBuffer.length === 0 || !provider) {
         respond(
@@ -202,6 +208,9 @@ export const ttsHandlers: GatewayRequestHandlers = {
       respond(true, {
         audioBase64: result.audioBuffer.toString("base64"),
         provider,
+        ...(result.persona ? { persona: result.persona } : {}),
+        ...(result.providerModel ? { providerModel: result.providerModel } : {}),
+        ...(result.providerVoice ? { providerVoice: result.providerVoice } : {}),
         outputFormat: result.outputFormat,
         mimeType: inferSpeechMimeType(result.outputFormat, result.fileExtension),
         fileExtension: result.fileExtension,
@@ -236,10 +245,11 @@ export const ttsHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
   },
-  "tts.personas": async ({ respond, context }) => {
+  "tts.personas": async ({ params, respond, context }) => {
     try {
       const cfg = context.getRuntimeConfig();
-      const config = resolveTtsConfig(cfg);
+      const agentId = normalizeOptionalString(params.agentId);
+      const config = resolveTtsConfig(cfg, { agentId });
       const prefsPath = resolveTtsPrefsPath(config);
       const active = getTtsPersona(config, prefsPath);
       respond(true, {

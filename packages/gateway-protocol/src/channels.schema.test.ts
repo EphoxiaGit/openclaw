@@ -1,7 +1,11 @@
 // Gateway Protocol tests cover channels.schema behavior.
 import { Compile } from "typebox/compile";
 import { describe, expect, it } from "vitest";
-import { ChannelsStatusResultSchema, WebLoginWaitParamsSchema } from "./schema/channels.js";
+import {
+  ChannelsStatusResultSchema,
+  TtsSpeakParamsSchema,
+  WebLoginWaitParamsSchema,
+} from "./schema/channels.js";
 
 /**
  * Channel schema regressions for browser login and status diagnostics.
@@ -30,6 +34,14 @@ describe("WebLoginWaitParamsSchema", () => {
         currentQrDataUrl: "https://example.com/qr.png",
       }),
     ).toBe(false);
+  });
+});
+
+describe("TtsSpeakParamsSchema", () => {
+  const validate = Compile(TtsSpeakParamsSchema);
+
+  it("accepts an owning Agent context for named Persona synthesis", () => {
+    expect(validate.Check({ text: "Hello.", persona: "lucy", agentId: "reader" })).toBe(true);
   });
 });
 

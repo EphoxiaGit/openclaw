@@ -20,6 +20,7 @@ import {
   PersonaRepository,
   PersonaValidationError,
 } from "../../personas/repository.js";
+import { projectPersonaWithVoice } from "../../personas/voice-binding.js";
 import type { GatewayClient, GatewayRequestHandlers } from "./types.js";
 
 function actorId(client: GatewayClient | null): string {
@@ -62,7 +63,9 @@ export function createPersonaHandlers(
           errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.list params"),
         );
       handle(respond, () => ({
-        personas: repository.list(configured(context), params.includeArchived),
+        personas: repository
+          .list(configured(context), params.includeArchived)
+          .map((persona) => projectPersonaWithVoice(context.getRuntimeConfig(), persona)),
       }));
     },
     "personas.get": ({ params, respond, context }) => {
@@ -76,7 +79,7 @@ export function createPersonaHandlers(
         const persona = repository.get(params.personaId, configured(context));
         const revisions = repository.listRevisions(params.personaId);
         return {
-          persona,
+          persona: projectPersonaWithVoice(context.getRuntimeConfig(), persona),
           activeRevision: repository.getRevision(persona.activeRevisionId),
           revisions,
         };
@@ -108,7 +111,7 @@ export function createPersonaHandlers(
           }),
           { dropIfSlow: true },
         );
-        return { persona };
+        return { persona: projectPersonaWithVoice(context.getRuntimeConfig(), persona) };
       });
     },
     "personas.update": ({ params, respond, context, client }) => {
@@ -136,7 +139,7 @@ export function createPersonaHandlers(
           },
           { dropIfSlow: true },
         );
-        return { persona };
+        return { persona: projectPersonaWithVoice(context.getRuntimeConfig(), persona) };
       });
     },
     "personas.revise": ({ params, respond, context, client }) => {
@@ -164,7 +167,10 @@ export function createPersonaHandlers(
           },
           { dropIfSlow: true },
         );
-        return result;
+        return {
+          ...result,
+          persona: projectPersonaWithVoice(context.getRuntimeConfig(), result.persona),
+        };
       });
     },
     "personas.archive": ({ params, respond, context, client }) =>
@@ -289,7 +295,7 @@ export function createPersonaHandlers(
           { dropIfSlow: true },
         );
       }
-      return { persona };
+      return { persona: projectPersonaWithVoice(context.getRuntimeConfig(), persona) };
     });
   }
 }

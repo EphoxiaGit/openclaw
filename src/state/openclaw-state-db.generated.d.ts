@@ -809,6 +809,11 @@ export interface PersonaTransitions {
   transition_id: string;
 }
 
+export interface PersonaVoiceBindings {
+  persona_id: string;
+  tts_persona_id: string;
+}
+
 export interface Personas {
   active_revision_id: string;
   created_at: number;
@@ -1404,6 +1409,7 @@ export interface DB {
   persona_revisions: PersonaRevisions;
   persona_session_selections: PersonaSessionSelections;
   persona_transitions: PersonaTransitions;
+  persona_voice_bindings: PersonaVoiceBindings;
   personas: Personas;
   plugin_binding_approvals: PluginBindingApprovals;
   plugin_blob_entries: PluginBlobEntries;

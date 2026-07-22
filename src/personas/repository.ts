@@ -1,6 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
+  executeSqliteQuerySync,
+  executeSqliteQueryTakeFirstSync,
+  getNodeSqliteKysely,
+} from "../infra/kysely-sync.js";
+import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
+import {
   openOpenClawStateDatabase,
   runOpenClawStateWriteTransaction,
   type OpenClawStateDatabaseOptions,
@@ -20,6 +26,7 @@ import {
 
 type Options = OpenClawStateDatabaseOptions & { now?: () => number };
 type Row = Record<string, string | number | null>;
+type PersonaVoiceDatabase = Pick<OpenClawStateKyselyDatabase, "persona_voice_bindings">;
 const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 const MAX_DELEGATES = 16;
@@ -139,6 +146,7 @@ export class PersonaRepository {
     description: string;
     primaryAgentId: string;
     allowedDelegateAgentIds: string[];
+    ttsPersonaId?: string;
     revision: PersonaRevisionContent;
     actorId: string;
     authorId: string;
@@ -190,6 +198,7 @@ export class PersonaRepository {
           now,
         );
       this.#replaceDelegates(personaId, input.allowedDelegateAgentIds);
+      this.#replaceVoiceBinding(personaId, input.ttsPersonaId);
       const result = this.get(personaId, input.configuredAgentIds);
       this.#transition(personaId, "create", input.actorId, requestHash, { recordRevision: 1 }, now);
       this.#receipt(`create:${slug}`, input.idempotencyKey, requestHash, result, now);
@@ -207,6 +216,7 @@ export class PersonaRepository {
     description?: string;
     primaryAgentId?: string;
     allowedDelegateAgentIds?: string[];
+    ttsPersonaId?: string | null;
   }): Persona {
     const requestHash = hash({ ...input, configuredAgentIds: undefined });
     return this.#mutate(
@@ -237,6 +247,9 @@ export class PersonaRepository {
             input.personaId,
           );
         this.#replaceDelegates(input.personaId, delegates);
+        if (input.ttsPersonaId !== undefined) {
+          this.#replaceVoiceBinding(input.personaId, input.ttsPersonaId ?? undefined);
+        }
       },
     );
   }
@@ -553,6 +566,33 @@ export class PersonaRepository {
     const stmt = this.#db.prepare("INSERT INTO persona_delegate_agents VALUES(?,?,?)");
     delegates.forEach((id, ordinal) => stmt.run(personaId, id, ordinal));
   }
+  #replaceVoiceBinding(personaId: string, ttsPersonaId: string | undefined) {
+    const voiceDb = getNodeSqliteKysely<PersonaVoiceDatabase>(this.#db);
+    executeSqliteQuerySync(
+      this.#db,
+      voiceDb.deleteFrom("persona_voice_bindings").where("persona_id", "=", personaId),
+    );
+    if (ttsPersonaId !== undefined) {
+      executeSqliteQuerySync(
+        this.#db,
+        voiceDb.insertInto("persona_voice_bindings").values({
+          persona_id: personaId,
+          tts_persona_id: text(ttsPersonaId, "ttsPersonaId", 128).toLowerCase(),
+        }),
+      );
+    }
+  }
+  #voiceBinding(personaId: string): string | undefined {
+    const voiceDb = getNodeSqliteKysely<PersonaVoiceDatabase>(this.#db);
+    const row = executeSqliteQueryTakeFirstSync(
+      this.#db,
+      voiceDb
+        .selectFrom("persona_voice_bindings")
+        .select("tts_persona_id")
+        .where("persona_id", "=", personaId),
+    );
+    return row?.tts_persona_id;
+  }
   #assertReferences(row: Row, configured: ReadonlySet<string>) {
     validateAgents(
       String(row.primary_agent_id),
@@ -563,6 +603,7 @@ export class PersonaRepository {
   #persona(row: Row, configured: ReadonlySet<string>): Persona {
     const delegates = this.#delegates(String(row.persona_id));
     const ids = [String(row.primary_agent_id), ...delegates];
+    const ttsPersonaId = this.#voiceBinding(String(row.persona_id));
     return {
       personaId: String(row.persona_id),
       slug: String(row.slug),
@@ -576,6 +617,7 @@ export class PersonaRepository {
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
       missingAgentIds: ids.filter((id) => !configured.has(id)),
+      ...(ttsPersonaId ? { ttsPersonaId } : {}),
     };
   }
   #revision(row: Row): PersonaRevision {

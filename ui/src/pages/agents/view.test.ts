@@ -66,6 +66,7 @@ function createProps(overrides: Partial<AgentsProps> = {}): AgentsProps {
       scope: "workspace",
       agents: [{ id: "alpha", name: "Alpha" } as never, { id: "beta", name: "Beta" } as never],
     },
+    personas: null,
     selectedAgentId: "beta",
     activePanel: "overview",
     config: {
@@ -146,6 +147,44 @@ function createProps(overrides: Partial<AgentsProps> = {}): AgentsProps {
 }
 
 describe("renderAgents", () => {
+  it("shows Personas and effective voice bindings owned by the selected Agent", async () => {
+    const container = document.createElement("div");
+    render(
+      renderAgents(
+        createProps({
+          personas: {
+            personas: [
+              {
+                personaId: "persona-lucy",
+                slug: "lucy",
+                displayName: "Lucy",
+                description: "Companion",
+                status: "active",
+                primaryAgentId: "beta",
+                allowedDelegateAgentIds: [],
+                activeRevisionId: "revision-1",
+                recordRevision: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                missingAgentIds: [],
+                voiceBinding: {
+                  status: "ready",
+                  ttsPersonaId: "lucy-voice",
+                  provider: "elevenlabs",
+                },
+              },
+            ],
+          },
+        }),
+      ),
+      container,
+    );
+
+    await vi.waitFor(() => expect(container.textContent).toContain("Bound Personas"));
+    expect(container.textContent).toContain("Lucy");
+    expect(container.textContent).toContain("ready · lucy-voice · elevenlabs");
+  });
+
   it("selects the configured primary model on initial render", async () => {
     const container = document.createElement("div");
     const configForm = {

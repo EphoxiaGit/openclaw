@@ -55,6 +55,8 @@ export const TalkSpeakParamsSchema = Type.Object(
 export const TtsSpeakParamsSchema = Type.Object(
   {
     text: NonEmptyString,
+    persona: Type.Optional(NonEmptyString),
+    agentId: Type.Optional(NonEmptyString),
   },
   { additionalProperties: false },
 );
@@ -715,6 +717,9 @@ export const TtsSpeakResultSchema = Type.Object(
   {
     audioBase64: NonEmptyString,
     provider: NonEmptyString,
+    persona: Type.Optional(NonEmptyString),
+    providerModel: Type.Optional(NonEmptyString),
+    providerVoice: Type.Optional(NonEmptyString),
     outputFormat: Type.Optional(Type.String()),
     mimeType: Type.Optional(Type.String()),
     fileExtension: Type.Optional(Type.String()),

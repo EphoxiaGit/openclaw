@@ -166,6 +166,15 @@ export type TtsSynthesisResult = {
   target?: "audio-file" | "voice-note";
 };
 
+export type TtsPersonaBindingResolution = {
+  status: "missing" | "unavailable" | "ready";
+  ttsPersonaId: string;
+  provider?: string;
+  model?: string;
+  voice?: string;
+  providerBinding?: "applied" | "missing";
+};
+
 export type TtsStreamResult = {
   success: boolean;
   audioStream?: ReadableStream<Uint8Array>;
@@ -811,6 +820,21 @@ export function getTtsProvider(config: ResolvedTtsConfig, prefsPath: string): Tt
   return config.provider;
 }
 
+function getTtsProviderForPersona(
+  config: ResolvedTtsConfig,
+  prefsPath: string,
+  persona: ResolvedTtsPersona,
+): TtsProvider {
+  const prefsProvider = canonicalizeSpeechProviderId(readPrefs(prefsPath).tts?.provider);
+  if (prefsProvider) {
+    return prefsProvider;
+  }
+  const personaProvider = canonicalizeSpeechProviderId(persona.provider, config.sourceConfig);
+  return personaProvider && getSpeechProvider(personaProvider, config.sourceConfig)
+    ? personaProvider
+    : getTtsProvider(config, prefsPath);
+}
+
 function resolveTtsPersonaFromPrefs(
   config: ResolvedTtsConfig,
   prefs: TtsUserPrefs,
@@ -832,6 +856,53 @@ export function getTtsPersona(
 
 export function listTtsPersonas(config: ResolvedTtsConfig): ResolvedTtsPersona[] {
   return Object.values(config.personas).toSorted((left, right) => left.id.localeCompare(right.id));
+}
+
+export function resolveTtsPersonaBinding(params: {
+  cfg: OpenClawConfig;
+  personaId: string;
+  prefsPath?: string;
+  agentId?: string;
+}): TtsPersonaBindingResolution {
+  const cfg = resolveTtsRuntimeConfig(params.cfg);
+  const config = resolveTtsConfig(cfg, { agentId: params.agentId });
+  const ttsPersonaId = normalizeTtsPersonaId(params.personaId) ?? params.personaId;
+  const persona = config.personas[ttsPersonaId];
+  if (!persona) {
+    return { status: "missing", ttsPersonaId };
+  }
+  const prefsPath = params.prefsPath ?? resolveTtsPrefsPath(config);
+  const primaryProvider = getTtsProviderForPersona(config, prefsPath, persona);
+  const candidates = resolveTtsProviderCandidates(primaryProvider, cfg);
+  for (const { provider, voiceModel } of candidates) {
+    const resolved = resolveReadySpeechProvider({
+      provider,
+      cfg,
+      config,
+      persona,
+      voiceModel,
+    });
+    if (resolved.kind === "skip") {
+      continue;
+    }
+    const model = resolveTtsResultModel(resolved.providerConfig);
+    const voice = resolveTtsResultVoice(resolved.providerConfig);
+    return {
+      status: "ready",
+      ttsPersonaId,
+      provider,
+      ...(model ? { model } : {}),
+      ...(voice ? { voice } : {}),
+      providerBinding: resolved.personaBinding === "none" ? "missing" : resolved.personaBinding,
+    };
+  }
+  const provider = candidates[0]?.provider ?? primaryProvider;
+  return {
+    status: "unavailable",
+    ttsPersonaId,
+    provider,
+    providerBinding: resolvePersonaProviderConfig(persona, provider) ? "applied" : "missing",
+  };
 }
 
 export function setTtsPersona(prefsPath: string, persona: string | null | undefined): void {
@@ -1240,6 +1311,7 @@ function resolveTtsRequestSetup(params: {
   agentId?: string;
   channelId?: string;
   accountId?: string;
+  personaId?: string;
 }):
   | {
       cfg: OpenClawConfig;
@@ -1263,12 +1335,20 @@ function resolveTtsRequestSetup(params: {
     };
   }
 
-  const userProvider = getTtsProvider(config, prefsPath);
+  const personaId = normalizeTtsPersonaId(params.personaId);
+  const persona = personaId ? config.personas[personaId] : getTtsPersona(config, prefsPath);
+  if (personaId && !persona) {
+    return { error: `TTS persona is not configured: ${personaId}` };
+  }
+  const userProvider =
+    personaId && persona
+      ? getTtsProviderForPersona(config, prefsPath, persona)
+      : getTtsProvider(config, prefsPath);
   const provider = canonicalizeSpeechProviderId(params.providerOverride, cfg) ?? userProvider;
   return {
     cfg,
     config,
-    persona: getTtsPersona(config, prefsPath),
+    persona,
     providers: params.disableFallback
       ? [resolvePrimaryTtsProviderCandidate(provider, cfg)]
       : resolveTtsProviderCandidates(provider, cfg),
@@ -1431,6 +1511,7 @@ export async function synthesizeSpeech(params: {
   timeoutMs?: number;
   agentId?: string;
   accountId?: string;
+  personaId?: string;
 }): Promise<TtsSynthesisResult> {
   const setup = resolveTtsRequestSetup({
     text: params.text,
@@ -1441,6 +1522,7 @@ export async function synthesizeSpeech(params: {
     agentId: params.agentId,
     channelId: params.channel,
     accountId: params.accountId,
+    personaId: params.personaId,
   });
   if ("error" in setup) {
     return { success: false, error: setup.error };

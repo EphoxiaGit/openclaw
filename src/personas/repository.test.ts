@@ -27,6 +27,7 @@ describe("PersonaRepository", () => {
       description: "Primary companion",
       primaryAgentId: "main",
       allowedDelegateAgentIds: ["delegate"],
+      ttsPersonaId: "lucy-voice",
       revision: content,
       actorId: "device:test",
       authorId: "device:test",
@@ -56,6 +57,7 @@ describe("PersonaRepository", () => {
     expect(revised.revision.revisionNumber).toBe(2);
     expect(repository.listRevisions(persona.personaId)).toHaveLength(2);
     expect(selection?.recordRevision).toBe(1);
+    expect(persona.ttsPersonaId).toBe("lucy-voice");
     expect(repository.listAgentReferences("delegate")).toEqual([persona.personaId]);
     expect(JSON.stringify(repository.history(persona.personaId))).not.toContain("Warm and direct");
 
@@ -64,7 +66,46 @@ describe("PersonaRepository", () => {
     expect(reopened.get(persona.personaId, agents).activeRevisionId).toBe(
       revised.revision.revisionId,
     );
+    expect(reopened.get(persona.personaId, agents).ttsPersonaId).toBe("lucy-voice");
     expect(reopened.getSelection("agent:main:main")?.personaId).toBe(persona.personaId);
+  });
+
+  it("updates or clears the named TTS persona binding under record CAS", () => {
+    const dbPath = path.join(makeTempDir(dirs, "personas-voice-"), "state.sqlite");
+    const repository = new PersonaRepository({ path: dbPath });
+    const persona = repository.create({
+      slug: "lucy",
+      displayName: "Lucy",
+      description: "",
+      primaryAgentId: "main",
+      allowedDelegateAgentIds: [],
+      revision: content,
+      actorId: "device:test",
+      authorId: "device:test",
+      reason: "Initial revision",
+      idempotencyKey: "create-lucy",
+      configuredAgentIds: agents,
+    });
+    const bound = repository.update({
+      personaId: persona.personaId,
+      expectedRevision: 1,
+      idempotencyKey: "bind-voice",
+      actorId: "device:test",
+      configuredAgentIds: agents,
+      ttsPersonaId: "Narrator",
+    });
+    const cleared = repository.update({
+      personaId: persona.personaId,
+      expectedRevision: 2,
+      idempotencyKey: "clear-voice",
+      actorId: "device:test",
+      configuredAgentIds: agents,
+      ttsPersonaId: null,
+    });
+
+    expect(bound).toMatchObject({ recordRevision: 2, ttsPersonaId: "narrator" });
+    expect(cleared).toMatchObject({ recordRevision: 3 });
+    expect(cleared).not.toHaveProperty("ttsPersonaId");
   });
 
   it("rejects stale writes and clears selections when archived", () => {

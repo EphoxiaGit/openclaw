@@ -1660,6 +1660,11 @@ CREATE TABLE IF NOT EXISTS persona_delegate_agents (
   UNIQUE (persona_id, ordinal)
 );
 
+CREATE TABLE IF NOT EXISTS persona_voice_bindings (
+  persona_id TEXT NOT NULL PRIMARY KEY REFERENCES personas(persona_id) ON DELETE CASCADE,
+  tts_persona_id TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS persona_session_selections (
   session_key TEXT PRIMARY KEY,
   persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getRuntimeConfig: vi.fn(() => ({})),
   resolveExplicitTtsOverrides: vi.fn(() => ({})),
   resolveTtsConfig: vi.fn(() => ({ maxTextLength: 4096 })),
+  listTtsPersonas: vi.fn(() => []),
   synthesizeSpeech: vi.fn(
     async (): Promise<{
       success: boolean;
@@ -16,6 +17,9 @@ const mocks = vi.hoisted(() => ({
       provider?: string;
       outputFormat?: string;
       fileExtension?: string;
+      persona?: string;
+      providerModel?: string;
+      providerVoice?: string;
       error?: string;
     }> => ({
       success: true,
@@ -51,7 +55,7 @@ vi.mock("../../tts/tts.js", () => ({
   getTtsProvider: vi.fn(() => "openai"),
   isTtsEnabled: vi.fn(() => true),
   isTtsProviderConfigured: vi.fn(() => true),
-  listTtsPersonas: vi.fn(() => []),
+  listTtsPersonas: mocks.listTtsPersonas,
   resolveExplicitTtsOverrides:
     mocks.resolveExplicitTtsOverrides as typeof import("../../tts/tts.js").resolveExplicitTtsOverrides,
   resolveTtsAutoMode: vi.fn(() => false),
@@ -73,6 +77,8 @@ describe("ttsHandlers", () => {
     mocks.resolveExplicitTtsOverrides.mockReturnValue({});
     mocks.resolveTtsConfig.mockReset();
     mocks.resolveTtsConfig.mockReturnValue({ maxTextLength: 4096 });
+    mocks.listTtsPersonas.mockReset();
+    mocks.listTtsPersonas.mockReturnValue([]);
     mocks.synthesizeSpeech.mockReset();
     mocks.synthesizeSpeech.mockResolvedValue({
       success: true,
@@ -133,6 +139,58 @@ describe("ttsHandlers", () => {
       mimeType: "audio/mpeg",
       fileExtension: ".mp3",
     });
+  });
+
+  it("tts.speak selects a named persona without changing global preferences", async () => {
+    mocks.synthesizeSpeech.mockResolvedValue({
+      success: true,
+      audioBuffer: Buffer.from([4, 5, 6]),
+      provider: "openai",
+      persona: "lucy",
+      providerModel: "tts-1",
+      providerVoice: "coral",
+      outputFormat: "mp3",
+      fileExtension: ".mp3",
+    });
+    const { ttsHandlers } = await import("./tts.js");
+    const respond = vi.fn();
+
+    await ttsHandlers["tts.speak"]({
+      params: { text: "Hello there.", persona: "lucy", agentId: " reader " },
+      respond,
+      context: { getRuntimeConfig: mocks.getRuntimeConfig },
+    } as never);
+
+    expect(mocks.synthesizeSpeech).toHaveBeenCalledWith({
+      text: "Hello there.",
+      cfg: {},
+      personaId: "lucy",
+      agentId: "reader",
+    });
+    expect(mocks.resolveTtsConfig).toHaveBeenCalledWith({}, { agentId: "reader" });
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        persona: "lucy",
+        providerModel: "tts-1",
+        providerVoice: "coral",
+      }),
+    );
+  });
+
+  it("tts.personas resolves the owning Agent TTS configuration", async () => {
+    const { ttsHandlers } = await import("./tts.js");
+    const respond = vi.fn();
+
+    await ttsHandlers["tts.personas"]({
+      params: { agentId: " reader " },
+      respond,
+      context: { getRuntimeConfig: mocks.getRuntimeConfig },
+    } as never);
+
+    expect(mocks.resolveTtsConfig).toHaveBeenCalledWith({}, { agentId: "reader" });
+    expect(mocks.listTtsPersonas).toHaveBeenCalledWith({ maxTextLength: 4096 });
+    expect(respond).toHaveBeenCalledWith(true, { active: null, personas: [] });
   });
 
   it("tts.speak rejects blank text without synthesizing", async () => {

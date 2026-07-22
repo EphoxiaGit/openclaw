@@ -1,3 +1,4 @@
+import { render } from "lit";
 import { describe, expect, it, vi } from "vitest";
 import type { PersonasGetResult } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
@@ -16,6 +17,7 @@ const persona = {
   createdAt: 1,
   updatedAt: 1,
   missingAgentIds: [],
+  voiceBinding: { status: "unbound" as const },
 };
 
 const detail: PersonasGetResult = {
@@ -39,6 +41,29 @@ const detail: PersonasGetResult = {
 };
 
 describe("PersonasPage", () => {
+  it("keeps a ready current binding selectable when discovery omits it", () => {
+    const page = new PersonasPage();
+    const container = document.createElement("div");
+    const readyDetail: PersonasGetResult = {
+      ...detail,
+      persona: {
+        ...detail.persona,
+        voiceBinding: { status: "ready", ttsPersonaId: "lucy-voice", provider: "mock" },
+      },
+    };
+    const template = (
+      page as unknown as {
+        renderVoice: (value: PersonasGetResult) => ReturnType<typeof page.render>;
+      }
+    ).renderVoice(readyDetail);
+
+    render(template, container);
+
+    const current = container.querySelector<HTMLOptionElement>('option[value="lucy-voice"]');
+    expect(current?.selected).toBe(true);
+    expect(current?.textContent).toContain("current binding");
+  });
+
   it("uses the same selector, tabs, and contained panel structure as Agents", async () => {
     const page = new PersonasPage();
     (page as unknown as { context: ApplicationContext }).context = {
@@ -60,7 +85,7 @@ describe("PersonasPage", () => {
         subscribe: () => () => undefined,
         ensureList: vi.fn(async () => undefined),
       },
-      gateway: { snapshot: { client: null } },
+      gateway: { snapshot: { client: null }, subscribe: () => () => undefined },
     } as unknown as ApplicationContext;
 
     document.body.append(page);
@@ -70,7 +95,7 @@ describe("PersonasPage", () => {
       });
 
       expect(page.querySelector(".agents-toolbar .agents-select")).not.toBeNull();
-      expect(page.querySelectorAll(".agent-tab")).toHaveLength(4);
+      expect(page.querySelectorAll(".agent-tab")).toHaveLength(5);
       expect(page.querySelector(".agents-main > .card")).not.toBeNull();
       expect(page.querySelector(".personas-page__setup-grid")).toBeNull();
       expect(page.textContent).not.toContain("Create Lucy Persona");
@@ -82,6 +107,14 @@ describe("PersonasPage", () => {
       identityTab?.click();
       await page.updateComplete;
       expect(page.querySelector('textarea[name="behaviorGuidance"]')).not.toBeNull();
+
+      const voiceTab = Array.from(page.querySelectorAll<HTMLButtonElement>(".agent-tab")).find(
+        (tab) => tab.textContent?.includes("Voice"),
+      );
+      voiceTab?.click();
+      await page.updateComplete;
+      expect(page.textContent).toContain("No named TTS personas are configured");
+      expect(page.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
     } finally {
       page.remove();
     }
@@ -111,6 +144,7 @@ describe("PersonasPage", () => {
             }),
         ),
       },
+      gateway: { snapshot: { client: null } },
     } as unknown as ApplicationContext;
     const internal = page as unknown as {
       select: (personaId: string) => Promise<void>;
@@ -125,5 +159,50 @@ describe("PersonasPage", () => {
     await first;
 
     expect(internal.detail?.persona.personaId).toBe(otherPersona.personaId);
+  });
+
+  it("uses the Persona's primary Agent for voice discovery and preview", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "tts.personas") {
+        return { personas: [{ id: "lucy-voice", provider: "mock" }] };
+      }
+      return {
+        audioBase64: "AQID",
+        provider: "mock",
+        mimeType: "audio/mpeg",
+      };
+    });
+    const page = new PersonasPage();
+    (page as unknown as { context: ApplicationContext }).context = {
+      personas: { get: vi.fn(async () => detail) },
+      gateway: { snapshot: { client: { request } } },
+    } as unknown as ApplicationContext;
+    const internal = page as unknown as {
+      select: (personaId: string) => Promise<void>;
+      previewVoice: (event: SubmitEvent) => Promise<void>;
+      detail: PersonasGetResult | null;
+    };
+
+    await internal.select(persona.personaId);
+    internal.detail = {
+      ...detail,
+      persona: {
+        ...detail.persona,
+        voiceBinding: { status: "ready", ttsPersonaId: "lucy-voice", provider: "mock" },
+      },
+    };
+    const form = document.createElement("form");
+    const input = document.createElement("input");
+    input.name = "preview";
+    input.value = "Hello.";
+    form.append(input);
+    await internal.previewVoice({ preventDefault: vi.fn(), currentTarget: form } as never);
+
+    expect(request).toHaveBeenCalledWith("tts.personas", { agentId: "main" });
+    expect(request).toHaveBeenCalledWith("tts.speak", {
+      text: "Hello.",
+      persona: "lucy-voice",
+      agentId: "main",
+    });
   });
 });

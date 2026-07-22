@@ -115,6 +115,7 @@ const {
   getTtsProvider,
   maybeApplyTtsToPayload,
   resolveTtsConfig,
+  resolveTtsPersonaBinding,
   setSummarizationEnabled,
   setTtsMaxLength,
   synthesizeSpeech,
@@ -1136,6 +1137,51 @@ describe("speech-core native voice-note routing", () => {
     }
   });
 
+  it("synthesizes with an explicitly selected named persona without global activation", async () => {
+    const cfg: OpenClawConfig = {
+      messages: {
+        tts: {
+          enabled: true,
+          provider: "mock",
+          prefsPath: "/tmp/openclaw-speech-core-explicit-persona.json",
+          providers: { mock: { model: "base-model", voice: "base-voice" } },
+          personas: {
+            lucy: { providers: { mock: { voice: "lucy-voice" } } },
+          },
+        },
+      },
+    };
+
+    const binding = resolveTtsPersonaBinding({ cfg, personaId: "lucy", agentId: "main" });
+    const result = await synthesizeSpeech({ text: "Hello from Lucy.", cfg, personaId: "lucy" });
+
+    expect(binding).toMatchObject({
+      status: "ready",
+      ttsPersonaId: "lucy",
+      provider: "mock",
+      model: "base-model",
+      voice: "lucy-voice",
+      providerBinding: "applied",
+    });
+    expect(result).toMatchObject({ success: true, persona: "lucy", providerVoice: "lucy-voice" });
+    const request = requireFirstSynthesisRequest("explicit persona synthesis request");
+    expect(requireRecord(request.providerConfig, "explicit persona config").voice).toBe(
+      "lucy-voice",
+    );
+  });
+
+  it("reports a missing explicit named persona without synthesizing", async () => {
+    const cfg = createTtsConfig("openclaw-speech-core-missing-persona");
+    const result = await synthesizeSpeech({ text: "Hello.", cfg, personaId: "missing" });
+
+    expect(resolveTtsPersonaBinding({ cfg, personaId: "missing" })).toEqual({
+      status: "missing",
+      ttsPersonaId: "missing",
+    });
+    expect(result).toEqual({ success: false, error: "TTS persona is not configured: missing" });
+    expect(synthesizeMock).not.toHaveBeenCalled();
+  });
+
   it("does not mark skipped unregistered providers as missing persona bindings", async () => {
     const result = await synthesizeSpeech({
       text: "Use fallback provider.",
@@ -1320,29 +1366,37 @@ describe("speech-core native voice-note routing", () => {
       createMockSpeechProvider("fallback", { autoSelectOrder: 2 }),
     ]);
 
-    const result = await synthesizeSpeech({
-      text: "Use the first persona-bound provider.",
-      cfg: {
-        messages: {
-          tts: {
-            enabled: true,
-            provider: "mock",
-            persona: "alfred",
-            personas: {
-              alfred: {
-                fallbackPolicy: "fail",
-                providers: {
-                  fallback: {
-                    voice: "fallback-voice",
-                  },
+    const cfg: OpenClawConfig = {
+      messages: {
+        tts: {
+          enabled: true,
+          provider: "mock",
+          persona: "alfred",
+          personas: {
+            alfred: {
+              fallbackPolicy: "fail",
+              providers: {
+                fallback: {
+                  voice: "fallback-voice",
                 },
               },
             },
           },
         },
       },
+    };
+    const binding = resolveTtsPersonaBinding({ cfg, personaId: "alfred" });
+    const result = await synthesizeSpeech({
+      text: "Use the first persona-bound provider.",
+      cfg,
     });
 
+    expect(binding).toMatchObject({
+      status: "ready",
+      provider: "fallback",
+      voice: "fallback-voice",
+      providerBinding: "applied",
+    });
     expect(result.success).toBe(true);
     expect(result.provider).toBe("fallback");
     expect(result.fallbackFrom).toBe("mock");

@@ -9,6 +9,7 @@ import type {
   CronJob,
   CronStatus,
   ModelCatalogEntry,
+  PersonasListResult,
   SkillStatusReport,
   ToolsCatalogResult,
   ToolsEffectiveResult,
@@ -80,6 +81,7 @@ type AgentsProps = {
   loading: boolean;
   error: string | null;
   agentsList: AgentsListResult | null;
+  personas: PersonasListResult | null;
   selectedAgentId: string | null;
   activePanel: AgentsPanel;
   config: ConfigState;
@@ -223,6 +225,10 @@ export function renderAgents(props: AgentsProps) {
                     selectedAgent.id,
                     renderAgentOverview({
                       agent: selectedAgent,
+                      personas:
+                        props.personas?.personas.filter(
+                          (persona) => persona.primaryAgentId === selectedAgent.id,
+                        ) ?? [],
                       basePath: props.basePath,
                       defaultId,
                       configForm: props.config.form,
