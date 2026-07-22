@@ -21,7 +21,10 @@ import {
   validateWorkRegisteredProjectsListParams,
   validateWorkWorkersCancelParams,
 } from "../../../packages/gateway-protocol/src/index.js";
+import { hasConfiguredModelFallbacks } from "../../agents/agent-scope.js";
+import { resolveFastModeState } from "../../agents/fast-mode.js";
 import type { SessionEntry } from "../../config/sessions.js";
+import { hasSessionActiveAutoModelFallback } from "../../config/sessions/model-override-provenance.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { redactToolDetail } from "../../logging/redact.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
@@ -58,6 +61,17 @@ type WorkerSessionFacts = {
   provider?: string;
   model?: string;
   runtime?: string;
+  requestedProvider?: string;
+  requestedModel?: string;
+  actualProvider?: string;
+  actualModel?: string;
+  routeSource?: "task_override" | "agent_policy" | "automatic_fallback" | "unknown";
+  exactModel?: "matched" | "substituted" | "unverified" | "not_requested";
+  fallback?: "disabled" | "configured" | "used" | "unknown";
+  fallbackReason?: string;
+  pacing?: "standard" | "fast" | "auto" | "unknown";
+  pacingSource?: "session" | "agent" | "config" | "default" | "unknown";
+  quotaLane?: string;
   contextPercent?: number;
 };
 
@@ -212,11 +226,22 @@ export function projectWorkPlanWorkers(params: {
         health: workerHealth(state),
         canCancel: task?.status === "queued" || task?.status === "running",
         canRetry: false,
+        routeSource: session.routeSource ?? "unknown",
+        exactModel: session.exactModel ?? "unverified",
+        fallback: session.fallback ?? "unknown",
+        pacing: session.pacing ?? "unknown",
+        pacingSource: session.pacingSource ?? "unknown",
       },
       parentKey ? { parentKey } : {},
       session.provider ? { provider: session.provider } : {},
       session.model ? { model: session.model } : {},
       session.runtime ? { runtime: session.runtime } : {},
+      session.requestedProvider ? { requestedProvider: session.requestedProvider } : {},
+      session.requestedModel ? { requestedModel: session.requestedModel } : {},
+      session.actualProvider ? { actualProvider: session.actualProvider } : {},
+      session.actualModel ? { actualModel: session.actualModel } : {},
+      session.fallbackReason ? { fallbackReason: session.fallbackReason } : {},
+      session.quotaLane ? { quotaLane: session.quotaLane } : {},
       progress ? { progress } : {},
       result ? { result } : {},
       session.contextPercent !== undefined ? { contextPercent: session.contextPercent } : {},
@@ -256,10 +281,75 @@ function resolveWorkerSessionFacts(
     contextTokens > 0
       ? Math.min(100, Math.round((totalTokens / contextTokens) * 100))
       : undefined;
+  const activeFallback = hasSessionActiveAutoModelFallback(entry);
+  const hasTaskOverride =
+    !activeFallback &&
+    entry.modelOverrideSource === "user" &&
+    Boolean(entry.providerOverride || entry.modelOverride);
+  const requestedProvider = activeFallback
+    ? technicalText(entry.modelOverrideFallbackOriginProvider)
+    : technicalText(modelRef.provider);
+  const requestedModel = activeFallback
+    ? technicalText(entry.modelOverrideFallbackOriginModel)
+    : technicalText(modelRef.model);
+  const actualProvider = technicalText(entry.modelProvider);
+  const actualModel = technicalText(entry.model);
+  const actualObserved =
+    entry.liveModelSwitchPending !== true && Boolean(actualProvider && actualModel);
+  const actualMatchesRequest =
+    actualObserved && actualProvider === requestedProvider && actualModel === requestedModel;
+  const fastMode = resolveFastModeState({
+    cfg,
+    provider: modelRef.provider,
+    model: modelRef.model,
+    agentId,
+    sessionEntry: entry,
+  });
+  const pacing = fastMode.mode === "auto" ? "auto" : fastMode.mode ? "fast" : "standard";
+  const quotaLane =
+    runtime === "codex" && entry.fastMode !== undefined
+      ? entry.fastMode === "auto"
+        ? "automatic"
+        : entry.fastMode
+          ? "priority"
+          : "default"
+      : undefined;
+  const fallback = activeFallback
+    ? "used"
+    : hasTaskOverride
+      ? "disabled"
+      : hasConfiguredModelFallbacks({ cfg, agentId, sessionKey })
+        ? "configured"
+        : "disabled";
   return {
     provider: technicalText(modelRef.provider),
     model: technicalText(modelRef.model),
     runtime: technicalText(runtime),
+    requestedProvider,
+    requestedModel,
+    actualProvider,
+    actualModel,
+    routeSource: activeFallback
+      ? "automatic_fallback"
+      : hasTaskOverride
+        ? "task_override"
+        : "agent_policy",
+    exactModel: activeFallback
+      ? "substituted"
+      : hasTaskOverride
+        ? actualObserved
+          ? actualMatchesRequest
+            ? "matched"
+            : "substituted"
+          : "unverified"
+        : "not_requested",
+    fallback,
+    ...(activeFallback
+      ? { fallbackReason: "Configured fallback selected; originating failure was not persisted." }
+      : {}),
+    pacing,
+    pacingSource: fastMode.source,
+    ...(quotaLane ? { quotaLane } : {}),
     ...(contextPercent !== undefined ? { contextPercent } : {}),
   };
 }

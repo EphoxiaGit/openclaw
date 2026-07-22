@@ -58,6 +58,17 @@ type WireWorker = {
   provider?: unknown;
   model?: unknown;
   runtime?: unknown;
+  requestedProvider?: unknown;
+  requestedModel?: unknown;
+  actualProvider?: unknown;
+  actualModel?: unknown;
+  routeSource?: unknown;
+  exactModel?: unknown;
+  fallback?: unknown;
+  fallbackReason?: unknown;
+  pacing?: unknown;
+  pacingSource?: unknown;
+  quotaLane?: unknown;
   progress?: unknown;
   result?: unknown;
   contextPercent?: unknown;
@@ -385,6 +396,11 @@ const WORKER_HEALTH = new Set([
   "unknown",
 ]);
 const WORKER_OWNER_KINDS = new Set(["inline", "isolated", "durable_job", "unknown"]);
+const ROUTE_SOURCES = new Set(["task_override", "agent_policy", "automatic_fallback", "unknown"]);
+const EXACT_MODEL_STATES = new Set(["matched", "substituted", "unverified", "not_requested"]);
+const FALLBACK_STATES = new Set(["disabled", "configured", "used", "unknown"]);
+const PACING_STATES = new Set(["standard", "fast", "auto", "unknown"]);
+const PACING_SOURCES = new Set(["session", "agent", "config", "default", "unknown"]);
 const TECHNICAL_TEXT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
 
 function allowlisted(value: unknown, values: Set<string>, fallback = "unknown"): string {
@@ -421,6 +437,17 @@ function normalizeWorkers(plan: WirePlan): NonNullable<WorkPlanSidebarContent["w
     provider: technicalText(worker.provider),
     model: technicalText(worker.model),
     runtime: technicalText(worker.runtime),
+    requestedProvider: technicalText(worker.requestedProvider),
+    requestedModel: technicalText(worker.requestedModel),
+    actualProvider: technicalText(worker.actualProvider),
+    actualModel: technicalText(worker.actualModel),
+    routeSource: allowlisted(worker.routeSource, ROUTE_SOURCES),
+    exactModel: allowlisted(worker.exactModel, EXACT_MODEL_STATES, "unverified"),
+    fallback: allowlisted(worker.fallback, FALLBACK_STATES),
+    fallbackReason: safeNarrative(worker.fallbackReason),
+    pacing: allowlisted(worker.pacing, PACING_STATES),
+    pacingSource: allowlisted(worker.pacingSource, PACING_SOURCES),
+    quotaLane: technicalText(worker.quotaLane),
     progress: safeNarrative(worker.progress),
     result: safeNarrative(worker.result),
     contextPercent:

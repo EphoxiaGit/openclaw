@@ -150,6 +150,17 @@ export type WorkPlanSidebarContent = {
     provider: string;
     model: string;
     runtime: string;
+    requestedProvider: string;
+    requestedModel: string;
+    actualProvider: string;
+    actualModel: string;
+    routeSource: string;
+    exactModel: string;
+    fallback: string;
+    fallbackReason: string;
+    pacing: string;
+    pacingSource: string;
+    quotaLane: string;
     progress: string;
     result: string;
     contextPercent: number | null;
@@ -533,8 +544,15 @@ function resolveSidebarCanvasSandbox(
   return content.kind === "canvas" ? resolveEmbedSandbox(embedSandboxMode) : "allow-scripts";
 }
 
-export type WorkPlanDetailTab = "plan" | "agents" | "attempts" | "context" | "evidence";
-const WORK_PLAN_TABS: WorkPlanDetailTab[] = ["plan", "agents", "attempts", "context", "evidence"];
+export type WorkPlanDetailTab = "plan" | "agents" | "routing" | "attempts" | "context" | "evidence";
+const WORK_PLAN_TABS: WorkPlanDetailTab[] = [
+  "plan",
+  "agents",
+  "routing",
+  "attempts",
+  "context",
+  "evidence",
+];
 
 export function nextWorkPlanDetailTab(
   current: WorkPlanDetailTab,
@@ -606,6 +624,105 @@ function formatWorkerHealth(value: string): string {
   return labels[value] ?? labels.unknown;
 }
 
+function formatRouteSource(value: string): string {
+  const labels: Record<string, string> = {
+    task_override: t("chat.liveWork.detail.routeSourceTaskOverride"),
+    agent_policy: t("chat.liveWork.detail.routeSourceAgentPolicy"),
+    automatic_fallback: t("chat.liveWork.detail.routeSourceAutomaticFallback"),
+    unknown: t("chat.liveWork.detail.unknown"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function formatExactModel(value: string): string {
+  const labels: Record<string, string> = {
+    matched: t("chat.liveWork.detail.exactMatched"),
+    substituted: t("chat.liveWork.detail.exactSubstituted"),
+    unverified: t("chat.liveWork.detail.exactUnverified"),
+    not_requested: t("chat.liveWork.detail.exactNotRequested"),
+  };
+  return labels[value] ?? labels.unverified;
+}
+
+function formatFallback(value: string): string {
+  const labels: Record<string, string> = {
+    disabled: t("chat.liveWork.detail.fallbackDisabled"),
+    configured: t("chat.liveWork.detail.fallbackConfigured"),
+    used: t("chat.liveWork.detail.fallbackUsed"),
+    unknown: t("chat.liveWork.detail.unknown"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function formatPacing(value: string): string {
+  const labels: Record<string, string> = {
+    standard: t("chat.liveWork.detail.pacingStandard"),
+    fast: t("chat.liveWork.detail.pacingFast"),
+    auto: t("chat.liveWork.detail.pacingAuto"),
+    unknown: t("chat.liveWork.detail.unknown"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function renderWorkPlanRouting(workers: NonNullable<WorkPlanSidebarContent["workers"]>) {
+  if (workers.length === 0) {
+    return html`<p class="muted work-plan-detail__empty">${t("chat.liveWork.detail.noRoutes")}</p>`;
+  }
+  return html`<div class="work-plan-workers">
+    ${workers.map((worker) => {
+      const requested = [worker.requestedProvider, worker.requestedModel].filter(Boolean).join("/");
+      const selected = [worker.provider, worker.model].filter(Boolean).join("/");
+      const actual = [worker.actualProvider, worker.actualModel].filter(Boolean).join("/");
+      return html`<article class="work-plan-worker">
+        <h4>${worker.label}</h4>
+        <dl class="work-plan-detail__counts">
+          <div>
+            <dt>${t("chat.liveWork.detail.requestedRoute")}</dt>
+            <dd>${requested || t("chat.liveWork.detail.unavailable")}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.selectedRoute")}</dt>
+            <dd>${selected || t("chat.liveWork.detail.unavailable")}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.actualRoute")}</dt>
+            <dd>${actual || t("chat.liveWork.detail.notObserved")}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.routeSource")}</dt>
+            <dd>${formatRouteSource(worker.routeSource)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.exactModel")}</dt>
+            <dd>${formatExactModel(worker.exactModel)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.fallbackPolicy")}</dt>
+            <dd>${formatFallback(worker.fallback)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.pacing")}</dt>
+            <dd>
+              ${formatPacing(worker.pacing)} ·
+              ${worker.pacingSource || t("chat.liveWork.detail.unknown")}
+            </dd>
+          </div>
+          ${worker.quotaLane
+            ? html`<div>
+                <dt>${t("chat.liveWork.detail.quotaLane")}</dt>
+                <dd>${worker.quotaLane}</dd>
+              </div>`
+            : nothing}
+        </dl>
+        ${worker.fallbackReason
+          ? html`<h5>${t("chat.liveWork.detail.fallbackReason")}</h5>
+              <p>${worker.fallbackReason}</p>`
+          : nothing}
+      </article>`;
+    })}
+  </div>`;
+}
+
 function renderWorkPlanSidebar(
   content: WorkPlanSidebarContent,
   activeTab: WorkPlanDetailTab,
@@ -630,6 +747,7 @@ function renderWorkPlanSidebar(
   const tabLabel: Record<WorkPlanDetailTab, string> = {
     plan: t("chat.liveWork.detail.tabPlan"),
     agents: t("chat.liveWork.detail.tabAgents"),
+    routing: t("chat.liveWork.detail.tabRouting"),
     attempts: t("chat.liveWork.detail.tabAttempts"),
     context: t("chat.liveWork.detail.tabContext"),
     evidence: t("chat.liveWork.detail.tabEvidence"),
@@ -915,26 +1033,31 @@ function renderWorkPlanSidebar(
                       ${content.nextTask}
                     </p>
                   </section>`
-              : html`<section class="work-plan-detail__section">
-                  <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
-                  ${content.checkpointPresent
-                    ? html`<dl class="work-plan-detail__counts">
-                          <div>
-                            <dt>${t("chat.liveWork.detail.files")}</dt>
-                            <dd>${formatLiveWorkNumber(counts.files)}</dd>
-                          </div>
-                          <div>
-                            <dt>${t("chat.liveWork.detail.tests")}</dt>
-                            <dd>${formatLiveWorkNumber(counts.tests)}</dd>
-                          </div>
-                          <div>
-                            <dt>${t("chat.liveWork.detail.blockers")}</dt>
-                            <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
-                          </div>
-                        </dl>
-                        <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
-                    : empty(t("chat.liveWork.detail.noCheckpoint"))}
-                </section>`}
+              : activeTab === "evidence"
+                ? html`<section class="work-plan-detail__section">
+                    <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
+                    ${content.checkpointPresent
+                      ? html`<dl class="work-plan-detail__counts">
+                            <div>
+                              <dt>${t("chat.liveWork.detail.files")}</dt>
+                              <dd>${formatLiveWorkNumber(counts.files)}</dd>
+                            </div>
+                            <div>
+                              <dt>${t("chat.liveWork.detail.tests")}</dt>
+                              <dd>${formatLiveWorkNumber(counts.tests)}</dd>
+                            </div>
+                            <div>
+                              <dt>${t("chat.liveWork.detail.blockers")}</dt>
+                              <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
+                            </div>
+                          </dl>
+                          <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
+                      : empty(t("chat.liveWork.detail.noCheckpoint"))}
+                  </section>`
+                : html`<section class="work-plan-detail__section">
+                    <h3>${t("chat.liveWork.detail.routing")}</h3>
+                    ${renderWorkPlanRouting(workers)}
+                  </section>`}
     </section>
   </article>`;
 }

@@ -259,6 +259,7 @@ describe("work plan sidebar", () => {
       "pane-a-work-tab-plan",
     );
     expect(nextWorkPlanDetailTab("plan", "ArrowRight")).toBe("agents");
+    expect(nextWorkPlanDetailTab("agents", "ArrowRight")).toBe("routing");
     expect(nextWorkPlanDetailTab("plan", "ArrowLeft")).toBe("evidence");
     expect(nextWorkPlanDetailTab("context", "Home")).toBe("plan");
     expect(nextWorkPlanDetailTab("context", "End")).toBe("evidence");
@@ -296,6 +297,17 @@ describe("work plan sidebar", () => {
               provider: "openai",
               model: "gpt-5.6-terra",
               runtime: "codex",
+              requestedProvider: "openai",
+              requestedModel: "gpt-5.6-sol",
+              actualProvider: "openai",
+              actualModel: "gpt-5.6-terra",
+              routeSource: "automatic_fallback",
+              exactModel: "substituted",
+              fallback: "used",
+              fallbackReason: "Configured fallback selected after a provider failure.",
+              pacing: "fast",
+              pacingSource: "session",
+              quotaLane: "priority",
               progress: "Comparing existing implementation seams.",
               result: "",
               contextPercent: 42,
@@ -330,5 +342,79 @@ describe("work plan sidebar", () => {
     expect(text).toContain("42%");
     container.querySelector<HTMLButtonElement>('[aria-label="Cancel Research worker"]')?.click();
     expect(onCancelWorker).toHaveBeenCalledWith("worker-1-1");
+  });
+
+  it("renders exact-model and fallback provenance in the Routing tab", () => {
+    const container = document.createElement("div");
+    render(
+      renderMarkdownSidebar({
+        content: {
+          kind: "work-plan",
+          title: "Northstar work details",
+          projectName: "Northstar",
+          planPosition: { x: 1, n: 3 },
+          planStatus: "running",
+          summary: "Bounded work.",
+          focus: "Implementation",
+          capsuleCounts: { constraints: 0, decisions: 0, openQuestions: 0, conflicts: 0 },
+          provenanceStatus: "current",
+          objective: "Ship the slice",
+          activeSteps: ["Implement the slice"],
+          readySteps: [],
+          blockedSteps: [],
+          workers: [
+            {
+              actionKey: "worker-1-1",
+              label: "Research worker",
+              parentLabel: null,
+              ownerKind: "isolated",
+              role: "Researcher",
+              lane: "subagent",
+              state: "running",
+              health: "busy",
+              provider: "openai",
+              model: "gpt-5.6-terra",
+              runtime: "codex",
+              requestedProvider: "openai",
+              requestedModel: "gpt-5.6-sol",
+              actualProvider: "openai",
+              actualModel: "gpt-5.6-terra",
+              routeSource: "automatic_fallback",
+              exactModel: "substituted",
+              fallback: "used",
+              fallbackReason: "Configured fallback selected after a provider failure.",
+              pacing: "fast",
+              pacingSource: "session",
+              quotaLane: "priority",
+              progress: "",
+              result: "",
+              contextPercent: null,
+              elapsedMs: null,
+              canCancel: false,
+            },
+          ],
+          evidenceCount: 0,
+          revisions: { project: 1, plan: 1, goal: 1, capsule: 1 },
+          checkpointPresent: false,
+          nextTask: "Implement the slice",
+          nextTaskSource: "ready-step",
+        },
+        error: null,
+        onClose: () => undefined,
+        onViewRawText: () => undefined,
+        workPlanTab: "routing",
+        workPlanIdPrefix: "pane-routing-work",
+      }),
+      container,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Model routing");
+    expect(text).toContain("openai/gpt-5.6-sol");
+    expect(text).toContain("openai/gpt-5.6-terra");
+    expect(text).toContain("Automatic fallback");
+    expect(text).toContain("Substituted");
+    expect(text).toContain("Configured fallback selected after a provider failure.");
+    expect(text).toContain("priority");
   });
 });
