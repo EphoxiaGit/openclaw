@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { GatewayBrowserClient } from "../../../api/gateway.ts";
-import { t } from "../../../i18n/index.ts";
+import { i18n, t } from "../../../i18n/index.ts";
 import { redactToolDetail } from "../../../lib/browser-redact.ts";
 import { areUiSessionKeysEquivalent } from "../../../lib/sessions/session-key.ts";
 import type { SidebarContent, WorkPlanSidebarContent } from "./chat-sidebar.ts";
@@ -10,6 +10,7 @@ type WirePlan = {
   status?: unknown;
   updatedAt?: unknown;
   recordRevision?: unknown;
+  goal?: { objective?: unknown; recordRevision?: unknown };
   steps?: unknown;
   projection?: {
     display?: unknown;
@@ -57,8 +58,7 @@ export type LiveWorkView = {
   stale: boolean;
   message?: string;
   projectName?: string;
-  planDisplay?: string;
-  planStatus?: string;
+  planStatus?: WorkPlanStatus;
   currentStep?: string;
   parallelCount?: number;
   progressNow?: number;
@@ -85,24 +85,125 @@ export type LiveWorkProps = {
 };
 
 const TERMINAL = new Set(["completed", "failed", "cancelled", "superseded"]);
-const CONTINUE_BLOCKED = new Set(["running", "waiting", "blocked"]);
+const CONTINUE_ALLOWED = new Set<WorkPlanStatus>(["draft", "ready"]);
+const WORK_PLAN_STATUSES = new Set([
+  "draft",
+  "ready",
+  "running",
+  "waiting",
+  "blocked",
+  "review",
+  "completed",
+  "failed",
+  "cancelled",
+  "superseded",
+]);
+
+export type WorkPlanStatus =
+  | "draft"
+  | "ready"
+  | "running"
+  | "waiting"
+  | "blocked"
+  | "review"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "superseded"
+  | "unknown";
+
+export type LiveWorkContinueActivation = {
+  paneActive: boolean;
+  paneConnected: boolean;
+  expectedSessionKey: string;
+  currentSessionKey: string;
+  expectedRequestVersion: number;
+  currentRequestVersion: number;
+  expectedClient: GatewayBrowserClient | null;
+  currentClient: GatewayBrowserClient | null;
+  connected: boolean;
+  archived: boolean;
+  runActive: boolean;
+  sending: boolean;
+  composing: boolean;
+  stateDraft: string;
+  liveDraft: string;
+  expectedView: LiveWorkView;
+  currentView: LiveWorkView | null;
+  draft: string;
+};
+
+export function canActivateLiveWorkContinue(input: LiveWorkContinueActivation): boolean {
+  return (
+    input.paneActive &&
+    input.paneConnected &&
+    input.expectedSessionKey === input.currentSessionKey &&
+    input.expectedRequestVersion === input.currentRequestVersion &&
+    input.expectedClient !== null &&
+    input.expectedClient === input.currentClient &&
+    input.connected &&
+    !input.archived &&
+    !input.runActive &&
+    !input.sending &&
+    !input.composing &&
+    input.stateDraft.trim() === "" &&
+    input.liveDraft.trim() === "" &&
+    input.expectedView === input.currentView &&
+    input.expectedView.kind === "plan" &&
+    !input.expectedView.stale &&
+    Boolean(input.expectedView.continueDraft) &&
+    input.expectedView.continueDraft === input.draft
+  );
+}
+
+export function shouldHandleChatPaneEscape(active: boolean): boolean {
+  return active;
+}
+
+export function formatLiveWorkNumber(value: number, locale = i18n.getLocale()): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+}
+
+export function formatLiveWorkPlanPosition(x: number, n: number): string {
+  return t("chat.liveWork.planPosition", {
+    x: formatLiveWorkNumber(x),
+    n: formatLiveWorkNumber(n),
+  });
+}
+
+export function formatLiveWorkPlanStatus(status: WorkPlanStatus): string {
+  return t(`chat.liveWork.status.${status}`);
+}
 
 function safeText(value: unknown, fallback = ""): string {
   if (typeof value !== "string") {
     return fallback;
   }
   return redactToolDetail(value.trim())
-    .replace(/(?:[a-z]:[\\/]|~?[\\/](?=[a-z_.-]))[^\s,;]+/gi, "[path omitted]")
+    .replace(/```[\s\S]*?```/g, "[command omitted]")
     .replace(
-      /(^|\n)\s*(?:\$\s*|pnpm\s+|npm\s+|git\s+|curl\s+|rm\s+|cd\s+)[^\n]+/gi,
+      /(?:\\\\[^\s\\/]+[\\/][^\s,;]+|[a-z]:[\\/][^\s,;]+|~?[\\/](?=[a-z_.-])[^\s,;]+)/gi,
+      "[path omitted]",
+    )
+    .replace(
+      /(^|\n)\s*(?:\$\s*|(?:sudo\s+)?(?:bash|sh|zsh|fish|powershell|pwsh|cmd)(?:\.exe)?\s+(?:-[a-z]+\s+)?|(?:pnpm|npm|npx|yarn|bun|git|gh|curl|wget|rm|cp|mv|cd|node|python\d*|docker|wrangler|make|ssh|scp|rsync)\s+)[^\n]+/gi,
       "$1[command omitted]",
     )
-    .replace(/\b(?:pnpm|npm|git|curl|rm|cd)\s+[^.\n]+/gi, "[command omitted]")
+    .replace(
+      /\b(?:(?:sudo\s+)?(?:bash|sh|zsh|fish|powershell|pwsh|cmd)(?:\.exe)?\s+(?:-[a-z]+\s+)?|(?:pnpm|npm|npx|yarn|bun|git|gh|curl|wget|rm|cp|mv|cd|node|python\d*|docker|wrangler|make|ssh|scp|rsync)\s+)[^.\n]+/gi,
+      "[command omitted]",
+    )
     .slice(0, 4_000);
 }
 
 function number(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function planStatus(value: unknown): WorkPlanStatus {
+  return typeof value === "string" && WORK_PLAN_STATUSES.has(value)
+    ? (value as WorkPlanStatus)
+    : "unknown";
 }
 
 function list(value: unknown): string[] {
@@ -142,26 +243,12 @@ function stepTitles(plan: WirePlan, ids: unknown): string[] {
     : [];
 }
 
-export function normalizeLiveWork(
-  project: WireProject,
-  context: WireContext | null,
-  registrationDisabled = false,
-): LiveWorkView {
+export function normalizeLiveWork(project: WireProject, context: WireContext | null): LiveWorkView {
   const plans = Array.isArray(project.plans) ? (project.plans as WirePlan[]) : [];
   const selected = selectPlan(plans);
-  if (!context) {
-    return {
-      kind: "legacy",
-      stale: false,
-      message: t(
-        registrationDisabled ? "chat.liveWork.registrationDisabled" : "chat.liveWork.legacy",
-      ),
-    };
-  }
-  const projectName = safeText(
-    context.registeredProject?.displayName,
-    t("chat.liveWork.registeredProject"),
-  );
+  const projectName = context
+    ? safeText(context.registeredProject?.displayName, t("chat.liveWork.registeredProject"))
+    : t("chat.liveWork.registeredProject");
   if (selected.kind === "ambiguous") {
     return {
       kind: "ambiguous-plans",
@@ -172,10 +259,10 @@ export function normalizeLiveWork(
   }
   if (selected.kind === "none") {
     return {
-      kind: "no-plan",
+      kind: context ? "no-plan" : "legacy",
       stale: false,
       projectName,
-      message: t("chat.liveWork.noPlan"),
+      message: t(context ? "chat.liveWork.noPlan" : "chat.liveWork.projectContextUnavailable"),
     };
   }
   const plan = selected.plan;
@@ -188,27 +275,39 @@ export function normalizeLiveWork(
         .map((step) => safeText(step.title))
         .filter(Boolean)
     : [];
-  const capsuleFresh = context.capsuleProvenance?.state !== "stale";
-  const capsuleNext = capsuleFresh ? safeText(context.capsule?.content?.explicitNextTask) : "";
-  const checkpointNext = safeText(context.latestCheckpoint?.content?.exactNextAction);
+  const provenanceStatus = !context?.capsule
+    ? "unavailable"
+    : context.capsuleProvenance?.state === "current"
+      ? "current"
+      : context.capsuleProvenance?.state === "stale"
+        ? "stale"
+        : "unavailable";
+  const capsuleFresh = provenanceStatus === "current";
+  const capsuleNext = capsuleFresh ? safeText(context?.capsule?.content?.explicitNextTask) : "";
+  const checkpointNext = safeText(context?.latestCheckpoint?.content?.exactNextAction);
   const nextTask = capsuleNext || checkpointNext || ready[0] || "";
-  const status = safeText(plan.status, "unknown");
+  const status = planStatus(plan.status);
+  const progressNow = number(projection.x);
+  const progressMax = Math.max(1, number(projection.n, 1));
   const details: WorkPlanSidebarContent = {
     kind: "work-plan",
     title: t("chat.liveWork.detail.title", { project: projectName }),
     projectName,
-    planDisplay: safeText(projection.display, "Plan"),
+    planPosition: { x: progressNow, n: progressMax },
     planStatus: status,
-    summary: safeText(context.capsule?.content?.summary, t("chat.liveWork.noSummary")),
-    focus: safeText(context.capsule?.content?.currentFocus, t("chat.liveWork.noFocus")),
+    summary: safeText(context?.capsule?.content?.summary, t("chat.liveWork.noSummary")),
+    focus: safeText(context?.capsule?.content?.currentFocus, t("chat.liveWork.noFocus")),
     capsuleCounts: {
-      constraints: list(context.capsule?.content?.constraints).length,
-      decisions: list(context.capsule?.content?.decisions).length,
-      openQuestions: list(context.capsule?.content?.openQuestions).length,
-      conflicts: list(context.capsule?.content?.conflicts).length,
+      constraints: list(context?.capsule?.content?.constraints).length,
+      decisions: list(context?.capsule?.content?.decisions).length,
+      openQuestions: list(context?.capsule?.content?.openQuestions).length,
+      conflicts: list(context?.capsule?.content?.conflicts).length,
     },
-    provenanceStatus: context.capsule ? (capsuleFresh ? "Current" : "Stale") : "Unavailable",
-    objective: safeText(context.goal?.objective, t("chat.liveWork.noObjective")),
+    provenanceStatus,
+    objective: safeText(
+      context?.goal?.objective ?? plan.goal?.objective,
+      t("chat.liveWork.noObjective"),
+    ),
     activeSteps: active,
     readySteps: ready,
     blockedSteps: blocked,
@@ -221,36 +320,35 @@ export function normalizeLiveWork(
     revisions: {
       project: number(project.recordRevision),
       plan: number(plan.recordRevision),
-      goal: number(context.goal?.recordRevision),
-      capsule: number(context.capsule?.revision),
+      goal: number(context?.goal?.recordRevision ?? plan.goal?.recordRevision),
+      capsule: number(context?.capsule?.revision),
     },
-    checkpointPresent: Boolean(context.latestCheckpoint),
+    checkpointPresent: Boolean(context?.latestCheckpoint),
     nextTask: nextTask || t("chat.liveWork.noNextTask"),
     nextTaskSource: capsuleNext
-      ? "Capsule"
+      ? "capsule"
       : checkpointNext
-        ? "Checkpoint"
+        ? "checkpoint"
         : ready[0]
-          ? "Ready step"
-          : "None",
+          ? "ready-step"
+          : "none",
   };
   const continueAllowed =
-    Boolean(context.registeredProject?.enabled) &&
+    Boolean(context?.registeredProject?.enabled) &&
     capsuleFresh &&
     ready.length > 0 &&
     Boolean(nextTask) &&
-    !CONTINUE_BLOCKED.has(status) &&
-    !TERMINAL.has(status);
+    CONTINUE_ALLOWED.has(status);
   return {
     kind: "plan",
     stale: false,
     projectName,
-    planDisplay: details.planDisplay,
     planStatus: status,
     currentStep: active[0] ?? ready[0] ?? t("chat.liveWork.noCurrentStep"),
     parallelCount: Math.max(0, active.length - 1),
-    progressNow: number(projection.x),
-    progressMax: Math.max(1, number(projection.n, 1)),
+    progressNow,
+    progressMax,
+    ...(!context ? { message: t("chat.liveWork.projectContextUnavailable") } : {}),
     ...(continueAllowed
       ? {
           continueDraft: t("chat.liveWork.continuationDraft", {
@@ -274,6 +372,12 @@ export async function refreshLiveWork(
   connected: boolean,
   requestUpdate: () => void,
 ): Promise<void> {
+  const sessionChanged = Boolean(
+    state.sessionKey && !areUiSessionKeysEquivalent(state.sessionKey, sessionKey),
+  );
+  if (sessionChanged) {
+    state.view = null;
+  }
   state.client = client;
   state.sessionKey = sessionKey;
   const version = ++state.requestVersion;
@@ -317,27 +421,28 @@ export async function refreshLiveWork(
       };
       return;
     }
-    state.view = { kind: "loading", stale: false, message: t("chat.liveWork.loading") };
-    requestUpdate();
+    if (!state.view) {
+      state.view = { kind: "loading", stale: false, message: t("chat.liveWork.loading") };
+      requestUpdate();
+    }
     const projectId = typeof matches[0].projectId === "string" ? matches[0].projectId : "";
     const load = async () => {
       const project = (
         await client.request<{ project: WireProject }>("work.projects.get", { projectId })
       ).project;
       let context: WireContext | null = null;
-      let registrationDisabled = false;
+      let contextUnavailable = false;
       try {
         context = (
           await client.request<{ context: WireContext }>("work.projectContext.get", { projectId })
         ).context;
-      } catch (error) {
-        const detail = String(error);
-        registrationDisabled = detail.includes("registered project is disabled");
-        if (!registrationDisabled && !detail.includes("not linked to a registered project")) {
-          throw error;
-        }
+      } catch {
+        contextUnavailable = true;
+        // G004 remains independently readable when the optional G005 context
+        // projection is unavailable for any reason. Never classify failures
+        // by parsing localized or provider-supplied Gateway prose.
       }
-      return { project, context, registrationDisabled };
+      return { project, context, contextUnavailable };
     };
     let detail = await load();
     if (
@@ -359,8 +464,16 @@ export async function refreshLiveWork(
     ) {
       return;
     }
-    state.view = normalizeLiveWork(detail.project, detail.context, detail.registrationDisabled);
-  } catch (error) {
+    if (detail.contextUnavailable && state.view && state.view.kind !== "loading") {
+      state.view = {
+        ...state.view,
+        stale: true,
+        message: t("chat.liveWork.projectContextUnavailable"),
+      };
+      return;
+    }
+    state.view = normalizeLiveWork(detail.project, detail.context);
+  } catch {
     if (
       version !== state.requestVersion ||
       state.client !== client ||
@@ -368,9 +481,7 @@ export async function refreshLiveWork(
     ) {
       return;
     }
-    const message = t("chat.liveWork.refreshFailed", {
-      message: redactToolDetail(error instanceof Error ? error.message : String(error)),
-    });
+    const message = t("chat.liveWork.refreshFailed");
     state.view =
       state.view && state.view.kind !== "loading"
         ? { ...state.view, stale: true, message }
@@ -393,11 +504,7 @@ export function renderLiveWorkStrip(
   const status = view.stale
     ? t("chat.liveWork.stale")
     : view.kind === "plan"
-      ? view.planStatus === "completed"
-        ? t("chat.liveWork.complete")
-        : view.planStatus === "blocked"
-          ? t("chat.liveWork.blocked")
-          : t("chat.liveWork.live")
+      ? formatLiveWorkPlanStatus(view.planStatus ?? "unknown")
       : view.kind === "loading"
         ? t("chat.liveWork.loading")
         : t("chat.liveWork.attention");
@@ -408,12 +515,14 @@ export function renderLiveWorkStrip(
     <div class="chat-live-work__summary" role="status" aria-live="polite" aria-atomic="true">
       <strong>${status}</strong>${view.projectName
         ? html`<span>${view.projectName}</span>`
-        : nothing}${view.planDisplay
-        ? html`<span>${view.planDisplay}</span>`
+        : nothing}${view.progressNow !== undefined && view.progressMax !== undefined
+        ? html`<span>${formatLiveWorkPlanPosition(view.progressNow, view.progressMax)}</span>`
         : nothing}${view.currentStep
         ? html`<span
             >${view.currentStep}${view.parallelCount
-              ? ` ${t("chat.liveWork.parallel", { count: String(view.parallelCount) })}`
+              ? ` ${t("chat.liveWork.parallel", {
+                  count: formatLiveWorkNumber(view.parallelCount),
+                })}`
               : ""}</span
           >`
         : nothing}${view.message ? html`<span>${view.message}</span>` : nothing}

@@ -1605,7 +1605,7 @@ export const en: TranslationMap = {
       continue: "Continue…",
       progress: "Plan progress",
       disconnectedStale: "Work status may be stale while disconnected.",
-      refreshFailed: "Live work could not be refreshed: {message}",
+      refreshFailed: "Live work could not be refreshed.",
       revisionMismatch: "Work revisions did not agree after one refresh.",
       projectAmbiguous:
         "Multiple work projects match this conversation. Work details are unavailable.",
@@ -1614,6 +1614,8 @@ export const en: TranslationMap = {
       legacy: "This legacy work project is read-only until it is registered.",
       registrationDisabled: "This work project is read-only because its registration is disabled.",
       noPlan: "No work plan is available for this conversation.",
+      projectContextUnavailable:
+        "Project context is unavailable. The authoritative plan remains read-only.",
       registeredProject: "Registered project",
       noCurrentStep: "No current step",
       noSummary: "No capsule summary is available.",
@@ -1623,6 +1625,20 @@ export const en: TranslationMap = {
       continuationDraft: "Continue {project}: {task}",
       continuationPrepared: "Continuation prepared. Review and send.",
       parallel: "(+{count} parallel)",
+      planPosition: "Plan {x}/{n}",
+      status: {
+        draft: "Draft",
+        ready: "Ready",
+        running: "Active",
+        waiting: "Waiting",
+        blocked: "Blocked",
+        review: "In review",
+        completed: "Complete",
+        failed: "Failed",
+        cancelled: "Cancelled",
+        superseded: "Superseded",
+        unknown: "Unknown",
+      },
       detail: {
         title: "{project} work details",
         capsuleSummary: "Capsule summary",

@@ -67,8 +67,10 @@ import { renderChat, resetChatViewState, type ChatProps } from "./chat-view.ts";
 import { isChatComposerComposing } from "./components/chat-composer.ts";
 import { renderChatControls } from "./components/chat-controls.ts";
 import {
+  canActivateLiveWorkContinue,
   createLiveWorkState,
   refreshLiveWork,
+  shouldHandleChatPaneEscape,
   type LiveWorkState,
 } from "./components/chat-live-work.ts";
 import {
@@ -398,6 +400,9 @@ class ChatPane extends LitElement {
     }
 
     if (event.defaultPrevented || event.key !== "Escape") {
+      return;
+    }
+    if (!shouldHandleChatPaneEscape(this.active)) {
       return;
     }
     const state = this.state;
@@ -861,6 +866,37 @@ class ChatPane extends LitElement {
       state.sessionsResult?.sessions.some(
         (row) => row.archived === true && areUiSessionKeysEquivalent(row.key, state.sessionKey),
       ) === true;
+    const liveWorkView = this.liveWorkState.view;
+    const liveWorkSessionKey = this.liveWorkState.sessionKey;
+    const liveWorkRequestVersion = this.liveWorkState.requestVersion;
+    const liveWorkClient = this.liveWorkState.client;
+    const liveWorkRunActive =
+      hasAbortableSessionRun(state) || Boolean(state.chatRunId) || state.chatStream !== null;
+    const currentComposerDraft =
+      this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR)?.value ??
+      state.chatMessage;
+    const canContinueLiveWork = liveWorkView
+      ? canActivateLiveWorkContinue({
+          paneActive: this.active,
+          paneConnected: this.isConnected,
+          expectedSessionKey: liveWorkSessionKey,
+          currentSessionKey: state.sessionKey,
+          expectedRequestVersion: liveWorkRequestVersion,
+          currentRequestVersion: this.liveWorkState.requestVersion,
+          expectedClient: liveWorkClient,
+          currentClient: state.client,
+          connected: state.connected,
+          archived: selectedSessionArchived,
+          runActive: liveWorkRunActive,
+          sending: state.chatSending,
+          composing: isChatComposerComposing(this.paneId),
+          stateDraft: state.chatMessage,
+          liveDraft: currentComposerDraft,
+          expectedView: liveWorkView,
+          currentView: this.liveWorkState.view,
+          draft: liveWorkView.continueDraft ?? "",
+        })
+      : false;
     const disabledReason = !state.connected
       ? t("chat.disconnected")
       : selectedSessionArchived
@@ -952,7 +988,7 @@ class ChatPane extends LitElement {
         realtimeTalkInputError: state.realtimeTalkInputError,
         canOpenRealtimeTalkSettings,
         onRefresh: () => {
-          handleChatManualRefresh(state);
+          void handleChatManualRefresh(state);
           this.refreshLiveWork();
         },
         onRealtimeTalkInputRefresh: () => void state.refreshRealtimeTalkInputs(true),
@@ -978,20 +1014,40 @@ class ChatPane extends LitElement {
         onOpenSplitView: this.onOpenSplitView,
       }),
       sessionWorkspace: createSessionWorkspaceProps(state),
-      liveWork: this.liveWorkState.view
+      liveWork: liveWorkView
         ? {
-            view: this.liveWorkState.view,
-            canContinue:
-              state.connected &&
-              !selectedSessionArchived &&
-              !hasAbortableSessionRun(state) &&
-              !state.chatSending &&
-              !isChatComposerComposing(this.paneId) &&
-              !state.chatMessage.trim() &&
-              !this.liveWorkState.view.stale,
+            view: liveWorkView,
+            canContinue: canContinueLiveWork,
             announcement: this.liveWorkAnnouncement,
             onContinue: (draft) => {
-              if (isChatComposerComposing(this.paneId)) {
+              const liveDraft =
+                this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR)?.value ??
+                state.chatMessage;
+              if (
+                !canActivateLiveWorkContinue({
+                  paneActive: this.active,
+                  paneConnected: this.isConnected,
+                  expectedSessionKey: liveWorkSessionKey,
+                  currentSessionKey: state.sessionKey,
+                  expectedRequestVersion: liveWorkRequestVersion,
+                  currentRequestVersion: this.liveWorkState.requestVersion,
+                  expectedClient: liveWorkClient,
+                  currentClient: state.client,
+                  connected: state.connected,
+                  archived: selectedSessionArchived,
+                  runActive:
+                    hasAbortableSessionRun(state) ||
+                    Boolean(state.chatRunId) ||
+                    state.chatStream !== null,
+                  sending: state.chatSending,
+                  composing: isChatComposerComposing(this.paneId),
+                  stateDraft: state.chatMessage,
+                  liveDraft,
+                  expectedView: liveWorkView,
+                  currentView: this.liveWorkState.view,
+                  draft,
+                })
+              ) {
                 return;
               }
               state.handleChatDraftChange(draft);

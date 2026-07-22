@@ -4208,7 +4208,6 @@ describe("right-click Reply", () => {
           kind: "plan",
           stale: false,
           projectName: "Northstar",
-          planDisplay: "Plan 1/2",
           planStatus: "ready",
           currentStep: "Implement the next slice",
           progressNow: 1,
@@ -4229,5 +4228,25 @@ describe("right-click Reply", () => {
     expect(
       container.querySelector(".chat-live-work")?.closest(".agent-chat__composer-shell"),
     ).not.toBeNull();
+  });
+
+  it("renders only the generic localized live-work refresh error", () => {
+    const container = renderChatView({
+      liveWork: {
+        view: {
+          kind: "error",
+          stale: false,
+          message: "Live work could not be refreshed.",
+        },
+        canContinue: false,
+        onContinue: vi.fn(),
+        onOpenDetails: vi.fn(),
+        onRefresh: vi.fn(),
+      },
+    });
+    const text = container.querySelector(".chat-live-work")?.textContent ?? "";
+    expect(text).toContain("Live work could not be refreshed.");
+    expect(text).not.toContain("SECRET_TOKEN");
+    expect(text).not.toContain("/private/");
   });
 });

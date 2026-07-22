@@ -149,3 +149,44 @@ describe("markdown sidebar", () => {
     panel.remove();
   });
 });
+
+describe("work plan sidebar", () => {
+  it("localizes plan position, status, provenance, source, and numeric details", () => {
+    const container = document.createElement("div");
+    render(
+      renderMarkdownSidebar({
+        content: {
+          kind: "work-plan",
+          title: "Northstar work details",
+          projectName: "Northstar",
+          planPosition: { x: 1, n: 3 },
+          planStatus: "review",
+          summary: "Bounded work.",
+          focus: "Review",
+          capsuleCounts: { constraints: 1, decisions: 2, openQuestions: 3, conflicts: 0 },
+          provenanceStatus: "unavailable",
+          objective: "Ship the slice",
+          activeSteps: [],
+          readySteps: ["Review the slice"],
+          blockedSteps: [],
+          evidenceCount: 4,
+          revisions: { project: 5, plan: 6, goal: 7, capsule: 8 },
+          checkpointPresent: true,
+          nextTask: "Review the slice",
+          nextTaskSource: "ready-step",
+        },
+        error: null,
+        onClose: () => undefined,
+        onViewRawText: () => undefined,
+      }),
+      container,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Plan 1/3");
+    expect(text).toContain("In review");
+    expect(text).toContain("Provenance: Unavailable");
+    expect(text).toContain("Ready step");
+    expect(text).toContain("4 attempt records");
+  });
+});

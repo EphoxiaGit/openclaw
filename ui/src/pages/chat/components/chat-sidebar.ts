@@ -19,6 +19,12 @@ import {
   type EmbedSandboxMode,
 } from "../../../lib/chat/tool-display.ts";
 import { copyToClipboard } from "../../../lib/clipboard.ts";
+import {
+  formatLiveWorkNumber,
+  formatLiveWorkPlanPosition,
+  formatLiveWorkPlanStatus,
+  type WorkPlanStatus,
+} from "./chat-live-work.ts";
 
 export const CHAT_DETAIL_FULL_MESSAGE_MAX_CHARS = 500_000;
 
@@ -82,8 +88,8 @@ export type WorkPlanSidebarContent = {
   kind: "work-plan";
   title: string;
   projectName: string;
-  planDisplay: string;
-  planStatus: string;
+  planPosition: { x: number; n: number };
+  planStatus: WorkPlanStatus;
   summary: string;
   focus: string;
   capsuleCounts: {
@@ -92,7 +98,7 @@ export type WorkPlanSidebarContent = {
     openQuestions: number;
     conflicts: number;
   };
-  provenanceStatus: "Current" | "Stale" | "Unavailable";
+  provenanceStatus: "current" | "stale" | "unavailable";
   objective: string;
   activeSteps: string[];
   readySteps: string[];
@@ -101,7 +107,7 @@ export type WorkPlanSidebarContent = {
   revisions: { project: number; plan: number; goal: number; capsule: number };
   checkpointPresent: boolean;
   nextTask: string;
-  nextTaskSource: "Capsule" | "Checkpoint" | "Ready step" | "None";
+  nextTaskSource: "capsule" | "checkpoint" | "ready-step" | "none";
   rawText?: null;
   fullMessageRequest?: never;
   unavailableReason?: null;
@@ -472,17 +478,17 @@ function resolveSidebarCanvasSandbox(
 
 function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
   const provenanceLabel =
-    content.provenanceStatus === "Current"
+    content.provenanceStatus === "current"
       ? t("chat.liveWork.detail.current")
-      : content.provenanceStatus === "Stale"
+      : content.provenanceStatus === "stale"
         ? t("chat.liveWork.stale")
         : t("chat.liveWork.detail.unavailable");
   const nextTaskSource =
-    content.nextTaskSource === "Capsule"
+    content.nextTaskSource === "capsule"
       ? t("chat.liveWork.detail.capsule")
-      : content.nextTaskSource === "Checkpoint"
+      : content.nextTaskSource === "checkpoint"
         ? t("chat.liveWork.detail.checkpoint")
-        : content.nextTaskSource === "Ready step"
+        : content.nextTaskSource === "ready-step"
           ? t("chat.liveWork.detail.readyStep")
           : t("chat.liveWork.detail.none");
   const steps = (label: string, values: string[]) => html` <section
@@ -497,7 +503,8 @@ function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
   </section>`;
   return html` <article class="work-plan-detail">
     <p class="work-plan-detail__status">
-      <strong>${content.planDisplay}</strong> · ${content.planStatus}
+      <strong>${formatLiveWorkPlanPosition(content.planPosition.x, content.planPosition.n)}</strong>
+      · ${formatLiveWorkPlanStatus(content.planStatus)}
     </p>
     <section class="work-plan-detail__section">
       <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
@@ -507,19 +514,19 @@ function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
       <dl class="work-plan-detail__counts">
         <div>
           <dt>${t("chat.liveWork.detail.constraints")}</dt>
-          <dd>${content.capsuleCounts.constraints}</dd>
+          <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
         </div>
         <div>
           <dt>${t("chat.liveWork.detail.decisions")}</dt>
-          <dd>${content.capsuleCounts.decisions}</dd>
+          <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
         </div>
         <div>
           <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
-          <dd>${content.capsuleCounts.openQuestions}</dd>
+          <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
         </div>
         <div>
           <dt>${t("chat.liveWork.detail.conflicts")}</dt>
-          <dd>${content.capsuleCounts.conflicts}</dd>
+          <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
         </div>
       </dl>
     </section>
@@ -535,7 +542,7 @@ function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
       <h3>${t("chat.liveWork.detail.evidence")}</h3>
       <p>
         ${t("chat.liveWork.detail.evidenceSummary", {
-          count: String(content.evidenceCount),
+          count: formatLiveWorkNumber(content.evidenceCount),
           checkpoint: t(
             content.checkpointPresent
               ? "chat.liveWork.detail.present"
@@ -545,10 +552,10 @@ function renderWorkPlanSidebar(content: WorkPlanSidebarContent) {
       </p>
       <p>
         ${t("chat.liveWork.detail.revisions", {
-          project: String(content.revisions.project),
-          plan: String(content.revisions.plan),
-          goal: String(content.revisions.goal),
-          capsule: String(content.revisions.capsule),
+          project: formatLiveWorkNumber(content.revisions.project),
+          plan: formatLiveWorkNumber(content.revisions.plan),
+          goal: formatLiveWorkNumber(content.revisions.goal),
+          capsule: formatLiveWorkNumber(content.revisions.capsule),
         })}
       </p>
     </section>

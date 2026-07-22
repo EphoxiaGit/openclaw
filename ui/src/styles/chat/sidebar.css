@@ -1272,6 +1272,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-main {
+    transition: none;
+  }
+
+  .chat-sidebar {
+    animation: none;
+  }
+
   .sidebar-markdown-reader {
     transition: none;
   }
