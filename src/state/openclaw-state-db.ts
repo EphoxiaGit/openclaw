@@ -818,6 +818,7 @@ function backfillDeliveryQueueEntriesFromEntryJson(db: DatabaseSync): void {
 
 function ensureAdditiveStateColumns(db: DatabaseSync): void {
   ensureCanonicalWorkGoalsTable(db);
+  ensureColumn(db, "work_projects", "registered_project_id TEXT");
   ensureColumn(db, "node_pairing_pending", "client_id TEXT");
   ensureColumn(db, "node_pairing_pending", "client_mode TEXT");
   ensureColumn(db, "node_pairing_paired", "client_id TEXT");

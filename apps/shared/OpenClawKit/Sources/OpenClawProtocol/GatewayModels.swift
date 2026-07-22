@@ -3545,6 +3545,330 @@ public struct WorkProjectsGetResult: Codable, Sendable {
     }
 }
 
+public struct WorkRegisteredProjectsListParams: Codable, Sendable {}
+
+public struct WorkRegisteredProjectsListResult: Codable, Sendable {
+    public let projects: [[String: AnyCodable]]
+
+    public init(
+        projects: [[String: AnyCodable]])
+    {
+        self.projects = projects
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projects
+    }
+}
+
+public struct WorkRegisteredProjectsGetParams: Codable, Sendable {
+    public let registeredprojectid: String
+
+    public init(
+        registeredprojectid: String)
+    {
+        self.registeredprojectid = registeredprojectid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case registeredprojectid = "registeredProjectId"
+    }
+}
+
+public struct WorkRegisteredProjectsGetResult: Codable, Sendable {
+    public let project: [String: AnyCodable]
+
+    public init(
+        project: [String: AnyCodable])
+    {
+        self.project = project
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case project
+    }
+}
+
+public struct WorkProjectsCreateRegisteredParams: Codable, Sendable {
+    public let registeredprojectid: String
+    public let objective: String
+    public let sessiongoalref: String?
+    public let idempotencykey: String
+
+    public init(
+        registeredprojectid: String,
+        objective: String,
+        sessiongoalref: String?,
+        idempotencykey: String)
+    {
+        self.registeredprojectid = registeredprojectid
+        self.objective = objective
+        self.sessiongoalref = sessiongoalref
+        self.idempotencykey = idempotencykey
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case registeredprojectid = "registeredProjectId"
+        case objective
+        case sessiongoalref = "sessionGoalRef"
+        case idempotencykey = "idempotencyKey"
+    }
+}
+
+public struct WorkProjectsCreateRegisteredResult: Codable, Sendable {
+    public let registeredprojectid: String
+    public let projectid: String
+    public let goalid: String
+    public let primaryconversationid: String
+    public let recordrevision: Int
+
+    public init(
+        registeredprojectid: String,
+        projectid: String,
+        goalid: String,
+        primaryconversationid: String,
+        recordrevision: Int)
+    {
+        self.registeredprojectid = registeredprojectid
+        self.projectid = projectid
+        self.goalid = goalid
+        self.primaryconversationid = primaryconversationid
+        self.recordrevision = recordrevision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case registeredprojectid = "registeredProjectId"
+        case projectid = "projectId"
+        case goalid = "goalId"
+        case primaryconversationid = "primaryConversationId"
+        case recordrevision = "recordRevision"
+    }
+}
+
+public struct WorkProjectContextGetParams: Codable, Sendable {
+    public let projectid: String
+
+    public init(
+        projectid: String)
+    {
+        self.projectid = projectid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+    }
+}
+
+public struct WorkProjectContextGetResult: Codable, Sendable {
+    public let context: [String: AnyCodable]
+
+    public init(
+        context: [String: AnyCodable])
+    {
+        self.context = context
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case context
+    }
+}
+
+public struct WorkDocumentsListParams: Codable, Sendable {
+    public let projectid: String
+
+    public init(
+        projectid: String)
+    {
+        self.projectid = projectid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+    }
+}
+
+public struct WorkDocumentsListResult: Codable, Sendable {
+    public let documents: [AnyCodable]
+
+    public init(
+        documents: [AnyCodable])
+    {
+        self.documents = documents
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case documents
+    }
+}
+
+public struct WorkDocumentsGetParams: Codable, Sendable {
+    public let projectid: String
+    public let documentid: String
+    public let revision: Int?
+
+    public init(
+        projectid: String,
+        documentid: String,
+        revision: Int?)
+    {
+        self.projectid = projectid
+        self.documentid = documentid
+        self.revision = revision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case documentid = "documentId"
+        case revision
+    }
+}
+
+public struct WorkDocumentsGetResult: Codable, Sendable {
+    public let document: AnyCodable
+
+    public init(
+        document: AnyCodable)
+    {
+        self.document = document
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case document
+    }
+}
+
+public struct WorkCapsulesUpdateParams: Codable, Sendable {
+    public let projectid: String
+    public let expectedrevision: Int
+    public let idempotencykey: String
+    public let content: [String: AnyCodable]
+    public let provenance: [[String: AnyCodable]]
+
+    public init(
+        projectid: String,
+        expectedrevision: Int,
+        idempotencykey: String,
+        content: [String: AnyCodable],
+        provenance: [[String: AnyCodable]])
+    {
+        self.projectid = projectid
+        self.expectedrevision = expectedrevision
+        self.idempotencykey = idempotencykey
+        self.content = content
+        self.provenance = provenance
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case expectedrevision = "expectedRevision"
+        case idempotencykey = "idempotencyKey"
+        case content
+        case provenance
+    }
+}
+
+public struct WorkCapsulesUpdateResult: Codable, Sendable {
+    public let document: AnyCodable
+    public let projectrecordrevision: Int
+
+    public init(
+        document: AnyCodable,
+        projectrecordrevision: Int)
+    {
+        self.document = document
+        self.projectrecordrevision = projectrecordrevision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case document
+        case projectrecordrevision = "projectRecordRevision"
+    }
+}
+
+public struct WorkCheckpointsCreateParams: Codable, Sendable {
+    public let projectid: String
+    public let expectedrevision: Int
+    public let idempotencykey: String
+
+    public init(
+        projectid: String,
+        expectedrevision: Int,
+        idempotencykey: String)
+    {
+        self.projectid = projectid
+        self.expectedrevision = expectedrevision
+        self.idempotencykey = idempotencykey
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case expectedrevision = "expectedRevision"
+        case idempotencykey = "idempotencyKey"
+    }
+}
+
+public struct WorkCheckpointsCreateResult: Codable, Sendable {
+    public let document: AnyCodable
+    public let projectrecordrevision: Int
+
+    public init(
+        document: AnyCodable,
+        projectrecordrevision: Int)
+    {
+        self.document = document
+        self.projectrecordrevision = projectrecordrevision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case document
+        case projectrecordrevision = "projectRecordRevision"
+    }
+}
+
+public struct WorkHandoffsCreateParams: Codable, Sendable {
+    public let projectid: String
+    public let checkpointdocumentid: String
+    public let expectedrevision: Int
+    public let idempotencykey: String
+
+    public init(
+        projectid: String,
+        checkpointdocumentid: String,
+        expectedrevision: Int,
+        idempotencykey: String)
+    {
+        self.projectid = projectid
+        self.checkpointdocumentid = checkpointdocumentid
+        self.expectedrevision = expectedrevision
+        self.idempotencykey = idempotencykey
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case checkpointdocumentid = "checkpointDocumentId"
+        case expectedrevision = "expectedRevision"
+        case idempotencykey = "idempotencyKey"
+    }
+}
+
+public struct WorkHandoffsCreateResult: Codable, Sendable {
+    public let document: AnyCodable
+    public let projectrecordrevision: Int
+
+    public init(
+        document: AnyCodable,
+        projectrecordrevision: Int)
+    {
+        self.document = document
+        self.projectrecordrevision = projectrecordrevision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case document
+        case projectrecordrevision = "projectRecordRevision"
+    }
+}
+
 public struct WorkPlansCreateParams: Codable, Sendable {
     public let projectid: String
     public let planid: String

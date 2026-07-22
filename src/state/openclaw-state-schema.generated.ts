@@ -1368,13 +1368,89 @@ CREATE INDEX IF NOT EXISTS idx_worktrees_removed_at
 
 -- Durable operator-authored project plans. These tables link to existing task,
 -- flow, session, and external-owner identifiers without owning their lifecycle.
-CREATE TABLE IF NOT EXISTS work_projects (
-  project_id TEXT NOT NULL PRIMARY KEY,
-  schema_version INTEGER NOT NULL DEFAULT 1,
-  primary_conversation_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS registered_projects (
+  registered_project_id TEXT NOT NULL PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0,1)),
+  profile TEXT NOT NULL CHECK (profile = 'repo-planning-v1'),
+  default_conversation_id TEXT NOT NULL,
   record_revision INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS registered_project_repositories (
+  registered_project_id TEXT NOT NULL,
+  repository_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  server_locator TEXT NOT NULL,
+  active INTEGER NOT NULL CHECK (active IN (0,1)),
+  is_primary INTEGER NOT NULL CHECK (is_primary IN (0,1)),
+  ordinal INTEGER NOT NULL,
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (registered_project_id, repository_id),
+  FOREIGN KEY (registered_project_id) REFERENCES registered_projects(registered_project_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_registered_project_primary_repository
+  ON registered_project_repositories(registered_project_id)
+  WHERE active = 1 AND is_primary = 1;
+
+CREATE TABLE IF NOT EXISTS registered_project_documents (
+  registered_project_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  repository_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('current','architecture','constraints','decisions','tasks','handoff','other')),
+  label TEXT NOT NULL,
+  server_locator TEXT NOT NULL,
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (registered_project_id, document_id),
+  FOREIGN KEY (registered_project_id, repository_id) REFERENCES registered_project_repositories(registered_project_id, repository_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS work_projects (
+  project_id TEXT NOT NULL PRIMARY KEY,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  registered_project_id TEXT,
+  primary_conversation_id TEXT NOT NULL,
+  record_revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (registered_project_id) REFERENCES registered_projects(registered_project_id)
+);
+
+CREATE TABLE IF NOT EXISTS project_documents (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('capsule','checkpoint','handoff')),
+  revision INTEGER NOT NULL,
+  immutable INTEGER NOT NULL CHECK (immutable IN (0,1)),
+  content_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE (project_id, document_id, revision),
+  FOREIGN KEY (project_id) REFERENCES work_projects(project_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_project_documents_latest
+  ON project_documents(project_id, kind, sequence DESC);
+CREATE TRIGGER IF NOT EXISTS trg_project_documents_immutable_update
+BEFORE UPDATE ON project_documents
+WHEN OLD.immutable = 1
+BEGIN
+  SELECT RAISE(ABORT, 'immutable project document');
+END;
+
+CREATE TABLE IF NOT EXISTS project_document_provenance (
+  document_sequence INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL,
+  source_type TEXT NOT NULL CHECK (source_type IN ('work_plan','registered_document','project_document')),
+  source_id TEXT NOT NULL,
+  source_revision INTEGER NOT NULL,
+  PRIMARY KEY (document_sequence, ordinal),
+  FOREIGN KEY (document_sequence) REFERENCES project_documents(sequence) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS work_goals (

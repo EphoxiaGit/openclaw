@@ -505,6 +505,15 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...createLazyCoreHandlers({
     methods: [
       "work.projects.create",
+      "work.registeredProjects.list",
+      "work.registeredProjects.get",
+      "work.projects.createRegistered",
+      "work.projectContext.get",
+      "work.documents.list",
+      "work.documents.get",
+      "work.capsules.update",
+      "work.checkpoints.create",
+      "work.handoffs.create",
       "work.projects.list",
       "work.projects.get",
       "work.plans.create",

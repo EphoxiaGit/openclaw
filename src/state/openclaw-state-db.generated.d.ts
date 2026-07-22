@@ -792,6 +792,61 @@ export interface PluginStateEntries {
   value_json: string;
 }
 
+export interface ProjectDocumentProvenance {
+  document_sequence: number;
+  ordinal: number;
+  source_id: string;
+  source_revision: number;
+  source_type: string;
+}
+
+export interface ProjectDocuments {
+  content_json: string;
+  created_at: number;
+  document_id: string;
+  immutable: number;
+  kind: string;
+  project_id: string;
+  revision: number;
+  sequence: Generated<number>;
+}
+
+export interface RegisteredProjectDocuments {
+  created_at: number;
+  document_id: string;
+  kind: string;
+  label: string;
+  record_revision: Generated<number>;
+  registered_project_id: string;
+  repository_id: string;
+  server_locator: string;
+  updated_at: number;
+}
+
+export interface RegisteredProjectRepositories {
+  active: number;
+  created_at: number;
+  display_name: string;
+  is_primary: number;
+  ordinal: number;
+  record_revision: Generated<number>;
+  registered_project_id: string;
+  repository_id: string;
+  server_locator: string;
+  updated_at: number;
+}
+
+export interface RegisteredProjects {
+  created_at: number;
+  default_conversation_id: string;
+  display_name: string;
+  enabled: number;
+  profile: string;
+  record_revision: Generated<number>;
+  registered_project_id: string;
+  updated_at: number;
+}
+
 export interface SandboxRegistryEntries {
   backend_id: string | null;
   cdp_port: number | null;
@@ -1150,6 +1205,7 @@ export interface WorkProjects {
   primary_conversation_id: string;
   project_id: string;
   record_revision: Generated<number>;
+  registered_project_id: string | null;
   schema_version: Generated<number>;
   updated_at: number;
 }
@@ -1233,6 +1289,11 @@ export interface DB {
   plugin_binding_approvals: PluginBindingApprovals;
   plugin_blob_entries: PluginBlobEntries;
   plugin_state_entries: PluginStateEntries;
+  project_document_provenance: ProjectDocumentProvenance;
+  project_documents: ProjectDocuments;
+  registered_project_documents: RegisteredProjectDocuments;
+  registered_project_repositories: RegisteredProjectRepositories;
+  registered_projects: RegisteredProjects;
   sandbox_registry_entries: SandboxRegistryEntries;
   schema_meta: SchemaMeta;
   skill_curator_state: SkillCuratorState;

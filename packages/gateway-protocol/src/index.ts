@@ -11,6 +11,26 @@ export {
 export * from "./schema/work-plans.js";
 import { Compile, type Validator as TypeBoxValidator } from "typebox/compile";
 import {
+  type WorkCapsulesUpdateParams,
+  WorkCapsulesUpdateParamsSchema,
+  type WorkCapsulesUpdateResult,
+  WorkCapsulesUpdateResultSchema,
+  type WorkCheckpointsCreateParams,
+  WorkCheckpointsCreateParamsSchema,
+  type WorkCheckpointsCreateResult,
+  WorkCheckpointsCreateResultSchema,
+  type WorkDocumentsGetParams,
+  WorkDocumentsGetParamsSchema,
+  type WorkDocumentsGetResult,
+  WorkDocumentsGetResultSchema,
+  type WorkDocumentsListParams,
+  WorkDocumentsListParamsSchema,
+  type WorkDocumentsListResult,
+  WorkDocumentsListResultSchema,
+  type WorkHandoffsCreateParams,
+  WorkHandoffsCreateParamsSchema,
+  type WorkHandoffsCreateResult,
+  WorkHandoffsCreateResultSchema,
   type AgentEvent,
   AgentEventSchema,
   type AuditEvent,
@@ -620,6 +640,14 @@ import {
   WorkPlansProjectionParamsSchema,
   type WorkPlansProjectionResult,
   WorkPlansProjectionResultSchema,
+  type WorkProjectContextGetParams,
+  WorkProjectContextGetParamsSchema,
+  type WorkProjectContextGetResult,
+  WorkProjectContextGetResultSchema,
+  type WorkProjectsCreateRegisteredParams,
+  WorkProjectsCreateRegisteredParamsSchema,
+  type WorkProjectsCreateRegisteredResult,
+  WorkProjectsCreateRegisteredResultSchema,
   type WorkProjectsCreateParams,
   WorkProjectsCreateParamsSchema,
   type WorkProjectsCreateResult,
@@ -632,6 +660,14 @@ import {
   WorkProjectsListParamsSchema,
   type WorkProjectsListResult,
   WorkProjectsListResultSchema,
+  type WorkRegisteredProjectsGetParams,
+  WorkRegisteredProjectsGetParamsSchema,
+  type WorkRegisteredProjectsGetResult,
+  WorkRegisteredProjectsGetResultSchema,
+  type WorkRegisteredProjectsListParams,
+  WorkRegisteredProjectsListParamsSchema,
+  type WorkRegisteredProjectsListResult,
+  WorkRegisteredProjectsListResultSchema,
 } from "./schema/work-plans.js";
 
 /** Normalized validation error shape exposed by every protocol validator. */
@@ -879,6 +915,31 @@ export const validateWorkProjectsListParams = lazyCompile<WorkProjectsListParams
 export const validateWorkProjectsGetParams = lazyCompile<WorkProjectsGetParams>(
   WorkProjectsGetParamsSchema,
 );
+export const validateWorkRegisteredProjectsListParams =
+  lazyCompile<WorkRegisteredProjectsListParams>(WorkRegisteredProjectsListParamsSchema);
+export const validateWorkRegisteredProjectsGetParams = lazyCompile<WorkRegisteredProjectsGetParams>(
+  WorkRegisteredProjectsGetParamsSchema,
+);
+export const validateWorkProjectsCreateRegisteredParams =
+  lazyCompile<WorkProjectsCreateRegisteredParams>(WorkProjectsCreateRegisteredParamsSchema);
+export const validateWorkProjectContextGetParams = lazyCompile<WorkProjectContextGetParams>(
+  WorkProjectContextGetParamsSchema,
+);
+export const validateWorkDocumentsListParams = lazyCompile<WorkDocumentsListParams>(
+  WorkDocumentsListParamsSchema,
+);
+export const validateWorkDocumentsGetParams = lazyCompile<WorkDocumentsGetParams>(
+  WorkDocumentsGetParamsSchema,
+);
+export const validateWorkCapsulesUpdateParams = lazyCompile<WorkCapsulesUpdateParams>(
+  WorkCapsulesUpdateParamsSchema,
+);
+export const validateWorkCheckpointsCreateParams = lazyCompile<WorkCheckpointsCreateParams>(
+  WorkCheckpointsCreateParamsSchema,
+);
+export const validateWorkHandoffsCreateParams = lazyCompile<WorkHandoffsCreateParams>(
+  WorkHandoffsCreateParamsSchema,
+);
 export const validateWorkPlansCreateParams = lazyCompile<WorkPlansCreateParams>(
   WorkPlansCreateParamsSchema,
 );
@@ -900,6 +961,31 @@ export const validateWorkProjectsListResult = lazyCompile<WorkProjectsListResult
 );
 export const validateWorkProjectsGetResult = lazyCompile<WorkProjectsGetResult>(
   WorkProjectsGetResultSchema,
+);
+export const validateWorkRegisteredProjectsListResult =
+  lazyCompile<WorkRegisteredProjectsListResult>(WorkRegisteredProjectsListResultSchema);
+export const validateWorkRegisteredProjectsGetResult = lazyCompile<WorkRegisteredProjectsGetResult>(
+  WorkRegisteredProjectsGetResultSchema,
+);
+export const validateWorkProjectsCreateRegisteredResult =
+  lazyCompile<WorkProjectsCreateRegisteredResult>(WorkProjectsCreateRegisteredResultSchema);
+export const validateWorkProjectContextGetResult = lazyCompile<WorkProjectContextGetResult>(
+  WorkProjectContextGetResultSchema,
+);
+export const validateWorkDocumentsListResult = lazyCompile<WorkDocumentsListResult>(
+  WorkDocumentsListResultSchema,
+);
+export const validateWorkDocumentsGetResult = lazyCompile<WorkDocumentsGetResult>(
+  WorkDocumentsGetResultSchema,
+);
+export const validateWorkCapsulesUpdateResult = lazyCompile<WorkCapsulesUpdateResult>(
+  WorkCapsulesUpdateResultSchema,
+);
+export const validateWorkCheckpointsCreateResult = lazyCompile<WorkCheckpointsCreateResult>(
+  WorkCheckpointsCreateResultSchema,
+);
+export const validateWorkHandoffsCreateResult = lazyCompile<WorkHandoffsCreateResult>(
+  WorkHandoffsCreateResultSchema,
 );
 export const validateWorkPlansCreateResult = lazyCompile<WorkPlansCreateResult>(
   WorkPlansCreateResultSchema,

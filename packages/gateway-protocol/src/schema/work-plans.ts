@@ -2,7 +2,16 @@ import type { Static } from "typebox";
 import { Type } from "typebox";
 import { NonEmptyString } from "./primitives.js";
 const IdentifierSchema = Type.String({ minLength: 1, maxLength: 256 });
+const OpaqueIdentifierSchema = Type.String({
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+});
 const TextSchema = Type.String({ minLength: 1, maxLength: 16_384 });
+const CapsuleTextSchema = Type.String({ minLength: 1, maxLength: 4_000 });
+const CapsuleListSchema = Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), {
+  maxItems: 50,
+});
 
 const WorkPlanStatusSchema = Type.Union([
   Type.Literal("draft"),
@@ -175,6 +184,87 @@ export const WorkProjectsGetParamsSchema = Type.Object(
   { projectId: IdentifierSchema },
   { additionalProperties: false },
 );
+export const WorkRegisteredProjectsListParamsSchema = Type.Object(
+  {},
+  { additionalProperties: false },
+);
+export const WorkRegisteredProjectsGetParamsSchema = Type.Object(
+  { registeredProjectId: OpaqueIdentifierSchema },
+  { additionalProperties: false },
+);
+export const WorkProjectsCreateRegisteredParamsSchema = Type.Object(
+  {
+    registeredProjectId: OpaqueIdentifierSchema,
+    objective: CapsuleTextSchema,
+    sessionGoalRef: Type.Optional(OpaqueIdentifierSchema),
+    idempotencyKey: OpaqueIdentifierSchema,
+  },
+  { additionalProperties: false },
+);
+export const WorkProjectContextGetParamsSchema = Type.Object(
+  { projectId: OpaqueIdentifierSchema },
+  { additionalProperties: false },
+);
+export const WorkDocumentsListParamsSchema = WorkProjectContextGetParamsSchema;
+export const WorkDocumentsGetParamsSchema = Type.Object(
+  {
+    projectId: OpaqueIdentifierSchema,
+    documentId: OpaqueIdentifierSchema,
+    revision: Type.Optional(Type.Integer({ minimum: 1 })),
+  },
+  { additionalProperties: false },
+);
+const ProjectDocumentProvenanceSchema = Type.Object(
+  {
+    sourceType: Type.Union([
+      Type.Literal("work_plan"),
+      Type.Literal("registered_document"),
+      Type.Literal("project_document"),
+    ]),
+    sourceId: OpaqueIdentifierSchema,
+    sourceRevision: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+const ProjectCapsuleSchema = Type.Object(
+  {
+    summary: CapsuleTextSchema,
+    currentFocus: CapsuleTextSchema,
+    constraints: CapsuleListSchema,
+    decisions: CapsuleListSchema,
+    openQuestions: CapsuleListSchema,
+    conflicts: CapsuleListSchema,
+    explicitNextTask: CapsuleTextSchema,
+  },
+  { additionalProperties: false },
+);
+export const WorkCapsulesUpdateParamsSchema = Type.Object(
+  {
+    projectId: OpaqueIdentifierSchema,
+    expectedRevision: Type.Integer({ minimum: 1 }),
+    idempotencyKey: OpaqueIdentifierSchema,
+    content: ProjectCapsuleSchema,
+    provenance: Type.Array(ProjectDocumentProvenanceSchema, { maxItems: 50 }),
+  },
+  { additionalProperties: false },
+);
+export const WorkCheckpointsCreateParamsSchema = Type.Object(
+  {
+    projectId: OpaqueIdentifierSchema,
+    expectedRevision: Type.Integer({ minimum: 1 }),
+    idempotencyKey: OpaqueIdentifierSchema,
+  },
+  { additionalProperties: false },
+);
+export const WorkHandoffsCreateParamsSchema = Type.Object(
+  {
+    projectId: OpaqueIdentifierSchema,
+    checkpointDocumentId: OpaqueIdentifierSchema,
+    expectedRevision: Type.Integer({ minimum: 1 }),
+    idempotencyKey: OpaqueIdentifierSchema,
+  },
+  { additionalProperties: false },
+);
 export const WorkPlansCreateParamsSchema = Type.Object(
   {
     projectId: IdentifierSchema,
@@ -322,6 +412,183 @@ export const WorkProjectsGetResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const RegisteredProjectSchema = Type.Object(
+  {
+    registeredProjectId: NonEmptyString,
+    displayName: NonEmptyString,
+    enabled: Type.Boolean(),
+    profile: Type.Literal("repo-planning-v1"),
+    defaultConversationId: NonEmptyString,
+    recordRevision: Type.Integer({ minimum: 1 }),
+    updatedAt: Type.Integer(),
+    repositories: Type.Array(
+      Type.Object(
+        {
+          repositoryId: NonEmptyString,
+          displayName: NonEmptyString,
+          active: Type.Boolean(),
+          primary: Type.Boolean(),
+          recordRevision: Type.Integer({ minimum: 1 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    documents: Type.Array(
+      Type.Object(
+        {
+          documentId: NonEmptyString,
+          repositoryId: NonEmptyString,
+          kind: Type.Union([
+            Type.Literal("current"),
+            Type.Literal("architecture"),
+            Type.Literal("constraints"),
+            Type.Literal("decisions"),
+            Type.Literal("tasks"),
+            Type.Literal("handoff"),
+            Type.Literal("other"),
+          ]),
+          label: NonEmptyString,
+          recordRevision: Type.Integer({ minimum: 1 }),
+          updatedAt: Type.Integer(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+const WorkPlanContextSummarySchema = Type.Object(
+  {
+    planId: NonEmptyString,
+    status: WorkPlanStatusSchema,
+    display: NonEmptyString,
+    recordRevision: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+const ProjectCheckpointSchema = Type.Object(
+  {
+    objective: CapsuleTextSchema,
+    progress: CapsuleListSchema,
+    files: CapsuleListSchema,
+    tests: CapsuleListSchema,
+    blockers: CapsuleListSchema,
+    exactNextAction: CapsuleTextSchema,
+    plans: Type.Array(WorkPlanContextSummarySchema, { maxItems: 1_000 }),
+  },
+  { additionalProperties: false },
+);
+const ProjectHandoffSchema = Type.Object(
+  {
+    checkpointDocumentId: NonEmptyString,
+    objective: CapsuleTextSchema,
+    progress: CapsuleListSchema,
+    blockers: CapsuleListSchema,
+    exactNextAction: CapsuleTextSchema,
+  },
+  { additionalProperties: false },
+);
+const DocumentBaseProperties = {
+  documentId: NonEmptyString,
+  provenance: Type.Array(ProjectDocumentProvenanceSchema),
+  createdAt: Type.Integer(),
+};
+const CapsuleProjectDocumentSchema = Type.Object(
+  {
+    ...DocumentBaseProperties,
+    kind: Type.Literal("capsule"),
+    revision: Type.Integer({ minimum: 1 }),
+    immutable: Type.Literal(false),
+    content: ProjectCapsuleSchema,
+  },
+  { additionalProperties: false },
+);
+const CheckpointProjectDocumentSchema = Type.Object(
+  {
+    ...DocumentBaseProperties,
+    kind: Type.Literal("checkpoint"),
+    revision: Type.Literal(1),
+    immutable: Type.Literal(true),
+    content: ProjectCheckpointSchema,
+  },
+  { additionalProperties: false },
+);
+const HandoffProjectDocumentSchema = Type.Object(
+  {
+    ...DocumentBaseProperties,
+    kind: Type.Literal("handoff"),
+    revision: Type.Literal(1),
+    immutable: Type.Literal(true),
+    content: ProjectHandoffSchema,
+  },
+  { additionalProperties: false },
+);
+const ProjectDocumentSchema = Type.Union([
+  CapsuleProjectDocumentSchema,
+  CheckpointProjectDocumentSchema,
+  HandoffProjectDocumentSchema,
+]);
+export const WorkRegisteredProjectsListResultSchema = Type.Object(
+  { projects: Type.Array(RegisteredProjectSchema) },
+  { additionalProperties: false },
+);
+export const WorkRegisteredProjectsGetResultSchema = Type.Object(
+  { project: RegisteredProjectSchema },
+  { additionalProperties: false },
+);
+export const WorkProjectsCreateRegisteredResultSchema = Type.Object(
+  {
+    registeredProjectId: NonEmptyString,
+    projectId: NonEmptyString,
+    goalId: NonEmptyString,
+    primaryConversationId: NonEmptyString,
+    recordRevision: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+export const WorkProjectContextGetResultSchema = Type.Object(
+  {
+    context: Type.Object(
+      {
+        project: ProjectSummarySchema,
+        registeredProject: RegisteredProjectSchema,
+        goal: Type.Object(
+          {
+            goalId: NonEmptyString,
+            objective: NonEmptyString,
+            sessionGoalRef: Type.Optional(NonEmptyString),
+            recordRevision: Type.Integer({ minimum: 1 }),
+          },
+          { additionalProperties: false },
+        ),
+        plans: Type.Array(WorkPlanContextSummarySchema),
+        capsule: Type.Optional(CapsuleProjectDocumentSchema),
+        latestCheckpoint: Type.Optional(CheckpointProjectDocumentSchema),
+        latestHandoff: Type.Optional(HandoffProjectDocumentSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+export const WorkDocumentsListResultSchema = Type.Object(
+  { documents: Type.Array(ProjectDocumentSchema) },
+  { additionalProperties: false },
+);
+export const WorkDocumentsGetResultSchema = Type.Object(
+  { document: ProjectDocumentSchema },
+  { additionalProperties: false },
+);
+export const WorkDocumentMutationResultSchema = Type.Object(
+  {
+    document: ProjectDocumentSchema,
+    projectRecordRevision: Type.Integer({ minimum: 2 }),
+  },
+  { additionalProperties: false },
+);
+export const WorkCapsulesUpdateResultSchema = WorkDocumentMutationResultSchema;
+export const WorkCheckpointsCreateResultSchema = WorkDocumentMutationResultSchema;
+export const WorkHandoffsCreateResultSchema = WorkDocumentMutationResultSchema;
 export const WorkPlansCreateResultSchema = Type.Object(
   { plan: WorkPlanSnapshotSchema },
   { additionalProperties: false },
@@ -405,6 +672,19 @@ export const WorkPlansProjectionResultSchema = Type.Object(
 export type WorkProjectsCreateParams = Static<typeof WorkProjectsCreateParamsSchema>;
 export type WorkProjectsListParams = Static<typeof WorkProjectsListParamsSchema>;
 export type WorkProjectsGetParams = Static<typeof WorkProjectsGetParamsSchema>;
+export type WorkRegisteredProjectsListParams = Static<
+  typeof WorkRegisteredProjectsListParamsSchema
+>;
+export type WorkRegisteredProjectsGetParams = Static<typeof WorkRegisteredProjectsGetParamsSchema>;
+export type WorkProjectsCreateRegisteredParams = Static<
+  typeof WorkProjectsCreateRegisteredParamsSchema
+>;
+export type WorkProjectContextGetParams = Static<typeof WorkProjectContextGetParamsSchema>;
+export type WorkDocumentsListParams = Static<typeof WorkDocumentsListParamsSchema>;
+export type WorkDocumentsGetParams = Static<typeof WorkDocumentsGetParamsSchema>;
+export type WorkCapsulesUpdateParams = Static<typeof WorkCapsulesUpdateParamsSchema>;
+export type WorkCheckpointsCreateParams = Static<typeof WorkCheckpointsCreateParamsSchema>;
+export type WorkHandoffsCreateParams = Static<typeof WorkHandoffsCreateParamsSchema>;
 export type WorkPlansCreateParams = Static<typeof WorkPlansCreateParamsSchema>;
 export type WorkPlansGetParams = Static<typeof WorkPlansGetParamsSchema>;
 export type WorkPlansMutateParams = Static<typeof WorkPlansMutateParamsSchema>;
@@ -413,6 +693,19 @@ export type WorkPlansProjectionParams = Static<typeof WorkPlansProjectionParamsS
 export type WorkProjectsCreateResult = Static<typeof WorkProjectsCreateResultSchema>;
 export type WorkProjectsListResult = Static<typeof WorkProjectsListResultSchema>;
 export type WorkProjectsGetResult = Static<typeof WorkProjectsGetResultSchema>;
+export type WorkRegisteredProjectsListResult = Static<
+  typeof WorkRegisteredProjectsListResultSchema
+>;
+export type WorkRegisteredProjectsGetResult = Static<typeof WorkRegisteredProjectsGetResultSchema>;
+export type WorkProjectsCreateRegisteredResult = Static<
+  typeof WorkProjectsCreateRegisteredResultSchema
+>;
+export type WorkProjectContextGetResult = Static<typeof WorkProjectContextGetResultSchema>;
+export type WorkDocumentsListResult = Static<typeof WorkDocumentsListResultSchema>;
+export type WorkDocumentsGetResult = Static<typeof WorkDocumentsGetResultSchema>;
+export type WorkCapsulesUpdateResult = Static<typeof WorkCapsulesUpdateResultSchema>;
+export type WorkCheckpointsCreateResult = Static<typeof WorkCheckpointsCreateResultSchema>;
+export type WorkHandoffsCreateResult = Static<typeof WorkHandoffsCreateResultSchema>;
 export type WorkPlansCreateResult = Static<typeof WorkPlansCreateResultSchema>;
 export type WorkPlansGetResult = Static<typeof WorkPlansGetResultSchema>;
 export type WorkPlansMutateResult = Static<typeof WorkPlansMutateResultSchema>;
