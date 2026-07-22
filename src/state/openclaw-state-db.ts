@@ -31,7 +31,7 @@ import { OPENCLAW_STATE_SCHEMA_SQL } from "./openclaw-state-schema.generated.js"
  * tables, private file permissions, cached handles, and audit rows for
  * migrations/backups that operate on local state.
  */
-export const OPENCLAW_STATE_SCHEMA_VERSION = 1;
+export const OPENCLAW_STATE_SCHEMA_VERSION = 2;
 /** Shared timeout used by state and agent SQLite handles before surfacing busy errors. */
 export const OPENCLAW_SQLITE_BUSY_TIMEOUT_MS = 30_000;
 const OPENCLAW_STATE_DIR_MODE = 0o700;
@@ -767,6 +767,13 @@ function backfillDeliveryQueueEntriesFromEntryJson(db: DatabaseSync): void {
 }
 
 function ensureAdditiveStateColumns(db: DatabaseSync): void {
+  ensureColumn(db, "work_goals", "origin_session_key TEXT");
+  ensureColumn(db, "work_goals", "session_goal_id TEXT");
+  if (tableExists(db, "work_goals") && tableHasColumn(db, "work_goals", "origin_session_key")) {
+    db.exec(
+      "UPDATE work_goals SET origin_session_key=(SELECT primary_conversation_id FROM work_projects WHERE work_projects.project_id=work_goals.project_id) WHERE origin_session_key IS NULL;",
+    );
+  }
   ensureColumn(db, "node_pairing_pending", "client_id TEXT");
   ensureColumn(db, "node_pairing_pending", "client_mode TEXT");
   ensureColumn(db, "node_pairing_paired", "client_id TEXT");

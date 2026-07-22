@@ -27,7 +27,7 @@ export const WORK_STEP_STATUSES = [
 ] as const;
 export type WorkStepStatus = (typeof WORK_STEP_STATUSES)[number];
 export type RequirementDisposition = "mapped" | "excluded" | "unresolved";
-export type WorkOwnerType = "task" | "task_flow" | "codex" | "omx" | "worktree" | "external";
+export type WorkOwnerType = "task" | "task_flow" | "codex" | "omx" | "external";
 
 export type WorkStepDefinition = {
   stepId: string;
@@ -60,6 +60,7 @@ export type WorkStep = Required<Pick<WorkStepDefinition, "stepId" | "title">> & 
   recordRevision: number;
   dependsOn: string[];
   taskLinks: Array<{ taskId: string; taskFlowId?: string }>;
+  worktreeLinks: string[];
   attempts: WorkAttempt[];
 };
 export type WorkRequirement = WorkRequirementDefinition;
@@ -76,7 +77,7 @@ export type WorkPlanSnapshot = {
   projectId: string;
   primaryConversationId: string;
   projectRecordRevision: number;
-  goal: { goalId: string; objective: string; recordRevision: number };
+  goal: { goalId: string; objective: string; sessionGoalRef?: string; recordRevision: number };
   planId: string;
   status: WorkPlanStatus;
   definitionRevision: number;
@@ -87,11 +88,57 @@ export type WorkPlanSnapshot = {
   requirements: WorkRequirement[];
   projection: WorkPlanProjection;
 };
+export type WorkPlanTransition = {
+  sequence: number;
+  transitionId: string;
+  projectId: string;
+  planId?: string;
+  stepId?: string;
+  definitionRevision?: number;
+  entityType: string;
+  fromStatus?: string;
+  toStatus?: string;
+  action: string;
+  actorId: string;
+  requestHash: string;
+  payloadJson: string;
+  createdAt: number;
+};
+export type WorkPlanLineage = {
+  definitions: Array<{
+    definitionRevision: number;
+    stepId: string;
+    status: WorkStepStatus;
+    supersededAt?: number;
+  }>;
+  taskLinks: Array<{
+    definitionRevision: number;
+    stepId: string;
+    taskId: string;
+    taskFlowId?: string;
+    linkedAt: number;
+  }>;
+  worktreeLinks: Array<{
+    definitionRevision: number;
+    stepId: string;
+    worktreeId: string;
+    linkedAt: number;
+  }>;
+  attempts: WorkAttempt[];
+};
 export type WorkPlanMutation =
   | { action: "setPlanStatus"; status: WorkPlanStatus }
   | { action: "setStepStatus"; stepId: string; status: WorkStepStatus }
   | { action: "skipStep"; stepId: string }
   | { action: "linkTask"; stepId: string; taskId: string; taskFlowId?: string }
+  | { action: "linkWorktree"; stepId: string; worktreeId: string }
+  | {
+      action: "startAttempt";
+      stepId: string;
+      attemptId: string;
+      ownerType: WorkOwnerType;
+      ownerId: string;
+    }
   | {
       action: "retryStep";
       stepId: string;
@@ -106,6 +153,7 @@ export type WorkPlanMutation =
       recoveryState?: string;
       stepStatus?: WorkStepStatus;
     }
+  | { action: "reconcileLocalOwners" }
   | { action: "splitStep"; stepId: string; replacementSteps: WorkStepDefinition[] }
   | { action: "mergeSteps"; stepIds: string[]; replacementStep: WorkStepDefinition }
   | { action: "replan"; steps: WorkStepDefinition[]; requirements: WorkRequirementDefinition[] };

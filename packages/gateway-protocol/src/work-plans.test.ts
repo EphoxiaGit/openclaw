@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   validateWorkPlansCreateParams,
+  validateWorkPlansCreateResult,
+  validateWorkPlansGetResult,
+  validateWorkPlansHistoryResult,
   validateWorkPlansMutateParams,
+  validateWorkPlansMutateResult,
+  validateWorkPlansProjectionResult,
   validateWorkProjectsCreateParams,
+  validateWorkProjectsCreateResult,
+  validateWorkProjectsGetResult,
+  validateWorkProjectsListResult,
 } from "./index.js";
 
 describe("work-plan gateway validation", () => {
@@ -14,7 +22,6 @@ describe("work-plan gateway validation", () => {
         primaryConversationId: "s",
         objective: "Ship",
         idempotencyKey: "i",
-        actorId: "a",
       }),
     ).toBe(true);
     expect(
@@ -24,7 +31,6 @@ describe("work-plan gateway validation", () => {
         goalId: "g",
         expectedRevision: 1,
         idempotencyKey: "i",
-        actorId: "a",
         steps: [{ stepId: "s1", title: "One" }],
       }),
     ).toBe(true);
@@ -34,7 +40,6 @@ describe("work-plan gateway validation", () => {
         planId: "plan",
         expectedRevision: 1,
         idempotencyKey: "i",
-        actorId: "a",
         mutation: {
           action: "retryStep",
           stepId: "s1",
@@ -54,7 +59,7 @@ describe("work-plan gateway validation", () => {
         primaryConversationId: "s",
         objective: "Ship",
         idempotencyKey: "i",
-        actorId: "a",
+        actorId: "client-forged",
         repoRoot: "/private",
       }),
     ).toBe(false);
@@ -62,9 +67,25 @@ describe("work-plan gateway validation", () => {
       validateWorkPlansMutateParams({
         projectId: "p",
         planId: "plan",
-        actorId: "a",
         mutation: { action: "setStepStatus", stepId: "s", status: "done" },
       }),
     ).toBe(false);
+  });
+
+  it("exports typed result validators for every work RPC", () => {
+    expect(
+      validateWorkProjectsCreateResult({ projectId: "p", goalId: "g", recordRevision: 1 }),
+    ).toBe(true);
+    expect(validateWorkProjectsListResult({ projects: [] })).toBe(true);
+    for (const validator of [
+      validateWorkProjectsGetResult,
+      validateWorkPlansCreateResult,
+      validateWorkPlansGetResult,
+      validateWorkPlansMutateResult,
+      validateWorkPlansHistoryResult,
+      validateWorkPlansProjectionResult,
+    ]) {
+      expect(typeof validator).toBe("function");
+    }
   });
 });

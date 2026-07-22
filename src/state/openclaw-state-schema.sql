@@ -1373,16 +1373,22 @@ CREATE TABLE IF NOT EXISTS work_projects (
 );
 
 CREATE TABLE IF NOT EXISTS work_goals (
+  -- Immutable project anchor and optional opaque SessionEntry.goal reference;
+  -- lifecycle remains owned by the session goal authority.
   goal_id TEXT NOT NULL PRIMARY KEY,
   project_id TEXT NOT NULL UNIQUE,
   schema_version INTEGER NOT NULL DEFAULT 1,
+  origin_session_key TEXT NOT NULL,
+  session_goal_id TEXT,
   objective TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled','superseded')),
   record_revision INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (project_id) REFERENCES work_projects(project_id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_work_goals_session_reference
+  ON work_goals(origin_session_key, session_goal_id)
+  WHERE session_goal_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS work_plans (
   plan_id TEXT NOT NULL PRIMARY KEY,
@@ -1439,7 +1445,8 @@ CREATE TABLE IF NOT EXISTS work_plan_requirements (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (plan_id, definition_revision, requirement_id),
-  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE
+  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id, definition_revision, mapped_step_id) REFERENCES work_plan_steps(plan_id, definition_revision, step_id)
 );
 
 CREATE TABLE IF NOT EXISTS work_plan_step_task_links (
@@ -1449,7 +1456,21 @@ CREATE TABLE IF NOT EXISTS work_plan_step_task_links (
   task_id TEXT NOT NULL,
   task_flow_id TEXT,
   linked_at INTEGER NOT NULL,
-  PRIMARY KEY (plan_id, definition_revision, step_id, task_id)
+  PRIMARY KEY (plan_id, definition_revision, step_id, task_id),
+  FOREIGN KEY (plan_id, definition_revision, step_id) REFERENCES work_plan_steps(plan_id, definition_revision, step_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_work_plan_task_owner
+  ON work_plan_step_task_links(task_id);
+
+CREATE TABLE IF NOT EXISTS work_plan_step_worktree_links (
+  plan_id TEXT NOT NULL,
+  definition_revision INTEGER NOT NULL,
+  step_id TEXT NOT NULL,
+  worktree_id TEXT NOT NULL,
+  linked_at INTEGER NOT NULL,
+  PRIMARY KEY (plan_id, definition_revision, step_id, worktree_id),
+  FOREIGN KEY (plan_id, definition_revision, step_id) REFERENCES work_plan_steps(plan_id, definition_revision, step_id) ON DELETE CASCADE,
+  FOREIGN KEY (worktree_id) REFERENCES worktrees(id)
 );
 
 CREATE TABLE IF NOT EXISTS work_plan_step_attempts (
@@ -1466,8 +1487,11 @@ CREATE TABLE IF NOT EXISTS work_plan_step_attempts (
   updated_at INTEGER NOT NULL,
   ended_at INTEGER,
   UNIQUE (plan_id, definition_revision, step_id, attempt_number),
-  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE
+  FOREIGN KEY (plan_id) REFERENCES work_plans(plan_id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id, definition_revision, step_id) REFERENCES work_plan_steps(plan_id, definition_revision, step_id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_work_plan_attempt_owner
+  ON work_plan_step_attempts(owner_type, owner_id);
 
 CREATE TABLE IF NOT EXISTS work_plan_transitions (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,

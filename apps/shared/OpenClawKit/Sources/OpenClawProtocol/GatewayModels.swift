@@ -3449,37 +3449,73 @@ public struct WorkProjectsCreateParams: Codable, Sendable {
     public let projectid: String
     public let goalid: String
     public let primaryconversationid: String
+    public let sessiongoalref: String?
     public let objective: String
     public let idempotencykey: String
-    public let actorid: String
 
     public init(
         projectid: String,
         goalid: String,
         primaryconversationid: String,
+        sessiongoalref: String?,
         objective: String,
-        idempotencykey: String,
-        actorid: String)
+        idempotencykey: String)
     {
         self.projectid = projectid
         self.goalid = goalid
         self.primaryconversationid = primaryconversationid
+        self.sessiongoalref = sessiongoalref
         self.objective = objective
         self.idempotencykey = idempotencykey
-        self.actorid = actorid
     }
 
     private enum CodingKeys: String, CodingKey {
         case projectid = "projectId"
         case goalid = "goalId"
         case primaryconversationid = "primaryConversationId"
+        case sessiongoalref = "sessionGoalRef"
         case objective
         case idempotencykey = "idempotencyKey"
-        case actorid = "actorId"
+    }
+}
+
+public struct WorkProjectsCreateResult: Codable, Sendable {
+    public let projectid: String
+    public let goalid: String
+    public let recordrevision: Int
+
+    public init(
+        projectid: String,
+        goalid: String,
+        recordrevision: Int)
+    {
+        self.projectid = projectid
+        self.goalid = goalid
+        self.recordrevision = recordrevision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectid = "projectId"
+        case goalid = "goalId"
+        case recordrevision = "recordRevision"
     }
 }
 
 public struct WorkProjectsListParams: Codable, Sendable {}
+
+public struct WorkProjectsListResult: Codable, Sendable {
+    public let projects: [[String: AnyCodable]]
+
+    public init(
+        projects: [[String: AnyCodable]])
+    {
+        self.projects = projects
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projects
+    }
+}
 
 public struct WorkProjectsGetParams: Codable, Sendable {
     public let projectid: String
@@ -3495,13 +3531,26 @@ public struct WorkProjectsGetParams: Codable, Sendable {
     }
 }
 
+public struct WorkProjectsGetResult: Codable, Sendable {
+    public let project: AnyCodable
+
+    public init(
+        project: AnyCodable)
+    {
+        self.project = project
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case project
+    }
+}
+
 public struct WorkPlansCreateParams: Codable, Sendable {
     public let projectid: String
     public let planid: String
     public let goalid: String
     public let expectedrevision: Int
     public let idempotencykey: String
-    public let actorid: String
     public let status: AnyCodable?
     public let steps: [[String: AnyCodable]]
     public let requirements: [[String: AnyCodable]]?
@@ -3512,7 +3561,6 @@ public struct WorkPlansCreateParams: Codable, Sendable {
         goalid: String,
         expectedrevision: Int,
         idempotencykey: String,
-        actorid: String,
         status: AnyCodable?,
         steps: [[String: AnyCodable]],
         requirements: [[String: AnyCodable]]?)
@@ -3522,7 +3570,6 @@ public struct WorkPlansCreateParams: Codable, Sendable {
         self.goalid = goalid
         self.expectedrevision = expectedrevision
         self.idempotencykey = idempotencykey
-        self.actorid = actorid
         self.status = status
         self.steps = steps
         self.requirements = requirements
@@ -3534,10 +3581,23 @@ public struct WorkPlansCreateParams: Codable, Sendable {
         case goalid = "goalId"
         case expectedrevision = "expectedRevision"
         case idempotencykey = "idempotencyKey"
-        case actorid = "actorId"
         case status
         case steps
         case requirements
+    }
+}
+
+public struct WorkPlansCreateResult: Codable, Sendable {
+    public let plan: [String: AnyCodable]
+
+    public init(
+        plan: [String: AnyCodable])
+    {
+        self.plan = plan
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case plan
     }
 }
 
@@ -3555,12 +3615,25 @@ public struct WorkPlansGetParams: Codable, Sendable {
     }
 }
 
+public struct WorkPlansGetResult: Codable, Sendable {
+    public let plan: [String: AnyCodable]
+
+    public init(
+        plan: [String: AnyCodable])
+    {
+        self.plan = plan
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case plan
+    }
+}
+
 public struct WorkPlansMutateParams: Codable, Sendable {
     public let projectid: String
     public let planid: String
     public let expectedrevision: Int
     public let idempotencykey: String
-    public let actorid: String
     public let mutation: AnyCodable
 
     public init(
@@ -3568,14 +3641,12 @@ public struct WorkPlansMutateParams: Codable, Sendable {
         planid: String,
         expectedrevision: Int,
         idempotencykey: String,
-        actorid: String,
         mutation: AnyCodable)
     {
         self.projectid = projectid
         self.planid = planid
         self.expectedrevision = expectedrevision
         self.idempotencykey = idempotencykey
-        self.actorid = actorid
         self.mutation = mutation
     }
 
@@ -3584,8 +3655,21 @@ public struct WorkPlansMutateParams: Codable, Sendable {
         case planid = "planId"
         case expectedrevision = "expectedRevision"
         case idempotencykey = "idempotencyKey"
-        case actorid = "actorId"
         case mutation
+    }
+}
+
+public struct WorkPlansMutateResult: Codable, Sendable {
+    public let plan: [String: AnyCodable]
+
+    public init(
+        plan: [String: AnyCodable])
+    {
+        self.plan = plan
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case plan
     }
 }
 
@@ -3603,6 +3687,24 @@ public struct WorkPlansHistoryParams: Codable, Sendable {
     }
 }
 
+public struct WorkPlansHistoryResult: Codable, Sendable {
+    public let transitions: [[String: AnyCodable]]
+    public let lineage: [String: AnyCodable]
+
+    public init(
+        transitions: [[String: AnyCodable]],
+        lineage: [String: AnyCodable])
+    {
+        self.transitions = transitions
+        self.lineage = lineage
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case transitions
+        case lineage
+    }
+}
+
 public struct WorkPlansProjectionParams: Codable, Sendable {
     public let planid: String
 
@@ -3614,6 +3716,20 @@ public struct WorkPlansProjectionParams: Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case planid = "planId"
+    }
+}
+
+public struct WorkPlansProjectionResult: Codable, Sendable {
+    public let projection: [String: AnyCodable]
+
+    public init(
+        projection: [String: AnyCodable])
+    {
+        self.projection = projection
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projection
     }
 }
 

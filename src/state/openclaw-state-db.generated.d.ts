@@ -1033,10 +1033,11 @@ export interface WorkGoals {
   created_at: number;
   goal_id: string;
   objective: string;
+  origin_session_key: string;
   project_id: string;
   record_revision: Generated<number>;
   schema_version: Generated<number>;
-  status: Generated<string>;
+  session_goal_id: string | null;
   updated_at: number;
 }
 
@@ -1089,6 +1090,14 @@ export interface WorkPlanStepTaskLinks {
   step_id: string;
   task_flow_id: string | null;
   task_id: string;
+}
+
+export interface WorkPlanStepWorktreeLinks {
+  definition_revision: number;
+  linked_at: number;
+  plan_id: string;
+  step_id: string;
+  worktree_id: string;
 }
 
 export interface WorkPlanSteps {
@@ -1247,6 +1256,7 @@ export interface DB {
   work_plan_step_attempts: WorkPlanStepAttempts;
   work_plan_step_dependencies: WorkPlanStepDependencies;
   work_plan_step_task_links: WorkPlanStepTaskLinks;
+  work_plan_step_worktree_links: WorkPlanStepWorktreeLinks;
   work_plan_steps: WorkPlanSteps;
   work_plan_transitions: WorkPlanTransitions;
   work_plans: WorkPlans;

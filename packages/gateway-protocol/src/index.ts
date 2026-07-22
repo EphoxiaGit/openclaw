@@ -600,14 +600,38 @@ import {
   WorktreesGcResultSchema,
 } from "./schema.js";
 import {
+  type WorkPlansCreateParams,
   WorkPlansCreateParamsSchema,
+  type WorkPlansCreateResult,
+  WorkPlansCreateResultSchema,
+  type WorkPlansGetParams,
   WorkPlansGetParamsSchema,
+  type WorkPlansGetResult,
+  WorkPlansGetResultSchema,
+  type WorkPlansHistoryParams,
   WorkPlansHistoryParamsSchema,
+  type WorkPlansHistoryResult,
+  WorkPlansHistoryResultSchema,
+  type WorkPlansMutateParams,
   WorkPlansMutateParamsSchema,
+  type WorkPlansMutateResult,
+  WorkPlansMutateResultSchema,
+  type WorkPlansProjectionParams,
   WorkPlansProjectionParamsSchema,
+  type WorkPlansProjectionResult,
+  WorkPlansProjectionResultSchema,
+  type WorkProjectsCreateParams,
   WorkProjectsCreateParamsSchema,
+  type WorkProjectsCreateResult,
+  WorkProjectsCreateResultSchema,
+  type WorkProjectsGetParams,
   WorkProjectsGetParamsSchema,
+  type WorkProjectsGetResult,
+  WorkProjectsGetResultSchema,
+  type WorkProjectsListParams,
   WorkProjectsListParamsSchema,
+  type WorkProjectsListResult,
+  WorkProjectsListResultSchema,
 } from "./schema/work-plans.js";
 
 /** Normalized validation error shape exposed by every protocol validator. */
@@ -846,14 +870,50 @@ export const validateSessionsUsageParams =
 export const validateTasksListParams = lazyCompile<TasksListParams>(TasksListParamsSchema);
 export const validateTasksGetParams = lazyCompile<TasksGetParams>(TasksGetParamsSchema);
 export const validateTasksCancelParams = lazyCompile<TasksCancelParams>(TasksCancelParamsSchema);
-export const validateWorkProjectsCreateParams = lazyCompile(WorkProjectsCreateParamsSchema);
-export const validateWorkProjectsListParams = lazyCompile(WorkProjectsListParamsSchema);
-export const validateWorkProjectsGetParams = lazyCompile(WorkProjectsGetParamsSchema);
-export const validateWorkPlansCreateParams = lazyCompile(WorkPlansCreateParamsSchema);
-export const validateWorkPlansGetParams = lazyCompile(WorkPlansGetParamsSchema);
-export const validateWorkPlansMutateParams = lazyCompile(WorkPlansMutateParamsSchema);
-export const validateWorkPlansHistoryParams = lazyCompile(WorkPlansHistoryParamsSchema);
-export const validateWorkPlansProjectionParams = lazyCompile(WorkPlansProjectionParamsSchema);
+export const validateWorkProjectsCreateParams = lazyCompile<WorkProjectsCreateParams>(
+  WorkProjectsCreateParamsSchema,
+);
+export const validateWorkProjectsListParams = lazyCompile<WorkProjectsListParams>(
+  WorkProjectsListParamsSchema,
+);
+export const validateWorkProjectsGetParams = lazyCompile<WorkProjectsGetParams>(
+  WorkProjectsGetParamsSchema,
+);
+export const validateWorkPlansCreateParams = lazyCompile<WorkPlansCreateParams>(
+  WorkPlansCreateParamsSchema,
+);
+export const validateWorkPlansGetParams = lazyCompile<WorkPlansGetParams>(WorkPlansGetParamsSchema);
+export const validateWorkPlansMutateParams = lazyCompile<WorkPlansMutateParams>(
+  WorkPlansMutateParamsSchema,
+);
+export const validateWorkPlansHistoryParams = lazyCompile<WorkPlansHistoryParams>(
+  WorkPlansHistoryParamsSchema,
+);
+export const validateWorkPlansProjectionParams = lazyCompile<WorkPlansProjectionParams>(
+  WorkPlansProjectionParamsSchema,
+);
+export const validateWorkProjectsCreateResult = lazyCompile<WorkProjectsCreateResult>(
+  WorkProjectsCreateResultSchema,
+);
+export const validateWorkProjectsListResult = lazyCompile<WorkProjectsListResult>(
+  WorkProjectsListResultSchema,
+);
+export const validateWorkProjectsGetResult = lazyCompile<WorkProjectsGetResult>(
+  WorkProjectsGetResultSchema,
+);
+export const validateWorkPlansCreateResult = lazyCompile<WorkPlansCreateResult>(
+  WorkPlansCreateResultSchema,
+);
+export const validateWorkPlansGetResult = lazyCompile<WorkPlansGetResult>(WorkPlansGetResultSchema);
+export const validateWorkPlansMutateResult = lazyCompile<WorkPlansMutateResult>(
+  WorkPlansMutateResultSchema,
+);
+export const validateWorkPlansHistoryResult = lazyCompile<WorkPlansHistoryResult>(
+  WorkPlansHistoryResultSchema,
+);
+export const validateWorkPlansProjectionResult = lazyCompile<WorkPlansProjectionResult>(
+  WorkPlansProjectionResultSchema,
+);
 export const validateConfigGetParams = lazyCompile<ConfigGetParams>(ConfigGetParamsSchema);
 export const validateConfigSetParams = lazyCompile<ConfigSetParams>(ConfigSetParamsSchema);
 export const validateConfigApplyParams = lazyCompile<ConfigApplyParams>(ConfigApplyParamsSchema);
