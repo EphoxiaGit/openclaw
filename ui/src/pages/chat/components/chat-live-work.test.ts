@@ -77,6 +77,23 @@ function context() {
 }
 
 describe("chat live work", () => {
+  it("skips projection reads and clears presentation when hidden", async () => {
+    const request = vi.fn();
+    const state = createLiveWorkState();
+    state.view = { kind: "plan", stale: false };
+
+    await refreshLiveWork(
+      state,
+      { request } as unknown as GatewayBrowserClient,
+      "agent:main:main",
+      true,
+      () => undefined,
+      false,
+    );
+
+    expect(request).not.toHaveBeenCalled();
+    expect(state.view).toBeNull();
+  });
   it("selects one active plan, resolves step titles, and excludes opaque identifiers", () => {
     const view = normalizeLiveWork(project(), context());
     expect(view).toMatchObject({

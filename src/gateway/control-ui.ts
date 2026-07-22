@@ -1051,6 +1051,8 @@ export async function handleControlUiHttpRequest(
       seamColor: config?.ui?.seamColor,
       timeFormat: config?.agents?.defaults?.timeFormat,
       terminalEnabled,
+      workspaceLiveWorkVisible: config?.workspace?.liveWork?.visible !== false,
+      workspaceLiveWorkShowContinueDraft: config?.workspace?.liveWork?.showContinueDraft !== false,
     } satisfies ControlUiBootstrapConfig);
     return true;
   }

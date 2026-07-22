@@ -58,14 +58,17 @@
     "chat.liveWork.status.review",
     "chat.liveWork.status.running",
     "chat.liveWork.status.superseded",
-    "chat.liveWork.status.waiting"
+    "chat.liveWork.status.waiting",
+    "subtitles.security",
+    "subtitles.workspace",
+    "tabs.security"
   ],
-  "generatedAt": "2026-07-22T04:35:05.357Z",
+  "generatedAt": "2026-07-22T05:32:01.993Z",
   "locale": "tr",
   "model": "gpt-5.5",
   "provider": "openai",
-  "sourceHash": "02804127a840475c632e90f175622b9b27ba8cc9b6d516950dabb3999bafccea",
-  "totalKeys": 1735,
-  "translatedKeys": 1676,
+  "sourceHash": "52aefa154aa547ee4cfef5cc87d7dc66e0966bf10c14a3deb25adcf66f1fbfbe",
+  "totalKeys": 1739,
+  "translatedKeys": 1677,
   "workflow": 1
 }

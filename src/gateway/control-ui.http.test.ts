@@ -960,7 +960,34 @@ describe("handleControlUiHttpRequest", () => {
         expect(parsed.seamColor).toBe("#1A2b3C");
         expect(parsed.timeFormat).toBe("24");
         expect(parsed.terminalEnabled).toBe(false);
+        expect(parsed.workspaceLiveWorkVisible).toBe(true);
+        expect(parsed.workspaceLiveWorkShowContinueDraft).toBe(true);
         expect(Array.isArray(parsed.localMediaPreviewRoots)).toBe(true);
+      },
+    });
+  });
+
+  it("serves only resolved workspace presentation booleans in bootstrap config", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        const { res, end } = makeMockHttpResponse();
+        await handleControlUiHttpRequest(
+          { url: CONTROL_UI_BOOTSTRAP_CONFIG_PATH, method: "GET" } as IncomingMessage,
+          res,
+          {
+            root: { kind: "resolved", path: tmp },
+            config: {
+              workspace: {
+                liveWork: { visible: false, showContinueDraft: false },
+              },
+            },
+          },
+        );
+
+        const parsed = parseBootstrapPayload(end);
+        expect(parsed.workspaceLiveWorkVisible).toBe(false);
+        expect(parsed.workspaceLiveWorkShowContinueDraft).toBe(false);
+        expect(parsed).not.toHaveProperty("workspace");
       },
     });
   });

@@ -90,6 +90,16 @@ export type SurfaceConfigEntry = {
   silentReply?: SilentReplyPolicyShape;
 };
 
+export type WorkspaceConfig = {
+  /** Native workspace presentation preferences for Control UI. */
+  liveWork?: {
+    /** Show the native live-work status strip and details. Default: true. */
+    visible?: boolean;
+    /** Show the draft-only Continue affordance. Default: true. */
+    showContinueDraft?: boolean;
+  };
+};
+
 /** Top-level OpenClaw config as read from user/project config files. */
 export type OpenClawConfig = {
   /** JSON schema URL used by editors and generated config files. */
@@ -177,6 +187,8 @@ export type OpenClawConfig = {
       avatar?: string;
     };
   };
+  /** Native workspace presentation preferences. */
+  workspace?: WorkspaceConfig;
   /** Terminal UI display settings. */
   tui?: {
     /** Footer display settings for the terminal UI. */

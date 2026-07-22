@@ -2,6 +2,10 @@
 import { MEDIA_AUDIO_FIELD_LABELS } from "./media-audio-field-metadata.js";
 
 export const FIELD_LABELS: Record<string, string> = {
+  workspace: "Workspace",
+  "workspace.liveWork": "Live Work",
+  "workspace.liveWork.visible": "Show Live Work",
+  "workspace.liveWork.showContinueDraft": "Show Continue Draft",
   meta: "Metadata",
   "meta.lastTouchedVersion": "Config Last Touched Version",
   "meta.lastTouchedAt": "Config Last Touched At",

@@ -57,4 +57,8 @@ export type ControlUiBootstrapConfig = {
    * switch removes the surface rather than showing a button that errors on open.
    */
   terminalEnabled?: boolean;
+  /** Resolved `workspace.liveWork.visible`; defaults true when omitted in gateway config. */
+  workspaceLiveWorkVisible?: boolean;
+  /** Resolved `workspace.liveWork.showContinueDraft`; defaults true when omitted. */
+  workspaceLiveWorkShowContinueDraft?: boolean;
 };

@@ -13,6 +13,7 @@ import {
   normalizeControlUiChatMessageMaxWidth,
 } from "./control-ui-css.js";
 import type { GatewayRemoteConfig } from "./types.gateway.js";
+import type { WorkspaceConfig } from "./types.openclaw.js";
 import { SilentReplyPolicyConfigSchema } from "./zod-schema.agent-defaults.js";
 import { ToolsSchema } from "./zod-schema.agent-runtime.js";
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
@@ -534,6 +535,18 @@ const CommitmentsSchema = z
   .strict()
   .optional();
 
+const WorkspaceSchemaShape = {
+  liveWork: z
+    .object({
+      visible: z.boolean().optional(),
+      showContinueDraft: z.boolean().optional(),
+    })
+    .strict()
+    .optional(),
+} satisfies ConfigSchemaShape<WorkspaceConfig>;
+
+const WorkspaceSchema = z.object(WorkspaceSchemaShape).strict().optional();
+
 export const OpenClawSchema = z
   .object({
     $schema: z.string().optional(),
@@ -796,6 +809,7 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    workspace: WorkspaceSchema,
     tui: z
       .object({
         footer: z

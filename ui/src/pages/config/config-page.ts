@@ -41,7 +41,9 @@ export type ConfigPageId =
   | "config"
   | "communications"
   | "appearance"
+  | "workspace"
   | "automation"
+  | "security"
   | "mcp"
   | "infrastructure"
   | "ai-agents";
@@ -53,7 +55,9 @@ const CONFIG_PAGE_I18N_KEYS = {
   config: "config",
   communications: "communications",
   appearance: "appearance",
+  workspace: "workspace",
   automation: "automation",
+  security: "security",
   mcp: "mcp",
   infrastructure: "infrastructure",
   "ai-agents": "aiAgents",
@@ -68,7 +72,9 @@ const COMMUNICATION_SECTION_KEYS = [
   "channels",
 ] as const;
 const APPEARANCE_SECTION_KEYS = ["__appearance__", "ui", "wizard"] as const;
-const AUTOMATION_SECTION_KEYS = ["commands", "hooks", "bindings", "cron", "approvals", "plugins"];
+const WORKSPACE_SECTION_KEYS = ["workspace"] as const;
+const AUTOMATION_SECTION_KEYS = ["commands", "hooks", "bindings", "cron", "plugins"] as const;
+const SECURITY_SECTION_KEYS = ["security", "approvals", "accessGroups", "auth", "secrets"] as const;
 const INFRASTRUCTURE_SECTION_KEYS = [
   "gateway",
   "web",
@@ -91,7 +97,9 @@ const AI_AGENTS_SECTION_KEYS = [
 const SCOPED_CONFIG_SECTION_KEYS = new Set<string>([
   ...COMMUNICATION_SECTION_KEYS,
   ...APPEARANCE_SECTION_KEYS,
+  ...WORKSPACE_SECTION_KEYS,
   ...AUTOMATION_SECTION_KEYS,
+  ...SECURITY_SECTION_KEYS,
   ...INFRASTRUCTURE_SECTION_KEYS,
   ...AI_AGENTS_SECTION_KEYS,
 ]);
@@ -125,8 +133,12 @@ function defaultConfigSelection(pageId: ConfigPageId): ConfigSelection {
       return { activeSection: "messages", activeSubsection: null };
     case "appearance":
       return { activeSection: "__appearance__", activeSubsection: null };
+    case "workspace":
+      return { activeSection: "workspace", activeSubsection: null };
     case "automation":
       return { activeSection: "commands", activeSubsection: null };
+    case "security":
+      return { activeSection: "security", activeSubsection: null };
     case "mcp":
       return { activeSection: "mcp", activeSubsection: null };
     case "infrastructure":
@@ -155,13 +167,17 @@ function normalizeConfigSelection(
       ? COMMUNICATION_SECTION_KEYS
       : pageId === "appearance"
         ? APPEARANCE_SECTION_KEYS
-        : pageId === "automation"
-          ? AUTOMATION_SECTION_KEYS
-          : pageId === "mcp" || pageId === "infrastructure"
-            ? INFRASTRUCTURE_SECTION_KEYS
-            : pageId === "ai-agents"
-              ? AI_AGENTS_SECTION_KEYS
-              : null;
+        : pageId === "workspace"
+          ? WORKSPACE_SECTION_KEYS
+          : pageId === "automation"
+            ? AUTOMATION_SECTION_KEYS
+            : pageId === "security"
+              ? SECURITY_SECTION_KEYS
+              : pageId === "mcp" || pageId === "infrastructure"
+                ? INFRASTRUCTURE_SECTION_KEYS
+                : pageId === "ai-agents"
+                  ? AI_AGENTS_SECTION_KEYS
+                  : null;
   if (pageId === "config" && activeSection && SCOPED_CONFIG_SECTION_KEYS.has(activeSection)) {
     return { activeSection: null, activeSubsection: null };
   }
@@ -297,7 +313,9 @@ export class ConfigPage extends LitElement {
     config: "form",
     communications: "form",
     appearance: "form",
+    workspace: "form",
     automation: "form",
+    security: "form",
     mcp: "form",
     infrastructure: "form",
     "ai-agents": "form",
@@ -306,7 +324,9 @@ export class ConfigPage extends LitElement {
     config: "",
     communications: "",
     appearance: "",
+    workspace: "",
     automation: "",
+    security: "",
     mcp: "",
     infrastructure: "",
     "ai-agents": "",
@@ -315,7 +335,9 @@ export class ConfigPage extends LitElement {
     config: defaultConfigSelection("config"),
     communications: defaultConfigSelection("communications"),
     appearance: defaultConfigSelection("appearance"),
+    workspace: defaultConfigSelection("workspace"),
     automation: defaultConfigSelection("automation"),
+    security: defaultConfigSelection("security"),
     mcp: defaultConfigSelection("mcp"),
     infrastructure: defaultConfigSelection("infrastructure"),
     "ai-agents": defaultConfigSelection("ai-agents"),
@@ -632,13 +654,29 @@ export class ConfigPage extends LitElement {
       ? COMMUNICATION_SECTION_KEYS
       : this.pageId === "appearance"
         ? APPEARANCE_SECTION_KEYS
-        : this.pageId === "automation"
-          ? AUTOMATION_SECTION_KEYS
-          : this.pageId === "mcp" || this.pageId === "infrastructure"
-            ? INFRASTRUCTURE_SECTION_KEYS
-            : this.pageId === "ai-agents"
-              ? AI_AGENTS_SECTION_KEYS
-              : undefined;
+        : this.pageId === "workspace"
+          ? WORKSPACE_SECTION_KEYS
+          : this.pageId === "automation"
+            ? AUTOMATION_SECTION_KEYS
+            : this.pageId === "security"
+              ? SECURITY_SECTION_KEYS
+              : this.pageId === "mcp" || this.pageId === "infrastructure"
+                ? INFRASTRUCTURE_SECTION_KEYS
+                : this.pageId === "ai-agents"
+                  ? AI_AGENTS_SECTION_KEYS
+                  : undefined;
+  }
+
+  private async saveConfig(): Promise<void> {
+    if (await this.context.runtimeConfig.save()) {
+      await this.context.config.refresh();
+    }
+  }
+
+  private async applyConfig(): Promise<void> {
+    if (await this.context.runtimeConfig.apply()) {
+      await this.context.config.refresh();
+    }
   }
 
   private renderAdvancedConfig(configObject: Record<string, unknown>) {
@@ -649,7 +687,9 @@ export class ConfigPage extends LitElement {
       this.pageId === "config"
         ? [
             ...COMMUNICATION_SECTION_KEYS,
+            ...WORKSPACE_SECTION_KEYS,
             ...AUTOMATION_SECTION_KEYS,
+            ...SECURITY_SECTION_KEYS,
             ...INFRASTRUCTURE_SECTION_KEYS,
             ...AI_AGENTS_SECTION_KEYS,
             "ui",
@@ -696,8 +736,8 @@ export class ConfigPage extends LitElement {
       onSubsectionChange: (section) => this.setActiveSubsection(section),
       onReload: () => void runtimeConfig.refresh({ discardPendingChanges: true }),
       onReset: () => runtimeConfig.resetDraft(),
-      onSave: () => void runtimeConfig.save(),
-      onApply: () => void runtimeConfig.apply(),
+      onSave: () => void this.saveConfig(),
+      onApply: () => void this.applyConfig(),
       onUpdate: () => void this.context.overlays.runUpdate(),
       onOpenFile: () => void runtimeConfig.openFile(),
       version:
@@ -752,8 +792,8 @@ export class ConfigPage extends LitElement {
       configSaving: configState.configSaving,
       configApplying: configState.configApplying,
       connected: configState.connected,
-      onSaveConfig: () => void runtimeConfig.save(),
-      onApplyConfig: () => void runtimeConfig.apply(),
+      onSaveConfig: () => void this.saveConfig(),
+      onApplyConfig: () => void this.applyConfig(),
       onServerEnabledChange: (name, enabled) => runtimeConfig.setMcpServerEnabled(name, enabled),
       editor: renderConfig({
         ...props,
@@ -836,8 +876,8 @@ export class ConfigPage extends LitElement {
         }
       },
       onResetConfig: () => runtimeConfig.resetDraft(),
-      onSaveConfig: () => void runtimeConfig.save(),
-      onApplyConfig: () => void runtimeConfig.apply(),
+      onSaveConfig: () => void this.saveConfig(),
+      onApplyConfig: () => void this.applyConfig(),
       onThinkingChange: (level) =>
         runtimeConfig.patchForm(["agents", "defaults", "thinkingLevel"], level),
       onFastModeChange: (mode: FastMode) =>
@@ -850,8 +890,9 @@ export class ConfigPage extends LitElement {
         this.settingsMode = "advanced";
         this.selections = {
           ...this.selections,
-          config: { activeSection: "auth", activeSubsection: null },
+          security: { activeSection: "security", activeSubsection: null },
         };
+        this.navigate("security");
       },
       canPairDevice:
         runtimeConfig.state.connected &&

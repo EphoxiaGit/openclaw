@@ -43,6 +43,8 @@ type ApplicationConfig = {
   allowExternalEmbedUrls: boolean;
   chatMessageMaxWidth: string | null;
   terminalEnabled: boolean;
+  workspaceLiveWorkVisible: boolean;
+  workspaceLiveWorkShowContinueDraft: boolean;
 };
 
 export type ApplicationConfigCapability = {
@@ -77,6 +79,8 @@ const DEFAULT_APPLICATION_CONFIG: ApplicationConfig = {
   allowExternalEmbedUrls: false,
   chatMessageMaxWidth: null,
   terminalEnabled: readDocumentTerminalEnabled() ?? false,
+  workspaceLiveWorkVisible: true,
+  workspaceLiveWorkShowContinueDraft: true,
 };
 
 function normalizeSeamColor(value: unknown): string | null {
@@ -152,6 +156,8 @@ function normalizeApplicationConfig(parsed: ControlUiBootstrapConfig): Applicati
         ? parsed.chatMessageMaxWidth
         : null,
     terminalEnabled: parsed.terminalEnabled === true,
+    workspaceLiveWorkVisible: parsed.workspaceLiveWorkVisible !== false,
+    workspaceLiveWorkShowContinueDraft: parsed.workspaceLiveWorkShowContinueDraft !== false,
   };
 }
 

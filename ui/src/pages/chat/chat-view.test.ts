@@ -4230,6 +4230,32 @@ describe("right-click Reply", () => {
     ).not.toBeNull();
   });
 
+  it("keeps live-work status read-only when the Continue draft affordance is hidden", () => {
+    const container = renderChatView({
+      liveWork: {
+        view: {
+          kind: "plan",
+          stale: false,
+          projectName: "Northstar",
+          planStatus: "ready",
+          currentStep: "Implement the next slice",
+          continueDraft: "Continue Northstar",
+        },
+        canContinue: true,
+        showContinueDraft: false,
+        onContinue: vi.fn(),
+        onOpenDetails: vi.fn(),
+        onRefresh: vi.fn(),
+      },
+    });
+
+    expect(container.querySelector(".chat-live-work")).not.toBeNull();
+    expect(container.querySelector(".chat-live-work")?.textContent).toContain("Northstar");
+    expect(container.querySelector(".chat-live-work__actions")?.textContent).not.toContain(
+      "Continue",
+    );
+  });
+
   it("renders only the generic localized live-work refresh error", () => {
     const container = renderChatView({
       liveWork: {

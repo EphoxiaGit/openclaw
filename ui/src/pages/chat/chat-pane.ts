@@ -150,6 +150,8 @@ class ChatPane extends LitElement {
   private readonly liveWorkState: LiveWorkState = createLiveWorkState();
   private liveWorkRunActive = false;
   private liveWorkAnnouncement = "";
+  private liveWorkVisible = true;
+  private liveWorkShowContinueDraft = true;
 
   private markSessionRead(row: GatewaySessionRow | undefined) {
     const state = this.state;
@@ -251,8 +253,13 @@ class ChatPane extends LitElement {
     if (!state) {
       return;
     }
-    void refreshLiveWork(this.liveWorkState, state.client, state.sessionKey, state.connected, () =>
-      state.requestUpdate?.(),
+    void refreshLiveWork(
+      this.liveWorkState,
+      state.client,
+      state.sessionKey,
+      state.connected,
+      () => state.requestUpdate?.(),
+      this.liveWorkVisible,
     );
   }
 
@@ -654,6 +661,11 @@ class ChatPane extends LitElement {
       return;
     }
     const previousTerminalAvailable = state.terminalAvailable;
+    const liveWorkVisibilityChanged = this.liveWorkVisible !== config.workspaceLiveWorkVisible;
+    const liveWorkDraftChanged =
+      this.liveWorkShowContinueDraft !== config.workspaceLiveWorkShowContinueDraft;
+    this.liveWorkVisible = config.workspaceLiveWorkVisible;
+    this.liveWorkShowContinueDraft = config.workspaceLiveWorkShowContinueDraft;
     state.terminalAvailable =
       config.terminalEnabled &&
       state.connected &&
@@ -669,7 +681,9 @@ class ChatPane extends LitElement {
       state.terminalAvailable === previousTerminalAvailable &&
       state.embedSandboxMode === config.embedSandboxMode &&
       state.allowExternalEmbedUrls === config.allowExternalEmbedUrls &&
-      state.chatMessageMaxWidth === config.chatMessageMaxWidth
+      state.chatMessageMaxWidth === config.chatMessageMaxWidth &&
+      !liveWorkVisibilityChanged &&
+      !liveWorkDraftChanged
     ) {
       return;
     }
@@ -677,6 +691,12 @@ class ChatPane extends LitElement {
     state.embedSandboxMode = config.embedSandboxMode;
     state.allowExternalEmbedUrls = config.allowExternalEmbedUrls;
     state.chatMessageMaxWidth = config.chatMessageMaxWidth;
+    if (liveWorkVisibilityChanged) {
+      if (!this.liveWorkVisible && state.sidebarContent?.kind === "work-plan") {
+        state.handleCloseSidebar();
+      }
+      this.refreshLiveWork();
+    }
     state.requestUpdate?.();
   }
 
@@ -868,7 +888,7 @@ class ChatPane extends LitElement {
       state.sessionsResult?.sessions,
       state.sessionKey,
     );
-    const liveWorkView = this.liveWorkState.view;
+    const liveWorkView = this.liveWorkVisible ? this.liveWorkState.view : null;
     const liveWorkSessionKey = this.liveWorkState.sessionKey;
     const liveWorkRequestVersion = this.liveWorkState.requestVersion;
     const liveWorkClient = this.liveWorkState.client;
@@ -877,29 +897,30 @@ class ChatPane extends LitElement {
     const currentComposerDraft =
       this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR)?.value ??
       state.chatMessage;
-    const canContinueLiveWork = liveWorkView
-      ? canActivateLiveWorkContinue({
-          paneActive: this.active,
-          paneConnected: this.isConnected,
-          expectedSessionKey: liveWorkSessionKey,
-          currentSessionKey: state.sessionKey,
-          expectedRequestVersion: liveWorkRequestVersion,
-          currentRequestVersion: this.liveWorkState.requestVersion,
-          expectedClient: liveWorkClient,
-          currentClient: state.client,
-          loading: this.liveWorkState.loading,
-          connected: state.connected,
-          archived: selectedSessionArchived,
-          runActive: liveWorkRunActive,
-          sending: state.chatSending,
-          composing: isChatComposerComposing(this.paneId),
-          stateDraft: state.chatMessage,
-          liveDraft: currentComposerDraft,
-          expectedView: liveWorkView,
-          currentView: this.liveWorkState.view,
-          draft: liveWorkView.continueDraft ?? "",
-        })
-      : false;
+    const canContinueLiveWork =
+      liveWorkView && this.liveWorkShowContinueDraft
+        ? canActivateLiveWorkContinue({
+            paneActive: this.active,
+            paneConnected: this.isConnected,
+            expectedSessionKey: liveWorkSessionKey,
+            currentSessionKey: state.sessionKey,
+            expectedRequestVersion: liveWorkRequestVersion,
+            currentRequestVersion: this.liveWorkState.requestVersion,
+            expectedClient: liveWorkClient,
+            currentClient: state.client,
+            loading: this.liveWorkState.loading,
+            connected: state.connected,
+            archived: selectedSessionArchived,
+            runActive: liveWorkRunActive,
+            sending: state.chatSending,
+            composing: isChatComposerComposing(this.paneId),
+            stateDraft: state.chatMessage,
+            liveDraft: currentComposerDraft,
+            expectedView: liveWorkView,
+            currentView: this.liveWorkState.view,
+            draft: liveWorkView.continueDraft ?? "",
+          })
+        : false;
     const disabledReason = !state.connected
       ? t("chat.disconnected")
       : selectedSessionArchived
@@ -1022,6 +1043,7 @@ class ChatPane extends LitElement {
             view: presentLiveWorkView(liveWorkView, this.liveWorkState.loading),
             canContinue: canContinueLiveWork,
             announcement: this.liveWorkAnnouncement,
+            showContinueDraft: this.liveWorkShowContinueDraft,
             onContinue: (draft) => {
               const liveDraft =
                 this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR)?.value ??

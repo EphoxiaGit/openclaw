@@ -82,6 +82,7 @@ export type LiveWorkProps = {
   onOpenDetails: (content: SidebarContent) => void;
   onRefresh: () => void;
   announcement?: string;
+  showContinueDraft?: boolean;
 };
 
 const TERMINAL = new Set(["completed", "failed", "cancelled", "superseded"]);
@@ -455,6 +456,7 @@ export async function refreshLiveWork(
   sessionKey: string,
   connected: boolean,
   requestUpdate: () => void,
+  visible = true,
 ): Promise<void> {
   const sessionChanged = Boolean(
     state.sessionKey && !areUiSessionKeysEquivalent(state.sessionKey, sessionKey),
@@ -465,6 +467,12 @@ export async function refreshLiveWork(
   state.client = client;
   state.sessionKey = sessionKey;
   const version = ++state.requestVersion;
+  if (!visible) {
+    state.loading = false;
+    state.view = null;
+    requestUpdate();
+    return;
+  }
   if (!client || !connected) {
     state.loading = false;
     if (state.view) {
@@ -641,7 +649,7 @@ export function renderLiveWorkStrip(
             ${t("chat.liveWork.retry")}
           </button>`
         : nothing}
-      ${view.kind === "plan"
+      ${view.kind === "plan" && props.showContinueDraft !== false
         ? html`<button
             class="btn btn--sm"
             type="button"

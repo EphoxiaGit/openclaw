@@ -3,6 +3,14 @@ import { MEDIA_AUDIO_FIELD_HELP } from "./media-audio-field-metadata.js";
 import { describeTalkSilenceTimeoutDefaults } from "./talk-defaults.js";
 
 export const FIELD_HELP: Record<string, string> = {
+  workspace:
+    "Control UI workspace presentation settings. These options only change native live-work visibility and draft preparation; they never execute work or change stored project state.",
+  "workspace.liveWork":
+    "Presentation controls for the native live-work status shown in chat. Both options default to enabled when omitted.",
+  "workspace.liveWork.visible":
+    "Show the read-only live-work status strip and its details in chat. Disable this to hide the presentation and skip its project/context projection reads. Default: true.",
+  "workspace.liveWork.showContinueDraft":
+    "Show the Continue action that prepares the suggested next step in the chat draft without sending it. Default: true.",
   meta: "Metadata fields automatically maintained by OpenClaw to record write/version history for this config file. Keep these values system-managed and avoid manual edits unless debugging migration history.",
   "meta.lastTouchedVersion": "Auto-set when OpenClaw writes the config.",
   "meta.lastTouchedAt": "ISO timestamp of the last config write (auto-set).",

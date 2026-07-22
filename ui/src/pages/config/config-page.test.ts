@@ -20,6 +20,21 @@ describe("configSelectionFromSearch", () => {
       activeSubsection: null,
     });
   });
+
+  it("routes workspace and security sections without duplicating approvals in automation", () => {
+    expect(configSelectionFromSearch("workspace", "?section=workspace")).toEqual({
+      activeSection: "workspace",
+      activeSubsection: null,
+    });
+    expect(configSelectionFromSearch("security", "?section=approvals")).toEqual({
+      activeSection: "approvals",
+      activeSubsection: null,
+    });
+    expect(configSelectionFromSearch("automation", "?section=approvals")).toEqual({
+      activeSection: "commands",
+      activeSubsection: null,
+    });
+  });
 });
 
 describe("supportsSystemInfo", () => {
