@@ -1288,6 +1288,83 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
+/* Personas */
+.personas-page__actions,
+.personas-page__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.personas-page__actions {
+  justify-content: flex-end;
+}
+
+.personas-page__actions--start {
+  justify-content: flex-start;
+}
+
+.personas-page__summary,
+.personas-page__form {
+  margin-top: 16px;
+}
+
+.personas-page__form-section,
+.personas-page__history,
+.personas-page__lifecycle {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.personas-page__form-section {
+  display: grid;
+  gap: 12px;
+}
+
+.personas-page__identity-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.personas-page__bounded-field {
+  max-width: 420px;
+}
+
+.personas-page__lifecycle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.personas-page__empty {
+  padding: 18px;
+}
+
+.personas-page__revision-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 700px) {
+  .personas-page__identity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .personas-page__revision-row,
+  .personas-page__lifecycle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* ===========================================
    Cron Form
    =========================================== */

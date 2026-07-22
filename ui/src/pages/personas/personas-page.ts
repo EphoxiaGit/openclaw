@@ -10,6 +10,9 @@ import { subtitleForRoute, titleForRoute } from "../../app-navigation.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 
 type Persona = PersonasListResult["personas"][number];
+type PersonasPanel = "overview" | "identity" | "agents" | "revisions";
+type PersonasMode = "browse" | "create" | "import";
+
 const DEFAULT_REVISION = {
   identity: "A helpful assistant identity.",
   relationship: "A trusted collaborator for this conversation.",
@@ -26,10 +29,13 @@ export class PersonasPage extends LitElement {
   @consume({ context: applicationContext, subscribe: false }) private context!: ApplicationContext;
   @state() private selectedId: string | null = null;
   @state() private detail: PersonasGetResult | null = null;
+  @state() private panel: PersonasPanel = "overview";
+  @state() private mode: PersonasMode = "browse";
   @state() private busy = false;
   @state() private error: string | null = null;
   @state() private lucyPreview: { agentId: string; identity: string; soul: string } | null = null;
   @state() private lucyAgentId = "";
+  private selectionRequest = 0;
   private stop?: () => void;
   private stopAgents?: () => void;
 
@@ -53,13 +59,20 @@ export class PersonasPage extends LitElement {
   }
 
   private async select(personaId: string) {
+    const request = ++this.selectionRequest;
     this.selectedId = personaId;
+    this.mode = "browse";
     this.detail = null;
     this.error = null;
     try {
-      this.detail = await this.context.personas.get(personaId);
+      const detail = await this.context.personas.get(personaId);
+      if (request === this.selectionRequest && this.selectedId === personaId) {
+        this.detail = detail;
+      }
     } catch (error) {
-      this.error = String(error);
+      if (request === this.selectionRequest && this.selectedId === personaId) {
+        this.error = String(error);
+      }
     }
   }
 
@@ -177,10 +190,12 @@ export class PersonasPage extends LitElement {
       return;
     }
     const form = new FormData(event.currentTarget as HTMLFormElement);
-    const delegates = String(form.get("delegates") || "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+    const delegates = form.has("delegates")
+      ? String(form.get("delegates") || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : this.detail.persona.allowedDelegateAgentIds;
     this.busy = true;
     try {
       await this.context.personas.update({
@@ -188,10 +203,10 @@ export class PersonasPage extends LitElement {
         expectedRevision: this.detail.persona.recordRevision,
         idempotencyKey: crypto.randomUUID(),
         metadata: {
-          displayName: String(form.get("displayName")),
-          description: String(form.get("description")),
+          displayName: String(form.get("displayName") ?? this.detail.persona.displayName),
+          description: String(form.get("description") ?? this.detail.persona.description),
         },
-        primaryAgentId: String(form.get("primaryAgentId")),
+        primaryAgentId: String(form.get("primaryAgentId") ?? this.detail.persona.primaryAgentId),
         allowedDelegateAgentIds: delegates,
       });
       await this.context.personas.refresh(true);
@@ -270,244 +285,491 @@ export class PersonasPage extends LitElement {
         this.detail = null;
       }
       await this.context.personas.refresh(true);
+      if (action !== "delete") {
+        await this.select(persona.personaId);
+      }
     } finally {
       this.busy = false;
     }
   }
 
-  private renderDetail(detail: PersonasGetResult) {
-    const { persona, activeRevision, revisions } = detail;
-    const agents = this.context.agents.state.agentsList?.agents ?? [];
+  private renderTabs(detail: PersonasGetResult) {
+    const tabs: Array<{ id: PersonasPanel; label: string; count?: number }> = [
+      { id: "overview", label: "Overview" },
+      { id: "identity", label: "Identity & Personality" },
+      {
+        id: "agents",
+        label: "Agent Binding",
+        count: detail.persona.allowedDelegateAgentIds.length + 1,
+      },
+      { id: "revisions", label: "Revisions", count: detail.revisions.length },
+    ];
+    return html`<div class="agent-tabs" role="tablist" aria-label="Persona settings">
+      ${tabs.map(
+        (tab) => html`<button
+          class="agent-tab ${this.panel === tab.id ? "active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected=${this.panel === tab.id ? "true" : "false"}
+          @click=${() => {
+            this.panel = tab.id;
+          }}
+        >
+          ${tab.label}${tab.count == null
+            ? nothing
+            : html`<span class="agent-tab-count">${tab.count}</span>`}
+        </button>`,
+      )}
+    </div>`;
+  }
+
+  private renderOverview(detail: PersonasGetResult) {
+    const { persona, activeRevision } = detail;
     return html`<section class="card">
-        <h2>${persona.displayName}</h2>
-        ${persona.missingAgentIds.length
-          ? html`<div class="callout warning">
-              Missing Agents: ${persona.missingAgentIds.join(", ")}
-            </div>`
-          : nothing}
-        <form class="stack" @submit=${this.updatePersona}>
-          <label
-            >Display name<input name="displayName" .value=${persona.displayName} required
-          /></label>
-          <label>Description<textarea name="description">${persona.description}</textarea></label>
-          <label
-            >Primary Agent<select name="primaryAgentId">
-              ${agents.map(
-                (agent) =>
-                  html`<option value=${agent.id} ?selected=${agent.id === persona.primaryAgentId}>
-                    ${agent.name ?? agent.id}
-                  </option>`,
-              )}
-            </select></label
-          >
-          <label
-            >Delegate Agent IDs<input
-              name="delegates"
-              .value=${persona.allowedDelegateAgentIds.join(", ")}
-          /></label>
-          <button class="btn primary" ?disabled=${this.busy}>Save metadata and bindings</button>
-        </form>
-      </section>
-      <section class="card">
-        <h2>Active revision ${activeRevision.revisionNumber}</h2>
-        <form class="stack" @submit=${this.revise}>
-          <label
-            >Identity<textarea name="identity" required>
-${activeRevision.content.identity}</textarea
-            >
+      <div class="personas-page__section-header">
+        <div>
+          <div class="card-title">Overview</div>
+          <div class="card-sub">Identity metadata and lifecycle.</div>
+        </div>
+        <span class="pill">${persona.status}</span>
+      </div>
+      <div class="agents-overview-grid personas-page__summary">
+        <div class="agent-kv">
+          <div class="label">Slug</div>
+          <div class="mono">${persona.slug}</div>
+        </div>
+        <div class="agent-kv">
+          <div class="label">Primary Agent</div>
+          <div class="mono">${persona.primaryAgentId}</div>
+        </div>
+        <div class="agent-kv">
+          <div class="label">Active revision</div>
+          <div>#${activeRevision.revisionNumber}</div>
+        </div>
+      </div>
+      <form class="stack personas-page__form" @submit=${this.updatePersona}>
+        <div class="form-grid">
+          <label class="field">
+            <span>Display name</span>
+            <input name="displayName" .value=${persona.displayName} maxlength="120" required />
           </label>
-          <label
-            >Relationship<textarea name="relationship" required>
-${activeRevision.content.relationship}</textarea
-            >
+          <label class="field full">
+            <span>Description</span>
+            <textarea name="description" maxlength="1000">${persona.description}</textarea>
           </label>
-          <label
-            >Communication style<textarea name="communicationStyle" required>
+        </div>
+        <div class="personas-page__actions">
+          <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+            Save profile
+          </button>
+        </div>
+      </form>
+      <div class="personas-page__lifecycle">
+        <div>
+          <div class="label">Lifecycle</div>
+          <div class="card-sub">Archive unused Personas before permanently deleting them.</div>
+        </div>
+        <div class="personas-page__actions">
+          ${persona.status === "active"
+            ? html`<button
+                type="button"
+                class="btn btn--sm"
+                ?disabled=${this.busy}
+                @click=${() => void this.lifecycle("archive", persona)}
+              >
+                Archive
+              </button>`
+            : html`<button
+                  type="button"
+                  class="btn btn--sm"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.lifecycle("restore", persona)}
+                >
+                  Restore</button
+                ><button
+                  type="button"
+                  class="btn btn--sm danger"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.lifecycle("delete", persona)}
+                >
+                  Delete
+                </button>`}
+        </div>
+      </div>
+    </section>`;
+  }
+
+  private renderIdentity(detail: PersonasGetResult) {
+    const { activeRevision } = detail;
+    return html`<section class="card">
+      <div class="card-title">Identity & Personality</div>
+      <div class="card-sub">
+        Create an immutable revision of this Persona's identity and behavior.
+      </div>
+      <form class="stack personas-page__form" @submit=${this.revise}>
+        <div class="form-grid personas-page__identity-grid">
+          <label class="field">
+            <span>Identity</span>
+            <textarea name="identity" required>${activeRevision.content.identity}</textarea>
+          </label>
+          <label class="field">
+            <span>Relationship</span>
+            <textarea name="relationship" required>${activeRevision.content.relationship}</textarea>
+          </label>
+          <label class="field">
+            <span>Communication style</span>
+            <textarea name="communicationStyle" required>
 ${activeRevision.content.communicationStyle}</textarea
             >
           </label>
-          <label
-            >Behavior guidance<textarea name="behaviorGuidance" required>
+          <label class="field">
+            <span>Behavior guidance</span>
+            <textarea name="behaviorGuidance" required>
 ${activeRevision.content.behaviorGuidance}</textarea
             >
           </label>
-          <label>Reason<input name="reason" value="Persona revision" required /></label>
-          <button class="btn primary" ?disabled=${this.busy}>Create revision</button>
-        </form>
-        <h3>Revision history</h3>
-        ${revisions.map(
-          (revision) =>
-            html`<div class="row">
-              <span>#${revision.revisionNumber} · ${revision.reason}</span>${revision.revisionId ===
-              persona.activeRevisionId
-                ? html`<strong>Active</strong>`
-                : html`<button
-                    class="btn"
-                    ?disabled=${this.busy}
-                    @click=${() => void this.rollback(revision.revisionId)}
-                  >
-                    Rollback
-                  </button>`}
-            </div>`,
-        )}
-      </section>`;
+          <label class="field full">
+            <span>Revision reason</span>
+            <input name="reason" value="Persona revision" required />
+          </label>
+        </div>
+        <div class="personas-page__actions">
+          <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+            Create revision
+          </button>
+        </div>
+      </form>
+    </section>`;
+  }
+
+  private renderAgentBinding(detail: PersonasGetResult) {
+    const { persona } = detail;
+    const agents = this.context.agents.state.agentsList?.agents ?? [];
+    return html`<section class="card">
+      <div class="card-title">Agent Binding</div>
+      <div class="card-sub">
+        Choose the primary execution Agent and the Agents this Persona may delegate to.
+      </div>
+      ${persona.missingAgentIds.length
+        ? html`<div class="callout warn personas-page__form">
+            Missing Agents: ${persona.missingAgentIds.join(", ")}
+          </div>`
+        : nothing}
+      <form class="stack personas-page__form" @submit=${this.updatePersona}>
+        <div class="form-grid">
+          <label class="field">
+            <span>Primary Agent</span>
+            <select name="primaryAgentId" required>
+              ${agents.map(
+                (agent) => html`<option
+                  value=${agent.id}
+                  ?selected=${agent.id === persona.primaryAgentId}
+                >
+                  ${agent.name ?? agent.id}
+                </option>`,
+              )}
+            </select>
+          </label>
+          <label class="field">
+            <span>Delegate Agent IDs</span>
+            <input
+              name="delegates"
+              .value=${persona.allowedDelegateAgentIds.join(", ")}
+              placeholder="agent-a, agent-b"
+            />
+          </label>
+        </div>
+        <div class="personas-page__actions">
+          <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+            Save Agent binding
+          </button>
+        </div>
+      </form>
+    </section>`;
+  }
+
+  private renderRevisions(detail: PersonasGetResult) {
+    return html`<section class="card">
+      <div class="card-title">Revision history</div>
+      <div class="card-sub">Review or restore a previous immutable Persona revision.</div>
+      <div class="personas-page__history">
+        ${detail.revisions.length === 0
+          ? html`<div class="muted">No revisions recorded.</div>`
+          : detail.revisions.map(
+              (revision) => html`<div class="personas-page__revision-row">
+                <div>
+                  <strong>#${revision.revisionNumber}</strong>
+                  <span class="muted"> · ${revision.reason}</span>
+                </div>
+                ${revision.revisionId === detail.persona.activeRevisionId
+                  ? html`<span class="pill">Active</span>`
+                  : html`<button
+                      type="button"
+                      class="btn btn--sm"
+                      ?disabled=${this.busy}
+                      @click=${() => void this.rollback(revision.revisionId)}
+                    >
+                      Rollback
+                    </button>`}
+              </div>`,
+            )}
+      </div>
+    </section>`;
+  }
+
+  private renderSelected(detail: PersonasGetResult) {
+    return html`${this.renderTabs(detail)}${this.panel === "overview"
+      ? this.renderOverview(detail)
+      : this.panel === "identity"
+        ? this.renderIdentity(detail)
+        : this.panel === "agents"
+          ? this.renderAgentBinding(detail)
+          : this.renderRevisions(detail)}`;
+  }
+
+  private renderCreate() {
+    const agents = this.context.agents.state.agentsList?.agents ?? [];
+    return html`<section class="card">
+      <div class="card-title">Create Persona</div>
+      <div class="card-sub">Add a reusable identity above Agents without changing Agent files.</div>
+      <form class="stack personas-page__form" @submit=${this.createPersona}>
+        <div class="form-grid personas-page__identity-grid">
+          <label class="field">
+            <span>Slug</span>
+            <input name="slug" pattern="[a-z0-9][a-z0-9-]*" maxlength="64" required />
+          </label>
+          <label class="field">
+            <span>Display name</span>
+            <input name="displayName" maxlength="120" required />
+          </label>
+          <label class="field">
+            <span>Primary Agent</span>
+            <select name="primaryAgentId" required>
+              <option value="">Select Agent</option>
+              ${agents.map(
+                (agent) => html`<option value=${agent.id}>${agent.name ?? agent.id}</option>`,
+              )}
+            </select>
+          </label>
+          <label class="field">
+            <span>Delegate Agent IDs</span>
+            <input name="delegates" placeholder="agent-a, agent-b" />
+          </label>
+          <label class="field full">
+            <span>Description</span>
+            <textarea name="description" maxlength="1000"></textarea>
+          </label>
+        </div>
+        <div class="personas-page__form-section">
+          <div class="label">Identity & behavior</div>
+          <div class="form-grid personas-page__identity-grid">
+            <label class="field">
+              <span>Identity</span>
+              <textarea name="identity" maxlength="2000" required>
+${DEFAULT_REVISION.identity}</textarea
+              >
+            </label>
+            <label class="field">
+              <span>Relationship</span>
+              <textarea name="relationship" maxlength="2000" required>
+${DEFAULT_REVISION.relationship}</textarea
+              >
+            </label>
+            <label class="field">
+              <span>Communication style</span>
+              <textarea name="communicationStyle" maxlength="2000" required>
+${DEFAULT_REVISION.communicationStyle}</textarea
+              >
+            </label>
+            <label class="field">
+              <span>Behavior guidance</span>
+              <textarea name="behaviorGuidance" maxlength="4000" required>
+${DEFAULT_REVISION.behaviorGuidance}</textarea
+              >
+            </label>
+          </div>
+        </div>
+        <div class="personas-page__actions">
+          <button type="button" class="btn btn--sm" @click=${() => (this.mode = "browse")}>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+            Create Persona
+          </button>
+        </div>
+      </form>
+    </section>`;
+  }
+
+  private renderImport() {
+    const agents = this.context.agents.state.agentsList?.agents ?? [];
+    return html`<section class="card">
+      <div class="card-title">Import Lucy</div>
+      <div class="card-sub">Create Lucy from an Agent's IDENTITY.md and SOUL.md files.</div>
+      <div class="stack personas-page__form">
+        <label class="field personas-page__bounded-field">
+          <span>Backing Agent</span>
+          <select
+            .value=${this.lucyAgentId}
+            @change=${(event: Event) => {
+              this.lucyAgentId = (event.currentTarget as HTMLSelectElement).value;
+            }}
+          >
+            <option value="">Select Agent</option>
+            ${agents.map(
+              (agent) => html`<option value=${agent.id}>${agent.name ?? agent.id}</option>`,
+            )}
+          </select>
+        </label>
+        <div class="personas-page__actions personas-page__actions--start">
+          <button type="button" class="btn btn--sm" @click=${() => (this.mode = "browse")}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn--sm primary"
+            ?disabled=${this.busy || !this.lucyAgentId}
+            @click=${() => void this.previewLucy()}
+          >
+            Preview import
+          </button>
+        </div>
+        ${this.lucyPreview
+          ? html`<form class="stack personas-page__form-section" @submit=${this.createLucy}>
+              <div class="card-sub">Source Agent: ${this.lucyPreview.agentId}</div>
+              <div class="form-grid personas-page__identity-grid">
+                <label class="field">
+                  <span>Display name</span>
+                  <input name="displayName" value="Lucy" required />
+                </label>
+                <label class="field">
+                  <span>Description</span>
+                  <input name="description" value="Imported from Agent IDENTITY.md and SOUL.md." />
+                </label>
+                <label class="field">
+                  <span>Identity</span>
+                  <textarea name="identity" required>${this.lucyPreview.identity}</textarea>
+                </label>
+                <label class="field">
+                  <span>Behavior guidance (SOUL.md)</span>
+                  <textarea name="soul" required>${this.lucyPreview.soul}</textarea>
+                </label>
+              </div>
+              <div class="personas-page__actions">
+                <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+                  Create Lucy Persona
+                </button>
+              </div>
+            </form>`
+          : nothing}
+      </div>
+    </section>`;
   }
 
   override render() {
     const capability = this.context.personas.state;
     const personas = capability.list?.personas ?? [];
-    const agents = this.context.agents.state.agentsList?.agents ?? [];
     const selected = this.selected ?? personas[0];
     if (selected && selected.personaId !== this.selectedId) {
       void this.select(selected.personaId);
     }
+    const detail = this.detail?.persona.personaId === selected?.personaId ? this.detail : null;
     return html`<section class="content-header content-header--page">
         <div>
           <div class="page-title">${titleForRoute("personas")}</div>
           <div class="page-sub">${subtitleForRoute("personas")}</div>
         </div>
-        <div class="row">
-          <label
-            >Lucy backing Agent<select
-              .value=${this.lucyAgentId}
-              @change=${(event: Event) => {
-                this.lucyAgentId = (event.currentTarget as HTMLSelectElement).value;
-              }}
-            >
-              <option value="">Select Agent</option>
-              ${agents.map(
-                (agent) => html`<option value=${agent.id}>${agent.name ?? agent.id}</option>`,
-              )}
-            </select></label
-          ><button
-            class="btn"
-            ?disabled=${this.busy || !this.lucyAgentId}
-            @click=${() => void this.previewLucy()}
-          >
-            Import Lucy</button
-          ><button
-            class="btn"
-            ?disabled=${capability.loading}
-            @click=${() => void this.context.personas.refresh(true)}
-          >
-            Refresh
-          </button>
-        </div>
       </section>
-      ${this.error || capability.error
-        ? html`<div class="callout danger">${this.error ?? capability.error}</div>`
-        : nothing}
-      ${this.lucyPreview
-        ? html`<section class="card">
-            <h2>Preview Lucy import</h2>
-            <p>
-              Source Agent: ${this.lucyPreview.agentId}. Review this authorized IDENTITY.md and
-              SOUL.md mapping before creation.
-            </p>
-            <form class="stack" @submit=${this.createLucy}>
-              <label>Display name<input name="displayName" value="Lucy" required /></label
-              ><label
-                >Description<input
-                  name="description"
-                  value="Imported from Agent IDENTITY.md and SOUL.md." /></label
-              ><label
-                >Identity<textarea name="identity" required>
-${this.lucyPreview.identity}</textarea
-                ></label
-              ><label
-                >Behavior guidance (SOUL.md)<textarea name="soul" required>
-${this.lucyPreview.soul}</textarea
-                ></label
-              ><button class="btn primary" ?disabled=${this.busy}>Create Lucy Persona</button>
-            </form>
-          </section>`
-        : nothing}
-      <section class="card">
-        <h2>Create Persona</h2>
-        <form class="stack" @submit=${this.createPersona}>
-          <label
-            >Slug<input name="slug" pattern="[a-z0-9][a-z0-9-]*" maxlength="64" required
-          /></label>
-          <label>Display name<input name="displayName" maxlength="120" required /></label>
-          <label>Description<textarea name="description" maxlength="1000"></textarea></label>
-          <label
-            >Primary Agent<select name="primaryAgentId" required>
-              <option value="">Select Agent</option>
-              ${agents.map(
-                (agent) => html`<option value=${agent.id}>${agent.name ?? agent.id}</option>`,
-              )}
-            </select></label
-          >
-          <label>Delegate Agent IDs<input name="delegates" placeholder="agent-a, agent-b" /></label>
-          <label
-            >Identity<textarea name="identity" maxlength="2000" required>
-${DEFAULT_REVISION.identity}</textarea
-            >
-          </label>
-          <label
-            >Relationship<textarea name="relationship" maxlength="2000" required>
-${DEFAULT_REVISION.relationship}</textarea
-            >
-          </label>
-          <label
-            >Communication style<textarea name="communicationStyle" maxlength="2000" required>
-${DEFAULT_REVISION.communicationStyle}</textarea
-            >
-          </label>
-          <label
-            >Behavior guidance<textarea name="behaviorGuidance" maxlength="4000" required>
-${DEFAULT_REVISION.behaviorGuidance}</textarea
-            >
-          </label>
-          <button class="btn primary" ?disabled=${this.busy}>Create Persona</button>
-        </form>
-      </section>
-      <div class="settings-workspace">
-        <aside class="settings-nav">
-          ${personas.length === 0
-            ? html`<p class="muted">No Personas yet.</p>`
-            : personas.map(
-                (persona) =>
-                  html`<button
-                    class="settings-nav__item ${selected?.personaId === persona.personaId
-                      ? "active"
-                      : ""}"
-                    @click=${() => void this.select(persona.personaId)}
-                  >
-                    <strong>${persona.displayName}</strong
-                    ><span>${persona.status} · ${persona.primaryAgentId}</span>
-                  </button>`,
-              )}
-        </aside>
-        <main class="settings-content">
-          ${this.detail ? this.renderDetail(this.detail) : nothing}${selected
-            ? html`<section class="card">
-                <div class="row">
-                  ${selected.status === "active"
-                    ? html`<button
-                        class="btn"
-                        ?disabled=${this.busy}
-                        @click=${() => void this.lifecycle("archive", selected)}
+      <div class="agents-layout personas-page">
+        <section class="agents-toolbar">
+          <div class="agents-toolbar-row">
+            <div class="agents-control-select">
+              <select
+                class="agents-select"
+                .value=${selected?.personaId ?? ""}
+                ?disabled=${capability.loading || personas.length === 0}
+                @change=${(event: Event) => {
+                  const personaId = (event.currentTarget as HTMLSelectElement).value;
+                  if (personaId) {
+                    void this.select(personaId);
+                  }
+                }}
+              >
+                ${personas.length === 0
+                  ? html`<option value="">No Personas yet</option>`
+                  : personas.map(
+                      (persona) => html`<option
+                        value=${persona.personaId}
+                        ?selected=${persona.personaId === selected?.personaId}
                       >
-                        Archive
-                      </button>`
-                    : html`<button
-                          class="btn"
-                          ?disabled=${this.busy}
-                          @click=${() => void this.lifecycle("restore", selected)}
-                        >
-                          Restore</button
-                        ><button
-                          class="btn danger"
-                          ?disabled=${this.busy}
-                          @click=${() => void this.lifecycle("delete", selected)}
-                        >
-                          Delete
-                        </button>`}
-                </div>
-              </section>`
+                        ${persona.displayName}${persona.status === "archived" ? " (archived)" : ""}
+                      </option>`,
+                    )}
+              </select>
+            </div>
+            <div class="agents-toolbar-actions">
+              <button
+                type="button"
+                class="btn btn--sm btn--ghost"
+                @click=${() => {
+                  this.mode = "create";
+                  this.error = null;
+                }}
+              >
+                New Persona
+              </button>
+              <button
+                type="button"
+                class="btn btn--sm btn--ghost"
+                @click=${() => {
+                  this.mode = "import";
+                  this.error = null;
+                  this.lucyPreview = null;
+                }}
+              >
+                Import Lucy
+              </button>
+              <button
+                type="button"
+                class="btn btn--sm agents-refresh-btn"
+                ?disabled=${capability.loading}
+                @click=${() => void this.context.personas.refresh(true)}
+              >
+                ${capability.loading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+          </div>
+        </section>
+        <section class="agents-main">
+          ${this.error || capability.error
+            ? html`<div class="callout danger">${this.error ?? capability.error}</div>`
             : nothing}
-        </main>
+          ${this.mode === "create"
+            ? this.renderCreate()
+            : this.mode === "import"
+              ? this.renderImport()
+              : detail
+                ? this.renderSelected(detail)
+                : selected
+                  ? html`<section class="card personas-page__empty muted" role="status">
+                      Loading ${selected.displayName}…
+                    </section>`
+                  : html`<section class="card">
+                      <div class="card-title">Create your first Persona</div>
+                      <div class="card-sub">
+                        Personas combine identity and personality with one or more Agents.
+                      </div>
+                      <div class="personas-page__actions personas-page__actions--start">
+                        <button
+                          type="button"
+                          class="btn btn--sm primary"
+                          @click=${() => (this.mode = "create")}
+                        >
+                          New Persona
+                        </button>
+                      </div>
+                    </section>`}
+        </section>
       </div>`;
   }
 }
