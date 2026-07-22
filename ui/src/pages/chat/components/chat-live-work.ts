@@ -8,6 +8,7 @@ import type { SidebarContent, WorkPlanSidebarContent } from "./chat-sidebar.ts";
 type WireAttempt = {
   attemptNumber?: unknown;
   ownerType?: unknown;
+  ownerId?: unknown;
   ownerState?: unknown;
   recoveryState?: unknown;
   createdAt?: unknown;
@@ -28,6 +29,7 @@ type WirePlan = {
   recordRevision?: unknown;
   definitionRevision?: unknown;
   requirements?: unknown;
+  workers?: unknown;
   goal?: { objective?: unknown; recordRevision?: unknown };
   steps?: unknown;
   projection?: {
@@ -43,6 +45,23 @@ type WireProject = {
   primaryConversationId?: unknown;
   recordRevision?: unknown;
   plans?: unknown;
+};
+type WireWorker = {
+  key?: unknown;
+  parentKey?: unknown;
+  label?: unknown;
+  ownerKind?: unknown;
+  role?: unknown;
+  lane?: unknown;
+  state?: unknown;
+  health?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  runtime?: unknown;
+  progress?: unknown;
+  result?: unknown;
+  contextPercent?: unknown;
+  elapsedMs?: unknown;
 };
 type WireContext = {
   project?: { recordRevision?: unknown };
@@ -341,6 +360,31 @@ const OWNER_STATES = new Set([
   "lost",
   "unknown",
 ]);
+const WORKER_STATES = new Set([
+  "queued",
+  "running",
+  "waiting",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "lost",
+  "unknown",
+]);
+const WORKER_HEALTH = new Set([
+  "available",
+  "busy",
+  "degraded",
+  "unavailable",
+  "disabled",
+  "misconfigured",
+  "quota_exhausted",
+  "authentication_required",
+  "runtime_unavailable",
+  "unknown",
+]);
+const WORKER_OWNER_KINDS = new Set(["inline", "isolated", "durable_job", "unknown"]);
+const TECHNICAL_TEXT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
 
 function allowlisted(value: unknown, values: Set<string>, fallback = "unknown"): string {
   return typeof value === "string" && values.has(value) ? value : fallback;
@@ -348,6 +392,47 @@ function allowlisted(value: unknown, values: Set<string>, fallback = "unknown"):
 
 function timestamp(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function technicalText(value: unknown): string {
+  return typeof value === "string" && TECHNICAL_TEXT.test(value) ? value : "";
+}
+
+function normalizeWorkers(plan: WirePlan): NonNullable<WorkPlanSidebarContent["workers"]> {
+  const workers = Array.isArray(plan.workers) ? (plan.workers as WireWorker[]).slice(0, 100) : [];
+  const labelByKey = new Map(
+    workers.flatMap((worker) =>
+      typeof worker.key === "string" ? [[worker.key, safeTitle(worker.label)] as const] : [],
+    ),
+  );
+  return workers.map((worker, index) => ({
+    label:
+      safeTitle(worker.label) ||
+      t("chat.liveWork.detail.workerNumber", { number: formatLiveWorkNumber(index + 1) }),
+    parentLabel:
+      typeof worker.parentKey === "string" ? (labelByKey.get(worker.parentKey) ?? null) : null,
+    ownerKind: allowlisted(worker.ownerKind, WORKER_OWNER_KINDS),
+    role: technicalText(worker.role) || "unknown",
+    lane: technicalText(worker.lane) || "unknown",
+    state: allowlisted(worker.state, WORKER_STATES),
+    health: allowlisted(worker.health, WORKER_HEALTH),
+    provider: technicalText(worker.provider),
+    model: technicalText(worker.model),
+    runtime: technicalText(worker.runtime),
+    progress: safeNarrative(worker.progress),
+    result: safeNarrative(worker.result),
+    contextPercent:
+      typeof worker.contextPercent === "number" &&
+      Number.isInteger(worker.contextPercent) &&
+      worker.contextPercent >= 0 &&
+      worker.contextPercent <= 100
+        ? worker.contextPercent
+        : null,
+    elapsedMs:
+      typeof worker.elapsedMs === "number" && Number.isFinite(worker.elapsedMs)
+        ? Math.max(0, worker.elapsedMs)
+        : null,
+  }));
 }
 
 function selectPlan(
@@ -518,6 +603,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
     blockedSteps: blocked,
     orderedSteps,
     attempts,
+    workers: normalizeWorkers(plan),
     requirements: {
       mapped: requirements.filter((item) => item.disposition === "mapped").map((item) => item.text),
       excluded: requirements

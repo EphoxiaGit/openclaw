@@ -258,9 +258,71 @@ describe("work plan sidebar", () => {
     expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(
       "pane-a-work-tab-plan",
     );
-    expect(nextWorkPlanDetailTab("plan", "ArrowRight")).toBe("attempts");
+    expect(nextWorkPlanDetailTab("plan", "ArrowRight")).toBe("agents");
     expect(nextWorkPlanDetailTab("plan", "ArrowLeft")).toBe("evidence");
     expect(nextWorkPlanDetailTab("context", "Home")).toBe("plan");
     expect(nextWorkPlanDetailTab("context", "End")).toBe("evidence");
+  });
+
+  it("renders observed worker state in the Agents tab", () => {
+    const container = document.createElement("div");
+    render(
+      renderMarkdownSidebar({
+        content: {
+          kind: "work-plan",
+          title: "Northstar work details",
+          projectName: "Northstar",
+          planPosition: { x: 1, n: 3 },
+          planStatus: "running",
+          summary: "Bounded work.",
+          focus: "Implementation",
+          capsuleCounts: { constraints: 0, decisions: 0, openQuestions: 0, conflicts: 0 },
+          provenanceStatus: "current",
+          objective: "Ship the slice",
+          activeSteps: ["Implement the slice"],
+          readySteps: [],
+          blockedSteps: [],
+          workers: [
+            {
+              label: "Research worker",
+              parentLabel: "Main assistant",
+              ownerKind: "isolated",
+              role: "Researcher",
+              lane: "subagent",
+              state: "running",
+              health: "busy",
+              provider: "openai",
+              model: "gpt-5.6-terra",
+              runtime: "codex",
+              progress: "Comparing existing implementation seams.",
+              result: "",
+              contextPercent: 42,
+              elapsedMs: 1250,
+            },
+          ],
+          evidenceCount: 0,
+          revisions: { project: 1, plan: 1, goal: 1, capsule: 1 },
+          checkpointPresent: false,
+          nextTask: "Implement the slice",
+          nextTaskSource: "ready-step",
+        },
+        error: null,
+        onClose: () => undefined,
+        onViewRawText: () => undefined,
+        workPlanTab: "agents",
+        workPlanIdPrefix: "pane-agents-work",
+      }),
+      container,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Research worker");
+    expect(text).toContain("Researcher");
+    expect(text).toContain("Isolated");
+    expect(text).toContain("subagent");
+    expect(text).toContain("Busy");
+    expect(text).toContain("openai");
+    expect(text).toContain("gpt-5.6-terra");
+    expect(text).toContain("42%");
   });
 });

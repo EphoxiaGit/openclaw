@@ -5,10 +5,12 @@ import {
   closeOpenClawStateDatabaseForTest,
   openOpenClawStateDatabase,
 } from "../../state/openclaw-state-db.js";
+import type { TaskRecord } from "../../tasks/task-registry.types.js";
 import { ProjectContextRepository } from "../../work-plans/project-context-repository.js";
 import { WorkPlanRepository } from "../../work-plans/repository.js";
+import type { WorkPlanSnapshot } from "../../work-plans/types.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
-import { createWorkPlansHandlers } from "./work-plans.js";
+import { createWorkPlansHandlers, projectWorkPlanWorkers } from "./work-plans.js";
 
 const dirs: string[] = [];
 
@@ -50,6 +52,153 @@ async function invoke(
 
 afterEach(() => closeOpenClawStateDatabaseForTest());
 afterAll(() => cleanupTempDirs(dirs));
+
+describe("work-plan worker projection", () => {
+  it("joins attempts to display-safe task and session facts with stable parentage", () => {
+    const plan = {
+      schemaVersion: 1,
+      projectId: "project",
+      primaryConversationId: "conversation",
+      projectRecordRevision: 1,
+      goal: { goalId: "goal", objective: "Ship", recordRevision: 1 },
+      planId: "plan",
+      status: "running",
+      definitionRevision: 1,
+      recordRevision: 1,
+      createdAt: 10,
+      updatedAt: 20,
+      steps: [
+        {
+          stepId: "step-parent",
+          title: "Research",
+          ordinal: 1,
+          status: "running",
+          recordRevision: 1,
+          dependsOn: [],
+          taskLinks: [],
+          worktreeLinks: [],
+          attempts: [
+            {
+              attemptId: "private-attempt-parent",
+              stepId: "step-parent",
+              attemptNumber: 1,
+              ownerType: "task",
+              ownerId: "private-task-parent",
+              ownerState: "running",
+              createdAt: 100,
+              updatedAt: 200,
+            },
+          ],
+        },
+        {
+          stepId: "step-child",
+          title: "Implement",
+          ordinal: 2,
+          status: "succeeded",
+          recordRevision: 1,
+          dependsOn: ["step-parent"],
+          taskLinks: [],
+          worktreeLinks: [],
+          attempts: [
+            {
+              attemptId: "private-attempt-child",
+              stepId: "step-child",
+              attemptNumber: 1,
+              ownerType: "task",
+              ownerId: "private-task-child",
+              ownerState: "succeeded",
+              createdAt: 120,
+              updatedAt: 220,
+              endedAt: 220,
+            },
+          ],
+        },
+      ],
+      requirements: [],
+      projection: {
+        display: "Plan 1/2",
+        x: 1,
+        n: 2,
+        activeStepIds: ["step-parent"],
+        readyStepIds: [],
+        statusCounts: { running: 1, succeeded: 1 },
+      },
+    } satisfies WorkPlanSnapshot;
+    const task = (overrides: Partial<TaskRecord>): TaskRecord => ({
+      taskId: "private-task-parent",
+      runtime: "subagent",
+      requesterSessionKey: "private-requester-session",
+      ownerKey: "private-owner",
+      scopeKind: "session",
+      status: "running",
+      deliveryStatus: "pending",
+      notifyPolicy: "done_only",
+      createdAt: 100,
+      task: "private prompt",
+      ...overrides,
+    });
+    const workers = projectWorkPlanWorkers({
+      plan,
+      now: 300,
+      tasks: [
+        task({
+          label: "Research worker",
+          agentId: "researcher",
+          childSessionKey: "private-child-session-parent",
+          progressSummary: "Comparing native seams.",
+        }),
+        task({
+          taskId: "private-task-child",
+          parentTaskId: "private-task-parent",
+          status: "succeeded",
+          label: "Implementation worker",
+          agentId: "executor",
+          childSessionKey: "private-child-session-child",
+          startedAt: 120,
+          endedAt: 220,
+          terminalSummary: "Implemented the bounded slice.",
+        }),
+      ],
+      resolveSessionFacts: () => ({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        runtime: "codex",
+        contextPercent: 42,
+      }),
+    });
+
+    expect(workers).toEqual([
+      expect.objectContaining({
+        key: "worker-1-1",
+        ownerKind: "isolated",
+        role: "researcher",
+        lane: "subagent",
+        state: "running",
+        health: "busy",
+        canCancel: true,
+        canRetry: false,
+      }),
+      expect.objectContaining({
+        key: "worker-2-1",
+        parentKey: "worker-1-1",
+        state: "succeeded",
+        result: "Implemented the bounded slice.",
+        canCancel: false,
+      }),
+    ]);
+    const rendered = JSON.stringify(workers);
+    for (const privateValue of [
+      "private-task-parent",
+      "private-task-child",
+      "private-child-session",
+      "private-attempt",
+      "private-owner",
+      "private prompt",
+    ]) {
+      expect(rendered).not.toContain(privateValue);
+    }
+  });
+});
 
 describe("project-context gateway mutations", () => {
   it("persists the authenticated device actor and rejects forged actor/session-goal fields", async () => {

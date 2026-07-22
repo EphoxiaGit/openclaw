@@ -138,6 +138,22 @@ export type WorkPlanSidebarContent = {
     endedAt: number | null;
     durationMs: number | null;
   }>;
+  workers?: Array<{
+    label: string;
+    parentLabel: string | null;
+    ownerKind: string;
+    role: string;
+    lane: string;
+    state: string;
+    health: string;
+    provider: string;
+    model: string;
+    runtime: string;
+    progress: string;
+    result: string;
+    contextPercent: number | null;
+    elapsedMs: number | null;
+  }>;
   requirements?: { mapped: string[]; excluded: string[]; unresolved: string[] };
   evidenceCount: number;
   checkpointEvidence?: { files: number; tests: number; blockers: number };
@@ -515,8 +531,8 @@ function resolveSidebarCanvasSandbox(
   return content.kind === "canvas" ? resolveEmbedSandbox(embedSandboxMode) : "allow-scripts";
 }
 
-export type WorkPlanDetailTab = "plan" | "attempts" | "context" | "evidence";
-const WORK_PLAN_TABS: WorkPlanDetailTab[] = ["plan", "attempts", "context", "evidence"];
+export type WorkPlanDetailTab = "plan" | "agents" | "attempts" | "context" | "evidence";
+const WORK_PLAN_TABS: WorkPlanDetailTab[] = ["plan", "agents", "attempts", "context", "evidence"];
 
 export function nextWorkPlanDetailTab(
   current: WorkPlanDetailTab,
@@ -564,6 +580,26 @@ function formatWorkToken(value: string): string {
     codex: t("chat.liveWork.detail.token.codex"),
     omx: t("chat.liveWork.detail.token.omx"),
     external: t("chat.liveWork.detail.token.external"),
+    inline: t("chat.liveWork.detail.token.inline"),
+    isolated: t("chat.liveWork.detail.token.isolated"),
+    durable_job: t("chat.liveWork.detail.token.durableJob"),
+    timed_out: t("chat.liveWork.detail.token.timedOut"),
+  };
+  return labels[value] ?? labels.unknown;
+}
+
+function formatWorkerHealth(value: string): string {
+  const labels: Record<string, string> = {
+    available: t("chat.liveWork.detail.health.available"),
+    busy: t("chat.liveWork.detail.health.busy"),
+    degraded: t("chat.liveWork.detail.health.degraded"),
+    unavailable: t("chat.liveWork.detail.health.unavailable"),
+    disabled: t("chat.liveWork.detail.health.disabled"),
+    misconfigured: t("chat.liveWork.detail.health.misconfigured"),
+    quota_exhausted: t("chat.liveWork.detail.health.quotaExhausted"),
+    authentication_required: t("chat.liveWork.detail.health.authenticationRequired"),
+    runtime_unavailable: t("chat.liveWork.detail.health.runtimeUnavailable"),
+    unknown: t("chat.liveWork.detail.health.unknown"),
   };
   return labels[value] ?? labels.unknown;
 }
@@ -590,6 +626,7 @@ function renderWorkPlanSidebar(
           : t("chat.liveWork.detail.none");
   const tabLabel: Record<WorkPlanDetailTab, string> = {
     plan: t("chat.liveWork.detail.tabPlan"),
+    agents: t("chat.liveWork.detail.tabAgents"),
     attempts: t("chat.liveWork.detail.tabAttempts"),
     context: t("chat.liveWork.detail.tabContext"),
     evidence: t("chat.liveWork.detail.tabEvidence"),
@@ -605,6 +642,7 @@ function renderWorkPlanSidebar(
   const requirements = content.requirements ?? { mapped: [], excluded: [], unresolved: [] };
   const orderedSteps = content.orderedSteps ?? [];
   const attempts = content.attempts ?? [];
+  const workers = content.workers ?? [];
   return html`<article class="work-plan-detail">
     <p class="work-plan-detail__status">
       <strong>${formatLiveWorkPlanPosition(content.planPosition.x, content.planPosition.n)}</strong>
@@ -707,110 +745,181 @@ function renderWorkPlanSidebar(
               </p>
             </section>
           `
-        : activeTab === "attempts"
+        : activeTab === "agents"
           ? html`<section class="work-plan-detail__section">
-              <h3>${t("chat.liveWork.detail.attempts")}</h3>
-              ${attempts.length
-                ? html`<ol>
-                    ${attempts.map(
-                      (attempt) =>
-                        html`<li>
-                          <strong
-                            >${t("chat.liveWork.detail.attemptNumber", {
-                              number: formatLiveWorkNumber(attempt.attemptNumber),
-                            })}</strong
-                          >
+              <h3>${t("chat.liveWork.detail.agents")}</h3>
+              ${workers.length
+                ? html`<div class="work-plan-workers">
+                    ${workers.map(
+                      (worker) => html`<article class="work-plan-worker">
+                        <h4>${worker.label}</h4>
+                        <p>
+                          ${formatWorkToken(worker.ownerKind)} · ${formatWorkToken(worker.state)} ·
+                          ${formatWorkerHealth(worker.health)}
+                        </p>
+                        ${worker.parentLabel
+                          ? html`<p class="muted">
+                              ${t("chat.liveWork.detail.workerParent", {
+                                parent: worker.parentLabel,
+                              })}
+                            </p>`
+                          : nothing}
+                        <dl class="work-plan-detail__counts">
                           <div>
-                            ${formatWorkToken(attempt.ownerType)} ·
-                            ${formatWorkToken(attempt.ownerState)}${attempt.recoveryState ===
-                            "present"
-                              ? t("chat.liveWork.detail.recoveryRecorded")
-                              : ""}
+                            <dt>${t("chat.liveWork.detail.role")}</dt>
+                            <dd>${worker.role || t("chat.liveWork.detail.unavailable")}</dd>
                           </div>
-                          <div class="muted">
-                            ${t("chat.liveWork.detail.attemptTiming", {
-                              started: formatTimestamp(attempt.createdAt),
-                              updated: formatTimestamp(attempt.updatedAt),
-                              ended: formatTimestamp(attempt.endedAt),
-                              duration:
-                                attempt.durationMs == null
-                                  ? t("chat.liveWork.detail.unavailable")
-                                  : t("chat.liveWork.detail.durationMs", {
-                                      duration: formatLiveWorkNumber(attempt.durationMs),
-                                    }),
-                            })}
+                          <div>
+                            <dt>${t("chat.liveWork.detail.lane")}</dt>
+                            <dd>${worker.lane || t("chat.liveWork.detail.unavailable")}</dd>
                           </div>
-                        </li>`,
+                          <div>
+                            <dt>${t("chat.liveWork.detail.runtime")}</dt>
+                            <dd>${worker.runtime || t("chat.liveWork.detail.unavailable")}</dd>
+                          </div>
+                          <div>
+                            <dt>${t("chat.liveWork.detail.model")}</dt>
+                            <dd>${worker.model || t("chat.liveWork.detail.unavailable")}</dd>
+                          </div>
+                          <div>
+                            <dt>${t("chat.liveWork.detail.provider")}</dt>
+                            <dd>${worker.provider || t("chat.liveWork.detail.unavailable")}</dd>
+                          </div>
+                          <div>
+                            <dt>${t("chat.liveWork.detail.context")}</dt>
+                            <dd>
+                              ${worker.contextPercent == null
+                                ? t("chat.liveWork.detail.unavailable")
+                                : t("chat.liveWork.detail.contextPercent", {
+                                    percent: formatLiveWorkNumber(worker.contextPercent),
+                                  })}
+                            </dd>
+                          </div>
+                        </dl>
+                        ${worker.elapsedMs == null
+                          ? nothing
+                          : html`<p class="muted">
+                              ${t("chat.liveWork.detail.workerElapsed", {
+                                duration: formatLiveWorkNumber(worker.elapsedMs),
+                              })}
+                            </p>`}
+                        ${worker.progress
+                          ? html`<h5>${t("chat.liveWork.detail.workerProgress")}</h5>
+                              <p>${worker.progress}</p>`
+                          : nothing}
+                        ${worker.result
+                          ? html`<h5>${t("chat.liveWork.detail.workerResult")}</h5>
+                              <p>${worker.result}</p>`
+                          : nothing}
+                      </article>`,
                     )}
-                  </ol>`
-                : empty(t("chat.liveWork.detail.noAttempts"))}
+                  </div>`
+                : empty(t("chat.liveWork.detail.noAgents"))}
             </section>`
-          : activeTab === "context"
+          : activeTab === "attempts"
             ? html`<section class="work-plan-detail__section">
-                  <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
-                  <p>${content.summary}</p>
-                  <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
-                  <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
-                  <dl class="work-plan-detail__counts">
-                    <div>
-                      <dt>${t("chat.liveWork.detail.constraints")}</dt>
-                      <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
-                    </div>
-                    <div>
-                      <dt>${t("chat.liveWork.detail.decisions")}</dt>
-                      <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
-                    </div>
-                    <div>
-                      <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
-                      <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
-                    </div>
-                    <div>
-                      <dt>${t("chat.liveWork.detail.conflicts")}</dt>
-                      <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
-                    </div>
-                  </dl>
-                  <p>
-                    ${t("chat.liveWork.detail.contextPresence", {
-                      checkpoint: t(
-                        content.checkpointPresent
-                          ? "chat.liveWork.detail.present"
-                          : "chat.liveWork.detail.notPresent",
-                      ),
-                      handoff: t(
-                        content.handoffPresent
-                          ? "chat.liveWork.detail.present"
-                          : "chat.liveWork.detail.notPresent",
-                      ),
-                    })}
-                  </p>
-                </section>
-                <section class="work-plan-detail__section">
-                  <h3>${t("chat.liveWork.detail.nextTask")}</h3>
-                  <p>
-                    <span class="work-plan-detail__source">${nextTaskSource}</span>
-                    ${content.nextTask}
-                  </p>
-                </section>`
-            : html`<section class="work-plan-detail__section">
-                <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
-                ${content.checkpointPresent
-                  ? html`<dl class="work-plan-detail__counts">
-                        <div>
-                          <dt>${t("chat.liveWork.detail.files")}</dt>
-                          <dd>${formatLiveWorkNumber(counts.files)}</dd>
-                        </div>
-                        <div>
-                          <dt>${t("chat.liveWork.detail.tests")}</dt>
-                          <dd>${formatLiveWorkNumber(counts.tests)}</dd>
-                        </div>
-                        <div>
-                          <dt>${t("chat.liveWork.detail.blockers")}</dt>
-                          <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
-                        </div>
-                      </dl>
-                      <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
-                  : empty(t("chat.liveWork.detail.noCheckpoint"))}
-              </section>`}
+                <h3>${t("chat.liveWork.detail.attempts")}</h3>
+                ${attempts.length
+                  ? html`<ol>
+                      ${attempts.map(
+                        (attempt) =>
+                          html`<li>
+                            <strong
+                              >${t("chat.liveWork.detail.attemptNumber", {
+                                number: formatLiveWorkNumber(attempt.attemptNumber),
+                              })}</strong
+                            >
+                            <div>
+                              ${formatWorkToken(attempt.ownerType)} ·
+                              ${formatWorkToken(attempt.ownerState)}${attempt.recoveryState ===
+                              "present"
+                                ? t("chat.liveWork.detail.recoveryRecorded")
+                                : ""}
+                            </div>
+                            <div class="muted">
+                              ${t("chat.liveWork.detail.attemptTiming", {
+                                started: formatTimestamp(attempt.createdAt),
+                                updated: formatTimestamp(attempt.updatedAt),
+                                ended: formatTimestamp(attempt.endedAt),
+                                duration:
+                                  attempt.durationMs == null
+                                    ? t("chat.liveWork.detail.unavailable")
+                                    : t("chat.liveWork.detail.durationMs", {
+                                        duration: formatLiveWorkNumber(attempt.durationMs),
+                                      }),
+                              })}
+                            </div>
+                          </li>`,
+                      )}
+                    </ol>`
+                  : empty(t("chat.liveWork.detail.noAttempts"))}
+              </section>`
+            : activeTab === "context"
+              ? html`<section class="work-plan-detail__section">
+                    <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
+                    <p>${content.summary}</p>
+                    <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
+                    <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
+                    <dl class="work-plan-detail__counts">
+                      <div>
+                        <dt>${t("chat.liveWork.detail.constraints")}</dt>
+                        <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
+                      </div>
+                      <div>
+                        <dt>${t("chat.liveWork.detail.decisions")}</dt>
+                        <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
+                      </div>
+                      <div>
+                        <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
+                        <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
+                      </div>
+                      <div>
+                        <dt>${t("chat.liveWork.detail.conflicts")}</dt>
+                        <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
+                      </div>
+                    </dl>
+                    <p>
+                      ${t("chat.liveWork.detail.contextPresence", {
+                        checkpoint: t(
+                          content.checkpointPresent
+                            ? "chat.liveWork.detail.present"
+                            : "chat.liveWork.detail.notPresent",
+                        ),
+                        handoff: t(
+                          content.handoffPresent
+                            ? "chat.liveWork.detail.present"
+                            : "chat.liveWork.detail.notPresent",
+                        ),
+                      })}
+                    </p>
+                  </section>
+                  <section class="work-plan-detail__section">
+                    <h3>${t("chat.liveWork.detail.nextTask")}</h3>
+                    <p>
+                      <span class="work-plan-detail__source">${nextTaskSource}</span>
+                      ${content.nextTask}
+                    </p>
+                  </section>`
+              : html`<section class="work-plan-detail__section">
+                  <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
+                  ${content.checkpointPresent
+                    ? html`<dl class="work-plan-detail__counts">
+                          <div>
+                            <dt>${t("chat.liveWork.detail.files")}</dt>
+                            <dd>${formatLiveWorkNumber(counts.files)}</dd>
+                          </div>
+                          <div>
+                            <dt>${t("chat.liveWork.detail.tests")}</dt>
+                            <dd>${formatLiveWorkNumber(counts.tests)}</dd>
+                          </div>
+                          <div>
+                            <dt>${t("chat.liveWork.detail.blockers")}</dt>
+                            <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
+                          </div>
+                        </dl>
+                        <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
+                    : empty(t("chat.liveWork.detail.noCheckpoint"))}
+                </section>`}
     </section>
   </article>`;
 }

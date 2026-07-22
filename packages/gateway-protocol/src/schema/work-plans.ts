@@ -354,6 +354,54 @@ const RequirementResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const WorkPlanWorkerSchema = Type.Object(
+  {
+    key: NonEmptyString,
+    parentKey: Type.Optional(NonEmptyString),
+    label: NonEmptyString,
+    ownerKind: Type.Union([
+      Type.Literal("inline"),
+      Type.Literal("isolated"),
+      Type.Literal("durable_job"),
+      Type.Literal("unknown"),
+    ]),
+    role: NonEmptyString,
+    lane: NonEmptyString,
+    state: Type.Union([
+      Type.Literal("queued"),
+      Type.Literal("running"),
+      Type.Literal("waiting"),
+      Type.Literal("succeeded"),
+      Type.Literal("failed"),
+      Type.Literal("cancelled"),
+      Type.Literal("timed_out"),
+      Type.Literal("lost"),
+      Type.Literal("unknown"),
+    ]),
+    health: Type.Union([
+      Type.Literal("available"),
+      Type.Literal("busy"),
+      Type.Literal("degraded"),
+      Type.Literal("unavailable"),
+      Type.Literal("disabled"),
+      Type.Literal("misconfigured"),
+      Type.Literal("quota_exhausted"),
+      Type.Literal("authentication_required"),
+      Type.Literal("runtime_unavailable"),
+      Type.Literal("unknown"),
+    ]),
+    provider: Type.Optional(NonEmptyString),
+    model: Type.Optional(NonEmptyString),
+    runtime: Type.Optional(NonEmptyString),
+    progress: Type.Optional(Type.String({ maxLength: 1_000 })),
+    result: Type.Optional(Type.String({ maxLength: 1_000 })),
+    contextPercent: Type.Optional(Type.Integer({ minimum: 0, maximum: 100 })),
+    elapsedMs: Type.Optional(Type.Integer({ minimum: 0 })),
+    canCancel: Type.Boolean(),
+    canRetry: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
 export const WorkPlanSnapshotSchema = Type.Object(
   {
     schemaVersion: Type.Literal(1),
@@ -378,6 +426,7 @@ export const WorkPlanSnapshotSchema = Type.Object(
     steps: Type.Array(StepResultSchema),
     requirements: Type.Array(RequirementResultSchema),
     projection: ProjectionSchema,
+    workers: Type.Optional(Type.Array(WorkPlanWorkerSchema, { maxItems: 100 })),
   },
   { additionalProperties: false },
 );

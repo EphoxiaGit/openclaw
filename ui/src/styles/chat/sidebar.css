@@ -139,6 +139,29 @@
   padding-inline-start: 24px;
 }
 
+.work-plan-workers {
+  display: grid;
+  gap: 10px;
+}
+
+.work-plan-worker {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--secondary) 42%, transparent);
+}
+
+.work-plan-worker h4,
+.work-plan-worker h5,
+.work-plan-worker p {
+  margin-top: 0;
+}
+
+.work-plan-worker > :last-child {
+  margin-bottom: 0;
+}
+
 @media (max-width: 480px) {
   .work-plan-detail__counts {
     grid-template-columns: minmax(0, 1fr);
@@ -147,6 +170,7 @@
 
 @media (forced-colors: active) {
   .work-plan-detail__counts div,
+  .work-plan-worker,
   .work-plan-tabs,
   .work-plan-tabs__tab[aria-selected="true"] {
     border-color: CanvasText;

@@ -206,6 +206,71 @@ describe("chat live work", () => {
     }
   });
 
+  it("renders the server-projected worker facts without projection identifiers", () => {
+    const source = project();
+    const plan = source.plans[0] as Record<string, unknown>;
+    plan.steps = [
+      {
+        stepId: "private-step",
+        title: "Research the implementation",
+        status: "running",
+        attempts: [
+          {
+            attemptId: "private-attempt",
+            ownerId: "private-task",
+            attemptNumber: 1,
+            ownerType: "task",
+            ownerState: "running",
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      },
+    ];
+    plan.workers = [
+      {
+        key: "private-worker-key",
+        label: "Research worker",
+        ownerKind: "isolated",
+        role: "Researcher",
+        lane: "subagent",
+        state: "running",
+        health: "busy",
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        runtime: "codex",
+        progress: "Comparing existing implementation seams.",
+        contextPercent: 42,
+        elapsedMs: 1250,
+      },
+    ];
+
+    const view = normalizeLiveWork(source, context());
+
+    expect(view.details?.workers).toEqual([
+      expect.objectContaining({
+        label: "Research worker",
+        ownerKind: "isolated",
+        role: "Researcher",
+        lane: "subagent",
+        state: "running",
+        health: "busy",
+        provider: "openai",
+        model: "gpt-5.6-terra",
+        runtime: "codex",
+        progress: "Comparing existing implementation seams.",
+        contextPercent: 42,
+        elapsedMs: 1250,
+      }),
+    ]);
+    const rendered = JSON.stringify(view);
+    expect(rendered).not.toContain("private-task");
+    expect(rendered).not.toContain("private-child-session");
+    expect(rendered).not.toContain("private-worker-key");
+    expect(rendered).not.toContain("private-attempt");
+    expect(rendered).not.toContain("private-step");
+  });
+
   it("fails closed for project and active-plan ambiguity", async () => {
     expect(
       normalizeLiveWork(

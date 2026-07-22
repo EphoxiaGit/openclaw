@@ -20,15 +20,223 @@ import {
   validateWorkRegisteredProjectsGetParams,
   validateWorkRegisteredProjectsListParams,
 } from "../../../packages/gateway-protocol/src/index.js";
+import type { SessionEntry } from "../../config/sessions.js";
+import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { redactToolDetail } from "../../logging/redact.js";
+import { parseAgentSessionKey } from "../../routing/session-key.js";
+import { listTaskRecords } from "../../tasks/runtime-internal.js";
+import type { TaskRecord } from "../../tasks/task-registry.types.js";
 import { ProjectContextRepository } from "../../work-plans/project-context-repository.js";
 import { WorkPlanRepository } from "../../work-plans/repository.js";
 import {
   WorkPlanConflictError,
   WorkPlanNotFoundError,
   WorkPlanValidationError,
+  type WorkPlanSnapshot,
 } from "../../work-plans/types.js";
+import {
+  loadCombinedSessionStoreForGateway,
+  resolveGatewaySessionThinkingProjection,
+  resolveSessionModelRef,
+} from "../session-utils.js";
 import type { GatewayRequestHandlers } from "./types.js";
 import type { GatewayClient } from "./types.js";
+
+type WorkerState =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "timed_out"
+  | "lost"
+  | "unknown";
+type WorkerSessionFacts = {
+  provider?: string;
+  model?: string;
+  runtime?: string;
+  contextPercent?: number;
+};
+
+const TECHNICAL_TEXT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
+
+function technicalText(value: unknown): string | undefined {
+  return typeof value === "string" && TECHNICAL_TEXT.test(value) ? value : undefined;
+}
+
+function boundedNarrative(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  const redacted = redactToolDetail(value.trim()).slice(0, 1_000).trim();
+  return redacted || undefined;
+}
+
+function workerState(value: string | undefined): WorkerState {
+  switch (value) {
+    case "queued":
+    case "running":
+    case "waiting":
+    case "succeeded":
+    case "failed":
+    case "cancelled":
+    case "timed_out":
+    case "lost":
+      return value;
+    case "completed":
+      return "succeeded";
+    default:
+      return "unknown";
+  }
+}
+
+function workerHealth(state: WorkerState) {
+  switch (state) {
+    case "queued":
+    case "succeeded":
+      return "available" as const;
+    case "running":
+      return "busy" as const;
+    case "failed":
+    case "cancelled":
+    case "timed_out":
+    case "lost":
+      return "unavailable" as const;
+    default:
+      return "unknown" as const;
+  }
+}
+
+function taskIdentifiers(task: TaskRecord): string[] {
+  return [task.taskId, task.runId, task.parentFlowId, task.sourceId].filter(
+    (value): value is string => Boolean(value),
+  );
+}
+
+function workerOwnerKind(ownerType: string, task: TaskRecord | undefined) {
+  if (ownerType === "omx" || ownerType === "task_flow" || task?.runtime === "cron") {
+    return "durable_job" as const;
+  }
+  if (task?.childSessionKey || task?.runtime === "subagent" || task?.runtime === "acp") {
+    return "isolated" as const;
+  }
+  if (ownerType === "task" || ownerType === "codex") {
+    return "inline" as const;
+  }
+  return "unknown" as const;
+}
+
+function workerElapsedMs(params: {
+  task?: TaskRecord;
+  attempt: WorkPlanSnapshot["steps"][number]["attempts"][number];
+  now: number;
+}): number | undefined {
+  const startedAt = params.task?.startedAt ?? params.task?.createdAt ?? params.attempt.createdAt;
+  const endedAt = params.task?.endedAt ?? params.attempt.endedAt;
+  if (!Number.isFinite(startedAt)) {
+    return undefined;
+  }
+  return Math.max(0, (endedAt ?? params.now) - startedAt);
+}
+
+export function projectWorkPlanWorkers(params: {
+  plan: WorkPlanSnapshot;
+  tasks: readonly TaskRecord[];
+  now?: number;
+  resolveSessionFacts?: (task: TaskRecord) => WorkerSessionFacts;
+}) {
+  const taskByIdentifier = new Map<string, TaskRecord>();
+  for (const task of params.tasks) {
+    for (const identifier of taskIdentifiers(task)) {
+      taskByIdentifier.set(identifier, task);
+    }
+  }
+  const matches = params.plan.steps.flatMap((step) =>
+    step.attempts.map((attempt) => ({
+      attempt,
+      step,
+      task: taskByIdentifier.get(attempt.ownerId),
+    })),
+  );
+  const keyByTaskId = new Map(
+    matches.flatMap(({ attempt, step, task }) =>
+      task ? [[task.taskId, `worker-${step.ordinal}-${attempt.attemptNumber}`] as const] : [],
+    ),
+  );
+  const now = params.now ?? Date.now();
+  return matches.slice(0, 100).map(({ attempt, step, task }) => {
+    const key = `worker-${step.ordinal}-${attempt.attemptNumber}`;
+    const state = workerState(task?.status ?? attempt.ownerState);
+    const session = task && params.resolveSessionFacts ? params.resolveSessionFacts(task) : {};
+    const role = technicalText(task?.agentId) ?? technicalText(attempt.ownerType) ?? "unknown";
+    const lane = technicalText(task?.runtime) ?? technicalText(attempt.ownerType) ?? "unknown";
+    const progress = boundedNarrative(task?.progressSummary);
+    const result = boundedNarrative(task?.terminalSummary);
+    const elapsedMs = workerElapsedMs({ task, attempt, now });
+    const parentKey = task?.parentTaskId ? keyByTaskId.get(task.parentTaskId) : undefined;
+    return Object.assign(
+      {
+        key,
+        label: boundedNarrative(task?.label) ?? boundedNarrative(step.title) ?? "Worker",
+        ownerKind: workerOwnerKind(attempt.ownerType, task),
+        role,
+        lane,
+        state,
+        health: workerHealth(state),
+        canCancel: task?.status === "queued" || task?.status === "running",
+        canRetry: false,
+      },
+      parentKey ? { parentKey } : {},
+      session.provider ? { provider: session.provider } : {},
+      session.model ? { model: session.model } : {},
+      session.runtime ? { runtime: session.runtime } : {},
+      progress ? { progress } : {},
+      result ? { result } : {},
+      session.contextPercent !== undefined ? { contextPercent: session.contextPercent } : {},
+      elapsedMs !== undefined ? { elapsedMs } : {},
+    );
+  });
+}
+
+function resolveWorkerSessionFacts(
+  cfg: OpenClawConfig,
+  store: Record<string, SessionEntry>,
+  task: TaskRecord,
+): WorkerSessionFacts {
+  const sessionKey = task.childSessionKey;
+  const entry = sessionKey ? store[sessionKey] : undefined;
+  if (!sessionKey || !entry) {
+    return {};
+  }
+  const agentId = task.agentId ?? parseAgentSessionKey(sessionKey)?.agentId;
+  const modelRef = resolveSessionModelRef(cfg, entry, agentId, { allowPluginNormalization: false });
+  const runtime = agentId
+    ? resolveGatewaySessionThinkingProjection({
+        cfg,
+        provider: modelRef.provider,
+        model: modelRef.model,
+        agentId,
+        sessionKey,
+        entry,
+      }).agentRuntime.id
+    : undefined;
+  const totalTokens = entry.totalTokens;
+  const contextTokens = entry.contextTokens;
+  const contextPercent =
+    typeof totalTokens === "number" &&
+    totalTokens >= 0 &&
+    typeof contextTokens === "number" &&
+    contextTokens > 0
+      ? Math.min(100, Math.round((totalTokens / contextTokens) * 100))
+      : undefined;
+  return {
+    provider: technicalText(modelRef.provider),
+    model: technicalText(modelRef.model),
+    runtime: technicalText(runtime),
+    ...(contextPercent !== undefined ? { contextPercent } : {}),
+  };
+}
 
 function authenticatedActorId(client: GatewayClient | null): string {
   const deviceId = client?.connect.device?.id;
@@ -196,11 +404,40 @@ export function createWorkPlansHandlers(
       }
       execute(respond, () => ({ projects: repository.listProjects() }));
     },
-    "work.projects.get": ({ params, respond }) => {
+    "work.projects.get": ({ params, respond, context }) => {
       if (!validateWorkProjectsGetParams(params)) {
         return invalid(respond, "work.projects.get", validateWorkProjectsGetParams.errors);
       }
-      execute(respond, () => ({ project: repository.getProject(params.projectId) }));
+      execute(respond, () => {
+        const project = repository.getProject(params.projectId);
+        const tasks = listTaskRecords();
+        let sessionContext:
+          | { cfg: OpenClawConfig; store: Record<string, SessionEntry> }
+          | undefined;
+        const resolveSessionFacts = (task: TaskRecord) => {
+          if (!task.childSessionKey) {
+            return {};
+          }
+          if (!sessionContext) {
+            const cfg = context.getRuntimeConfig();
+            sessionContext = {
+              cfg,
+              store: loadCombinedSessionStoreForGateway(cfg).store,
+            };
+          }
+          return resolveWorkerSessionFacts(sessionContext.cfg, sessionContext.store, task);
+        };
+        return {
+          project: {
+            ...project,
+            plans: project.plans.map((plan) =>
+              Object.assign({}, plan, {
+                workers: projectWorkPlanWorkers({ plan, tasks, resolveSessionFacts }),
+              }),
+            ),
+          },
+        };
+      });
     },
     "work.plans.create": ({ params, respond, client }) => {
       if (!validateWorkPlansCreateParams(params)) {

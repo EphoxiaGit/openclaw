@@ -254,12 +254,21 @@ class ChatPane extends LitElement {
     if (!state) {
       return;
     }
+    const updateLiveWork = () => {
+      const details = this.liveWorkState.view?.details;
+      if (details && state.sidebarContent?.kind === "work-plan") {
+        // The open inspector is a snapshot; replace it after each authoritative
+        // refresh so detached worker completion does not leave stale cards open.
+        state.sidebarContent = details;
+      }
+      state.requestUpdate?.();
+    };
     void refreshLiveWork(
       this.liveWorkState,
       state.client,
       state.sessionKey,
       state.connected,
-      () => state.requestUpdate?.(),
+      updateLiveWork,
       this.liveWorkConfigSettled && this.liveWorkVisible,
     );
   }
