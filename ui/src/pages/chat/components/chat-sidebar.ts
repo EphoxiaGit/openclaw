@@ -167,6 +167,29 @@ export type WorkPlanSidebarContent = {
     elapsedMs: number | null;
     canCancel: boolean;
   }>;
+  worktrees?: Array<{
+    label: string;
+    stepTitle: string;
+    branch: string;
+    baseRef: string;
+    state: string;
+    commitState: string;
+    changeCount: number;
+    stagedCount: number;
+    unstagedCount: number;
+    untrackedCount: number;
+    conflictCount: number;
+    unpushedCommitCount: number;
+    files: string[];
+    diffStat: string;
+    filesTruncated: boolean;
+    diffStatTruncated: boolean;
+    canTest: boolean;
+    canPrepareCommit: boolean;
+    canResolveConflicts: boolean;
+    canResume: boolean;
+    canRollback: boolean;
+  }>;
   requirements?: { mapped: string[]; excluded: string[]; unresolved: string[] };
   evidenceCount: number;
   checkpointEvidence?: { files: number; tests: number; blockers: number };
@@ -544,14 +567,22 @@ function resolveSidebarCanvasSandbox(
   return content.kind === "canvas" ? resolveEmbedSandbox(embedSandboxMode) : "allow-scripts";
 }
 
-export type WorkPlanDetailTab = "plan" | "agents" | "routing" | "attempts" | "context" | "evidence";
+export type WorkPlanDetailTab =
+  | "plan"
+  | "agents"
+  | "changes"
+  | "validation"
+  | "routing"
+  | "attempts"
+  | "context";
 const WORK_PLAN_TABS: WorkPlanDetailTab[] = [
   "plan",
   "agents",
+  "changes",
+  "validation",
   "routing",
   "attempts",
   "context",
-  "evidence",
 ];
 
 export function nextWorkPlanDetailTab(
@@ -723,11 +754,182 @@ function renderWorkPlanRouting(workers: NonNullable<WorkPlanSidebarContent["work
   </div>`;
 }
 
+function formatWorktreeState(value: string): string {
+  const labels: Record<string, string> = {
+    active: t("chat.liveWork.detail.worktreeActive"),
+    restorable: t("chat.liveWork.detail.worktreeRestorable"),
+    unavailable: t("chat.liveWork.detail.unavailable"),
+  };
+  return labels[value] ?? labels.unavailable;
+}
+
+function formatCommitState(value: string): string {
+  const labels: Record<string, string> = {
+    clean: t("chat.liveWork.detail.commitClean"),
+    uncommitted: t("chat.liveWork.detail.commitUncommitted"),
+    conflicted: t("chat.liveWork.detail.commitConflicted"),
+    unpushed: t("chat.liveWork.detail.commitUnpushed"),
+    restorable: t("chat.liveWork.detail.worktreeRestorable"),
+    unavailable: t("chat.liveWork.detail.unavailable"),
+  };
+  return labels[value] ?? labels.unavailable;
+}
+
+function renderWorkPlanChanges(
+  worktrees: NonNullable<WorkPlanSidebarContent["worktrees"]>,
+  onPrepareAction: ((draft: string) => void) | undefined,
+) {
+  if (worktrees.length === 0) {
+    return html`<p class="muted work-plan-detail__empty">
+      ${t("chat.liveWork.detail.noWorktrees")}
+    </p>`;
+  }
+  return html`<div class="work-plan-workers">
+    ${worktrees.map(
+      (worktree) => html`<article class="work-plan-worker">
+        <h4>${worktree.label}</h4>
+        <p>${worktree.stepTitle}</p>
+        <dl class="work-plan-detail__counts">
+          <div>
+            <dt>${t("chat.liveWork.detail.worktreeState")}</dt>
+            <dd>${formatWorktreeState(worktree.state)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.commitState")}</dt>
+            <dd>${formatCommitState(worktree.commitState)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.branch")}</dt>
+            <dd>${worktree.branch || t("chat.liveWork.detail.unavailable")}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.baseRef")}</dt>
+            <dd>${worktree.baseRef || t("chat.liveWork.detail.unavailable")}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.changedFiles")}</dt>
+            <dd>${formatLiveWorkNumber(worktree.changeCount)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.stagedFiles")}</dt>
+            <dd>${formatLiveWorkNumber(worktree.stagedCount)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.unstagedFiles")}</dt>
+            <dd>${formatLiveWorkNumber(worktree.unstagedCount)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.untrackedFiles")}</dt>
+            <dd>${formatLiveWorkNumber(worktree.untrackedCount)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.conflicts")}</dt>
+            <dd>${formatLiveWorkNumber(worktree.conflictCount)}</dd>
+          </div>
+          <div>
+            <dt>${t("chat.liveWork.detail.unpushedCommits")}</dt>
+            <dd>${formatLiveWorkNumber(worktree.unpushedCommitCount)}</dd>
+          </div>
+        </dl>
+        <h5>${t("chat.liveWork.detail.files")}</h5>
+        ${worktree.files.length
+          ? html`<ul>
+                ${worktree.files.map((file) => html`<li><code>${file}</code></li>`)}
+              </ul>
+              ${worktree.filesTruncated
+                ? html`<p class="muted">${t("chat.liveWork.detail.listTruncated")}</p>`
+                : nothing}`
+          : html`<p class="muted">${t("chat.liveWork.detail.noneRecorded")}</p>`}
+        ${worktree.diffStat
+          ? html`<h5>${t("chat.liveWork.detail.diffSummary")}</h5>
+              <pre>${worktree.diffStat}</pre>
+              ${worktree.diffStatTruncated
+                ? html`<p class="muted">${t("chat.liveWork.detail.listTruncated")}</p>`
+                : nothing}`
+          : nothing}
+        ${onPrepareAction
+          ? html`<div class="row" style="gap: 8px; flex-wrap: wrap;">
+              ${worktree.changeCount > 0
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.reviewDiffDraft", { worktree: worktree.label }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.reviewDiff")}
+                  </button>`
+                : nothing}
+              ${worktree.canPrepareCommit
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.prepareCommitDraft", {
+                          worktree: worktree.label,
+                        }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.prepareCommit")}
+                  </button>`
+                : nothing}
+              ${worktree.canResolveConflicts
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.resolveConflictsDraft", {
+                          worktree: worktree.label,
+                        }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.resolveConflicts")}
+                  </button>`
+                : nothing}
+              ${worktree.canResume
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.resumeWorktreeDraft", {
+                          worktree: worktree.label,
+                        }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.resumeWorktree")}
+                  </button>`
+                : nothing}
+              ${worktree.canRollback
+                ? html`<button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${() =>
+                      onPrepareAction(
+                        t("chat.liveWork.detail.rollbackWorktreeDraft", {
+                          worktree: worktree.label,
+                        }),
+                      )}
+                  >
+                    ${t("chat.liveWork.detail.rollbackWorktree")}
+                  </button>`
+                : nothing}
+            </div>`
+          : nothing}
+      </article>`,
+    )}
+  </div>`;
+}
+
 function renderWorkPlanSidebar(
   content: WorkPlanSidebarContent,
   activeTab: WorkPlanDetailTab,
   onTabChange: (tab: WorkPlanDetailTab) => void,
   onCancelWorker: ((workerKey: string) => void) | undefined,
+  onPrepareAction: ((draft: string) => void) | undefined,
   idPrefix: string,
 ) {
   const provenanceLabel =
@@ -747,10 +949,11 @@ function renderWorkPlanSidebar(
   const tabLabel: Record<WorkPlanDetailTab, string> = {
     plan: t("chat.liveWork.detail.tabPlan"),
     agents: t("chat.liveWork.detail.tabAgents"),
+    changes: t("chat.liveWork.detail.tabChanges"),
+    validation: t("chat.liveWork.detail.tabValidation"),
     routing: t("chat.liveWork.detail.tabRouting"),
     attempts: t("chat.liveWork.detail.tabAttempts"),
     context: t("chat.liveWork.detail.tabContext"),
-    evidence: t("chat.liveWork.detail.tabEvidence"),
   };
   const empty = (text: string) => html`<p class="muted work-plan-detail__empty">${text}</p>`;
   const values = (items: string[]) =>
@@ -764,6 +967,7 @@ function renderWorkPlanSidebar(
   const orderedSteps = content.orderedSteps ?? [];
   const attempts = content.attempts ?? [];
   const workers = content.workers ?? [];
+  const worktrees = content.worktrees ?? [];
   return html`<article class="work-plan-detail">
     <p class="work-plan-detail__status">
       <strong>${formatLiveWorkPlanPosition(content.planPosition.x, content.planPosition.n)}</strong>
@@ -949,115 +1153,143 @@ function renderWorkPlanSidebar(
                   </div>`
                 : empty(t("chat.liveWork.detail.noAgents"))}
             </section>`
-          : activeTab === "attempts"
+          : activeTab === "changes"
             ? html`<section class="work-plan-detail__section">
-                <h3>${t("chat.liveWork.detail.attempts")}</h3>
-                ${attempts.length
-                  ? html`<ol>
-                      ${attempts.map(
-                        (attempt) =>
-                          html`<li>
-                            <strong
-                              >${t("chat.liveWork.detail.attemptNumber", {
-                                number: formatLiveWorkNumber(attempt.attemptNumber),
-                              })}</strong
-                            >
-                            <div>
-                              ${formatWorkToken(attempt.ownerType)} ·
-                              ${formatWorkToken(attempt.ownerState)}${attempt.recoveryState ===
-                              "present"
-                                ? t("chat.liveWork.detail.recoveryRecorded")
-                                : ""}
-                            </div>
-                            <div class="muted">
-                              ${t("chat.liveWork.detail.attemptTiming", {
-                                started: formatTimestamp(attempt.createdAt),
-                                updated: formatTimestamp(attempt.updatedAt),
-                                ended: formatTimestamp(attempt.endedAt),
-                                duration:
-                                  attempt.durationMs == null
-                                    ? t("chat.liveWork.detail.unavailable")
-                                    : t("chat.liveWork.detail.durationMs", {
-                                        duration: formatLiveWorkNumber(attempt.durationMs),
-                                      }),
-                              })}
-                            </div>
-                          </li>`,
-                      )}
-                    </ol>`
-                  : empty(t("chat.liveWork.detail.noAttempts"))}
+                <h3>${t("chat.liveWork.detail.changes")}</h3>
+                ${renderWorkPlanChanges(worktrees, onPrepareAction)}
               </section>`
-            : activeTab === "context"
+            : activeTab === "attempts"
               ? html`<section class="work-plan-detail__section">
-                    <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
-                    <p>${content.summary}</p>
-                    <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
-                    <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
-                    <dl class="work-plan-detail__counts">
-                      <div>
-                        <dt>${t("chat.liveWork.detail.constraints")}</dt>
-                        <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
-                      </div>
-                      <div>
-                        <dt>${t("chat.liveWork.detail.decisions")}</dt>
-                        <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
-                      </div>
-                      <div>
-                        <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
-                        <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
-                      </div>
-                      <div>
-                        <dt>${t("chat.liveWork.detail.conflicts")}</dt>
-                        <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
-                      </div>
-                    </dl>
-                    <p>
-                      ${t("chat.liveWork.detail.contextPresence", {
-                        checkpoint: t(
-                          content.checkpointPresent
-                            ? "chat.liveWork.detail.present"
-                            : "chat.liveWork.detail.notPresent",
-                        ),
-                        handoff: t(
-                          content.handoffPresent
-                            ? "chat.liveWork.detail.present"
-                            : "chat.liveWork.detail.notPresent",
-                        ),
-                      })}
-                    </p>
-                  </section>
-                  <section class="work-plan-detail__section">
-                    <h3>${t("chat.liveWork.detail.nextTask")}</h3>
-                    <p>
-                      <span class="work-plan-detail__source">${nextTaskSource}</span>
-                      ${content.nextTask}
-                    </p>
-                  </section>`
-              : activeTab === "evidence"
+                  <h3>${t("chat.liveWork.detail.attempts")}</h3>
+                  ${attempts.length
+                    ? html`<ol>
+                        ${attempts.map(
+                          (attempt) =>
+                            html`<li>
+                              <strong
+                                >${t("chat.liveWork.detail.attemptNumber", {
+                                  number: formatLiveWorkNumber(attempt.attemptNumber),
+                                })}</strong
+                              >
+                              <div>
+                                ${formatWorkToken(attempt.ownerType)} ·
+                                ${formatWorkToken(attempt.ownerState)}${attempt.recoveryState ===
+                                "present"
+                                  ? t("chat.liveWork.detail.recoveryRecorded")
+                                  : ""}
+                              </div>
+                              <div class="muted">
+                                ${t("chat.liveWork.detail.attemptTiming", {
+                                  started: formatTimestamp(attempt.createdAt),
+                                  updated: formatTimestamp(attempt.updatedAt),
+                                  ended: formatTimestamp(attempt.endedAt),
+                                  duration:
+                                    attempt.durationMs == null
+                                      ? t("chat.liveWork.detail.unavailable")
+                                      : t("chat.liveWork.detail.durationMs", {
+                                          duration: formatLiveWorkNumber(attempt.durationMs),
+                                        }),
+                                })}
+                              </div>
+                            </li>`,
+                        )}
+                      </ol>`
+                    : empty(t("chat.liveWork.detail.noAttempts"))}
+                </section>`
+              : activeTab === "context"
                 ? html`<section class="work-plan-detail__section">
-                    <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
-                    ${content.checkpointPresent
-                      ? html`<dl class="work-plan-detail__counts">
-                            <div>
-                              <dt>${t("chat.liveWork.detail.files")}</dt>
-                              <dd>${formatLiveWorkNumber(counts.files)}</dd>
-                            </div>
-                            <div>
-                              <dt>${t("chat.liveWork.detail.tests")}</dt>
-                              <dd>${formatLiveWorkNumber(counts.tests)}</dd>
-                            </div>
-                            <div>
-                              <dt>${t("chat.liveWork.detail.blockers")}</dt>
-                              <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
-                            </div>
-                          </dl>
-                          <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
-                      : empty(t("chat.liveWork.detail.noCheckpoint"))}
-                  </section>`
-                : html`<section class="work-plan-detail__section">
-                    <h3>${t("chat.liveWork.detail.routing")}</h3>
-                    ${renderWorkPlanRouting(workers)}
-                  </section>`}
+                      <h3>${t("chat.liveWork.detail.capsuleSummary")}</h3>
+                      <p>${content.summary}</p>
+                      <p><strong>${t("chat.liveWork.detail.focus")}</strong> ${content.focus}</p>
+                      <p>${t("chat.liveWork.detail.provenance")} ${provenanceLabel}</p>
+                      <dl class="work-plan-detail__counts">
+                        <div>
+                          <dt>${t("chat.liveWork.detail.constraints")}</dt>
+                          <dd>${formatLiveWorkNumber(content.capsuleCounts.constraints)}</dd>
+                        </div>
+                        <div>
+                          <dt>${t("chat.liveWork.detail.decisions")}</dt>
+                          <dd>${formatLiveWorkNumber(content.capsuleCounts.decisions)}</dd>
+                        </div>
+                        <div>
+                          <dt>${t("chat.liveWork.detail.openQuestions")}</dt>
+                          <dd>${formatLiveWorkNumber(content.capsuleCounts.openQuestions)}</dd>
+                        </div>
+                        <div>
+                          <dt>${t("chat.liveWork.detail.conflicts")}</dt>
+                          <dd>${formatLiveWorkNumber(content.capsuleCounts.conflicts)}</dd>
+                        </div>
+                      </dl>
+                      <p>
+                        ${t("chat.liveWork.detail.contextPresence", {
+                          checkpoint: t(
+                            content.checkpointPresent
+                              ? "chat.liveWork.detail.present"
+                              : "chat.liveWork.detail.notPresent",
+                          ),
+                          handoff: t(
+                            content.handoffPresent
+                              ? "chat.liveWork.detail.present"
+                              : "chat.liveWork.detail.notPresent",
+                          ),
+                        })}
+                      </p>
+                    </section>
+                    <section class="work-plan-detail__section">
+                      <h3>${t("chat.liveWork.detail.nextTask")}</h3>
+                      <p>
+                        <span class="work-plan-detail__source">${nextTaskSource}</span>
+                        ${content.nextTask}
+                      </p>
+                    </section>`
+                : activeTab === "validation"
+                  ? html`<section class="work-plan-detail__section">
+                      <h3>${t("chat.liveWork.detail.checkpointEvidence")}</h3>
+                      ${content.checkpointPresent
+                        ? html`<dl class="work-plan-detail__counts">
+                              <div>
+                                <dt>${t("chat.liveWork.detail.files")}</dt>
+                                <dd>${formatLiveWorkNumber(counts.files)}</dd>
+                              </div>
+                              <div>
+                                <dt>${t("chat.liveWork.detail.tests")}</dt>
+                                <dd>${formatLiveWorkNumber(counts.tests)}</dd>
+                              </div>
+                              <div>
+                                <dt>${t("chat.liveWork.detail.blockers")}</dt>
+                                <dd>${formatLiveWorkNumber(counts.blockers)}</dd>
+                              </div>
+                            </dl>
+                            <p class="muted">${t("chat.liveWork.detail.countsOnly")}</p>`
+                        : empty(t("chat.liveWork.detail.noCheckpoint"))}
+                      ${onPrepareAction && worktrees.some((worktree) => worktree.canTest)
+                        ? html`<h4>${t("chat.liveWork.detail.validationActions")}</h4>
+                            <div class="row" style="gap: 8px; flex-wrap: wrap;">
+                              ${worktrees
+                                .filter((worktree) => worktree.canTest)
+                                .map(
+                                  (worktree) => html`<button
+                                    class="btn btn--sm"
+                                    type="button"
+                                    @click=${() =>
+                                      onPrepareAction(
+                                        t("chat.liveWork.detail.runTestsDraft", {
+                                          worktree: worktree.label,
+                                        }),
+                                      )}
+                                  >
+                                    ${t("chat.liveWork.detail.runTests", {
+                                      worktree: worktree.label,
+                                    })}
+                                  </button>`,
+                                )}
+                            </div>`
+                        : nothing}
+                    </section>`
+                  : html`<section class="work-plan-detail__section">
+                      <h3>${t("chat.liveWork.detail.routing")}</h3>
+                      ${renderWorkPlanRouting(workers)}
+                    </section>`}
     </section>
   </article>`;
 }
@@ -1074,6 +1306,7 @@ type MarkdownSidebarProps = {
   workPlanTab?: WorkPlanDetailTab;
   onWorkPlanTabChange?: (tab: WorkPlanDetailTab) => void;
   onCancelWorkPlanWorker?: (workerKey: string) => void;
+  onPrepareWorkPlanAction?: (draft: string) => void;
   workPlanIdPrefix?: string;
 };
 
@@ -1141,6 +1374,7 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                   props.workPlanTab ?? "plan",
                   props.onWorkPlanTabChange ?? (() => undefined),
                   props.onCancelWorkPlanWorker,
+                  props.onPrepareWorkPlanAction,
                   props.workPlanIdPrefix ?? "work-plan",
                 )
               : content.kind === "file"
@@ -1247,6 +1481,7 @@ class ChatDetailPanel extends LitElement {
   @property({ attribute: false }) onRevealInWorkspace?: ((path: string) => void) | null = null;
   @property({ attribute: false }) onCancelWorkPlanWorker?: ((workerKey: string) => void) | null =
     null;
+  @property({ attribute: false }) onPrepareWorkPlanAction?: ((draft: string) => void) | null = null;
 
   @state() private visibleContent: SidebarContent | null = null;
   @state() private error: string | null = null;
@@ -1662,6 +1897,7 @@ class ChatDetailPanel extends LitElement {
           workPlanTab: this.workPlanTab,
           onWorkPlanTabChange: this.changeWorkPlanTab,
           onCancelWorkPlanWorker: this.onCancelWorkPlanWorker ?? undefined,
+          onPrepareWorkPlanAction: this.onPrepareWorkPlanAction ?? undefined,
           workPlanIdPrefix: this.workPlanIdPrefix,
         })}
       </div>

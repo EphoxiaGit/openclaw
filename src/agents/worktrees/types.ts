@@ -38,3 +38,18 @@ export type ManagedWorktreeGcResult = {
   orphansDeleted: number;
   snapshotsPruned: number;
 };
+
+export type ManagedWorktreeInspection = {
+  record: ManagedWorktreeRecord;
+  state: "active" | "restorable";
+  changeCount: number;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  conflictCount: number;
+  unpushedCommitCount: number;
+  files: string[];
+  diffStat?: string;
+  filesTruncated: boolean;
+  diffStatTruncated: boolean;
+};

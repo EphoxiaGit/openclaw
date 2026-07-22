@@ -84,6 +84,34 @@ describe("ManagedWorktreeService", () => {
     expect(repeated).toEqual(created);
   });
 
+  it("inspects bounded changes and retained recovery state", async () => {
+    await addRemote(root, repo);
+    const created = await service.create({ repoRoot: repo, name: "inspect" });
+    await fs.writeFile(path.join(created.path, "README.md"), "changed\n");
+    await fs.writeFile(path.join(created.path, "new.txt"), "new\n");
+    await git(created.path, "add", "README.md");
+
+    expect(await service.inspect(created.id)).toMatchObject({
+      state: "active",
+      changeCount: 2,
+      stagedCount: 1,
+      unstagedCount: 0,
+      untrackedCount: 1,
+      conflictCount: 0,
+      unpushedCommitCount: 0,
+      files: ["README.md", "new.txt"],
+      diffStatTruncated: false,
+      filesTruncated: false,
+    });
+
+    await service.remove({ id: created.id, reason: "inspect-test" });
+    expect(await service.inspect(created.id)).toMatchObject({
+      state: "restorable",
+      changeCount: 0,
+      files: [],
+    });
+  });
+
   it("does not remove a concurrent successful create during remote fallback", async () => {
     await addRemote(root, repo);
 

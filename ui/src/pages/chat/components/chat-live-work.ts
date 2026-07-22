@@ -30,6 +30,7 @@ type WirePlan = {
   definitionRevision?: unknown;
   requirements?: unknown;
   workers?: unknown;
+  worktrees?: unknown;
   goal?: { objective?: unknown; recordRevision?: unknown };
   steps?: unknown;
   projection?: {
@@ -39,6 +40,29 @@ type WirePlan = {
     activeStepIds?: unknown;
     readyStepIds?: unknown;
   };
+};
+type WireWorktree = {
+  label?: unknown;
+  stepTitle?: unknown;
+  branch?: unknown;
+  baseRef?: unknown;
+  state?: unknown;
+  commitState?: unknown;
+  changeCount?: unknown;
+  stagedCount?: unknown;
+  unstagedCount?: unknown;
+  untrackedCount?: unknown;
+  conflictCount?: unknown;
+  unpushedCommitCount?: unknown;
+  files?: unknown;
+  diffStat?: unknown;
+  filesTruncated?: unknown;
+  diffStatTruncated?: unknown;
+  canTest?: unknown;
+  canPrepareCommit?: unknown;
+  canResolveConflicts?: unknown;
+  canResume?: unknown;
+  canRollback?: unknown;
 };
 type WireProject = {
   projectId?: unknown;
@@ -401,6 +425,15 @@ const EXACT_MODEL_STATES = new Set(["matched", "substituted", "unverified", "not
 const FALLBACK_STATES = new Set(["disabled", "configured", "used", "unknown"]);
 const PACING_STATES = new Set(["standard", "fast", "auto", "unknown"]);
 const PACING_SOURCES = new Set(["session", "agent", "config", "default", "unknown"]);
+const WORKTREE_STATES = new Set(["active", "restorable", "unavailable"]);
+const WORKTREE_COMMIT_STATES = new Set([
+  "clean",
+  "uncommitted",
+  "conflicted",
+  "unpushed",
+  "restorable",
+  "unavailable",
+]);
 const TECHNICAL_TEXT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/;
 
 function allowlisted(value: unknown, values: Set<string>, fallback = "unknown"): string {
@@ -413,6 +446,26 @@ function timestamp(value: unknown): number | null {
 
 function technicalText(value: unknown): string {
   return typeof value === "string" && TECHNICAL_TEXT.test(value) ? value : "";
+}
+
+function relativeFilePath(value: unknown): string {
+  if (typeof value !== "string" || !value || value.length > 500 || value.includes("\0")) {
+    return "";
+  }
+  const normalized = value.replaceAll("\\", "/");
+  return normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.split("/").includes("..")
+    ? ""
+    : normalized;
+}
+
+function boundedMachineText(value: unknown, maxLength: number): string {
+  return typeof value === "string" &&
+    value.length <= maxLength &&
+    !/[\0\u0008\u000B\u000C]/.test(value)
+    ? value
+    : "";
 }
 
 function normalizeWorkers(plan: WirePlan): NonNullable<WorkPlanSidebarContent["workers"]> {
@@ -462,6 +515,39 @@ function normalizeWorkers(plan: WirePlan): NonNullable<WorkPlanSidebarContent["w
         ? Math.max(0, worker.elapsedMs)
         : null,
     canCancel: worker.canCancel === true,
+  }));
+}
+
+function normalizeWorktrees(plan: WirePlan): NonNullable<WorkPlanSidebarContent["worktrees"]> {
+  const worktrees = Array.isArray(plan.worktrees)
+    ? (plan.worktrees as WireWorktree[]).slice(0, 100)
+    : [];
+  return worktrees.map((worktree, index) => ({
+    label:
+      technicalText(worktree.label) ||
+      t("chat.liveWork.detail.worktreeNumber", { number: formatLiveWorkNumber(index + 1) }),
+    stepTitle: safeTitle(worktree.stepTitle, t("chat.liveWork.detail.unavailable")),
+    branch: technicalText(worktree.branch),
+    baseRef: technicalText(worktree.baseRef),
+    state: allowlisted(worktree.state, WORKTREE_STATES, "unavailable"),
+    commitState: allowlisted(worktree.commitState, WORKTREE_COMMIT_STATES, "unavailable"),
+    changeCount: Math.max(0, Math.floor(number(worktree.changeCount))),
+    stagedCount: Math.max(0, Math.floor(number(worktree.stagedCount))),
+    unstagedCount: Math.max(0, Math.floor(number(worktree.unstagedCount))),
+    untrackedCount: Math.max(0, Math.floor(number(worktree.untrackedCount))),
+    conflictCount: Math.max(0, Math.floor(number(worktree.conflictCount))),
+    unpushedCommitCount: Math.max(0, Math.floor(number(worktree.unpushedCommitCount))),
+    files: Array.isArray(worktree.files)
+      ? worktree.files.flatMap((file) => relativeFilePath(file) || []).slice(0, 200)
+      : [],
+    diffStat: boundedMachineText(worktree.diffStat, 16_000),
+    filesTruncated: worktree.filesTruncated === true,
+    diffStatTruncated: worktree.diffStatTruncated === true,
+    canTest: worktree.canTest === true,
+    canPrepareCommit: worktree.canPrepareCommit === true,
+    canResolveConflicts: worktree.canResolveConflicts === true,
+    canResume: worktree.canResume === true,
+    canRollback: worktree.canRollback === true,
   }));
 }
 
@@ -634,6 +720,7 @@ export function normalizeLiveWork(project: WireProject, context: WireContext | n
     orderedSteps,
     attempts,
     workers: normalizeWorkers(plan),
+    worktrees: normalizeWorktrees(plan),
     requirements: {
       mapped: requirements.filter((item) => item.disposition === "mapped").map((item) => item.text),
       excluded: requirements

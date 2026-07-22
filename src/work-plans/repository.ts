@@ -752,6 +752,18 @@ export class WorkPlanRepository {
           "worktree link already exists; replay requires the original idempotency key",
         );
       }
+      // A live worktree has one active plan-step owner. Superseded definitions release it
+      // so a re-plan can carry the same isolated checkout forward without parallel edits.
+      const existingWorktreeOwner = db
+        .prepare(
+          "SELECT l.plan_id,l.step_id FROM work_plan_step_worktree_links l JOIN work_plan_steps s ON s.plan_id=l.plan_id AND s.definition_revision=l.definition_revision AND s.step_id=l.step_id WHERE l.worktree_id=? AND s.status!='superseded'",
+        )
+        .get(mutation.worktreeId) as Row | undefined;
+      if (existingWorktreeOwner) {
+        throw new WorkPlanConflictError(
+          `worktree already linked to ${existingWorktreeOwner.plan_id}/${existingWorktreeOwner.step_id}`,
+        );
+      }
       db.prepare(
         "INSERT INTO work_plan_step_worktree_links(plan_id,definition_revision,step_id,worktree_id,linked_at) VALUES(?,?,?,?,?)",
       ).run(before.planId, before.definitionRevision, mutation.stepId, mutation.worktreeId, now);

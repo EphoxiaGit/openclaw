@@ -1,6 +1,7 @@
 import path from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupTempDirs, makeTempDir } from "../../../test/helpers/temp-dir.js";
+import type { ManagedWorktreeInspection } from "../../agents/worktrees/types.js";
 import {
   closeOpenClawStateDatabaseForTest,
   openOpenClawStateDatabase,
@@ -10,7 +11,11 @@ import { ProjectContextRepository } from "../../work-plans/project-context-repos
 import { WorkPlanRepository } from "../../work-plans/repository.js";
 import type { WorkPlanSnapshot } from "../../work-plans/types.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
-import { createWorkPlansHandlers, projectWorkPlanWorkers } from "./work-plans.js";
+import {
+  createWorkPlansHandlers,
+  projectWorkPlanWorkers,
+  projectWorkPlanWorktrees,
+} from "./work-plans.js";
 
 const dirs: string[] = [];
 
@@ -280,6 +285,105 @@ describe("work-plan worker projection", () => {
       taskId: "private-task-id",
       reason: "Stopped from Assistant.",
     });
+  });
+});
+
+describe("work-plan worktree projection", () => {
+  it("shows bounded repository state without raw worktree authority", async () => {
+    const plan = {
+      schemaVersion: 1,
+      projectId: "project",
+      primaryConversationId: "conversation",
+      projectRecordRevision: 1,
+      goal: { goalId: "goal", objective: "Ship", recordRevision: 1 },
+      planId: "plan",
+      status: "running",
+      definitionRevision: 1,
+      recordRevision: 1,
+      createdAt: 10,
+      updatedAt: 20,
+      steps: [
+        {
+          stepId: "private-step",
+          title: "Implement changes",
+          ordinal: 1,
+          status: "running",
+          recordRevision: 1,
+          dependsOn: [],
+          taskLinks: [],
+          worktreeLinks: ["private-worktree-id"],
+          attempts: [],
+        },
+      ],
+      requirements: [],
+      projection: {
+        display: "Plan 0/1",
+        x: 0,
+        n: 1,
+        activeStepIds: ["private-step"],
+        readyStepIds: [],
+        statusCounts: { running: 1 },
+      },
+    } satisfies WorkPlanSnapshot;
+    const inspection: ManagedWorktreeInspection = {
+      record: {
+        id: "private-worktree-id",
+        name: "implementation",
+        repoFingerprint: "0123456789abcdef",
+        repoRoot: "/private/repo",
+        path: "/private/state/worktree",
+        branch: "openclaw/implementation",
+        baseRef: "origin/main",
+        ownerKind: "session",
+        ownerId: "private-session",
+        snapshotRef: "refs/private/snapshot",
+        createdAt: 1,
+        lastActiveAt: 2,
+      },
+      state: "active",
+      changeCount: 2,
+      stagedCount: 1,
+      unstagedCount: 0,
+      untrackedCount: 1,
+      conflictCount: 0,
+      unpushedCommitCount: 1,
+      files: ["src/feature.ts", "test/feature.test.ts", "/private/rejected.ts"],
+      diffStat: "src/feature.ts | 4 ++++",
+      filesTruncated: false,
+      diffStatTruncated: false,
+    };
+
+    const projected = await projectWorkPlanWorktrees({
+      plan,
+      inspect: vi.fn(async () => inspection),
+    });
+
+    expect(projected).toEqual([
+      expect.objectContaining({
+        key: "worktree-1-1",
+        label: "implementation",
+        stepTitle: "Implement changes",
+        state: "active",
+        commitState: "uncommitted",
+        files: ["src/feature.ts", "test/feature.test.ts"],
+        canTest: true,
+        canPrepareCommit: true,
+        canResume: false,
+        canRollback: true,
+      }),
+    ]);
+    const rendered = JSON.stringify(projected);
+    for (const secret of [
+      "private-worktree-id",
+      "/private/repo",
+      "/private/state/worktree",
+      "private-session",
+      "refs/private/snapshot",
+      "/private/rejected.ts",
+      "private-step",
+    ]) {
+      expect(rendered).not.toContain(secret);
+    }
   });
 });
 

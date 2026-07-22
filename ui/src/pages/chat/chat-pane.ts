@@ -1242,6 +1242,18 @@ class ChatPane extends LitElement {
         }
       },
       onCancelWorkPlanWorker: (workerKey) => this.cancelWorkPlanWorker(workerKey),
+      onPrepareWorkPlanAction: (draft) => {
+        const composer = this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR);
+        const current = composer?.value ?? state.chatMessage;
+        state.handleChatDraftChange(current.trim() ? `${current.trim()}\n\n${draft}` : draft);
+        this.liveWorkAnnouncement = t("chat.liveWork.actionPrepared");
+        state.requestUpdate?.();
+        void this.updateComplete.then(() =>
+          this.querySelector<HTMLTextAreaElement>(CHAT_COMPOSER_TEXTAREA_SELECTOR)?.focus({
+            preventScroll: true,
+          }),
+        );
+      },
       onSplitRatioChange: state.handleSplitRatioChange,
       assistantName: state.assistantName,
       assistantAvatar: state.assistantAvatar,

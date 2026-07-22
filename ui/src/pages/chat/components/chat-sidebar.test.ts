@@ -259,10 +259,10 @@ describe("work plan sidebar", () => {
       "pane-a-work-tab-plan",
     );
     expect(nextWorkPlanDetailTab("plan", "ArrowRight")).toBe("agents");
-    expect(nextWorkPlanDetailTab("agents", "ArrowRight")).toBe("routing");
-    expect(nextWorkPlanDetailTab("plan", "ArrowLeft")).toBe("evidence");
+    expect(nextWorkPlanDetailTab("agents", "ArrowRight")).toBe("changes");
+    expect(nextWorkPlanDetailTab("plan", "ArrowLeft")).toBe("context");
     expect(nextWorkPlanDetailTab("context", "Home")).toBe("plan");
-    expect(nextWorkPlanDetailTab("context", "End")).toBe("evidence");
+    expect(nextWorkPlanDetailTab("context", "End")).toBe("context");
   });
 
   it("renders observed worker state in the Agents tab", () => {
@@ -416,5 +416,76 @@ describe("work plan sidebar", () => {
     expect(text).toContain("Substituted");
     expect(text).toContain("Configured fallback selected after a provider failure.");
     expect(text).toContain("priority");
+  });
+
+  it("renders managed changes and prepares safe worktree actions", () => {
+    const container = document.createElement("div");
+    const onPrepareAction = vi.fn();
+    render(
+      renderMarkdownSidebar({
+        content: {
+          kind: "work-plan",
+          title: "Northstar work details",
+          projectName: "Northstar",
+          planPosition: { x: 1, n: 3 },
+          planStatus: "running",
+          summary: "Bounded work.",
+          focus: "Implementation",
+          capsuleCounts: { constraints: 0, decisions: 0, openQuestions: 0, conflicts: 0 },
+          provenanceStatus: "current",
+          objective: "Ship the slice",
+          activeSteps: ["Implement the slice"],
+          readySteps: [],
+          blockedSteps: [],
+          worktrees: [
+            {
+              label: "implementation",
+              stepTitle: "Implement the slice",
+              branch: "openclaw/implementation",
+              baseRef: "origin/main",
+              state: "active",
+              commitState: "uncommitted",
+              changeCount: 2,
+              stagedCount: 1,
+              unstagedCount: 0,
+              untrackedCount: 1,
+              conflictCount: 0,
+              unpushedCommitCount: 0,
+              files: ["src/feature.ts", "test/feature.test.ts"],
+              diffStat: "src/feature.ts | 4 ++++",
+              filesTruncated: false,
+              diffStatTruncated: false,
+              canTest: true,
+              canPrepareCommit: true,
+              canResolveConflicts: false,
+              canResume: false,
+              canRollback: true,
+            },
+          ],
+          evidenceCount: 0,
+          revisions: { project: 1, plan: 1, goal: 1, capsule: 1 },
+          checkpointPresent: false,
+          nextTask: "Implement the slice",
+          nextTaskSource: "ready-step",
+        },
+        error: null,
+        onClose: () => undefined,
+        onViewRawText: () => undefined,
+        onPrepareWorkPlanAction: onPrepareAction,
+        workPlanTab: "changes",
+        workPlanIdPrefix: "pane-changes-work",
+      }),
+      container,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Managed worktrees and changes");
+    expect(text).toContain("Uncommitted changes");
+    expect(text).toContain("src/feature.ts");
+    [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Prepare commit"))
+      ?.click();
+    expect(onPrepareAction).toHaveBeenCalledWith(expect.stringContaining("implementation"));
+    expect(onPrepareAction).toHaveBeenCalledWith(expect.stringContaining("Do not push or deploy"));
   });
 });

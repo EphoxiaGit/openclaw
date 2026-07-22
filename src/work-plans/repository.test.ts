@@ -651,6 +651,16 @@ describe("durable work plans", () => {
       actorId: "operator",
       mutation: { action: "linkWorktree", stepId: "a", worktreeId: "worktree-1" },
     });
+    expect(() =>
+      repository.mutate({
+        projectId: "project-1",
+        planId: "plan-1",
+        expectedRevision: linked.recordRevision,
+        idempotencyKey: "link-worktree-twice",
+        actorId: "operator",
+        mutation: { action: "linkWorktree", stepId: "b", worktreeId: "worktree-1" },
+      }),
+    ).toThrow(WorkPlanConflictError);
     const started = repository.mutate({
       projectId: "project-1",
       planId: "plan-1",

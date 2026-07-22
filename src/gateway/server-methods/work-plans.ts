@@ -23,6 +23,8 @@ import {
 } from "../../../packages/gateway-protocol/src/index.js";
 import { hasConfiguredModelFallbacks } from "../../agents/agent-scope.js";
 import { resolveFastModeState } from "../../agents/fast-mode.js";
+import { managedWorktrees } from "../../agents/worktrees/service.js";
+import type { ManagedWorktreeInspection } from "../../agents/worktrees/types.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { hasSessionActiveAutoModelFallback } from "../../config/sessions/model-override-provenance.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -87,6 +89,21 @@ function boundedNarrative(value: unknown): string | undefined {
   }
   const redacted = redactToolDetail(value.trim()).slice(0, 1_000).trim();
   return redacted || undefined;
+}
+
+function relativeFilePath(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value || value.length > 500) {
+    return undefined;
+  }
+  const normalized = value.replaceAll("\\", "/");
+  if (
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.split("/").includes("..")
+  ) {
+    return undefined;
+  }
+  return normalized;
 }
 
 function workerState(value: string | undefined): WorkerState {
@@ -250,6 +267,93 @@ export function projectWorkPlanWorkers(params: {
   });
 }
 
+function worktreeCommitState(inspection: ManagedWorktreeInspection) {
+  if (inspection.state === "restorable") {
+    return "restorable" as const;
+  }
+  if (inspection.conflictCount > 0) {
+    return "conflicted" as const;
+  }
+  if (inspection.changeCount > 0) {
+    return "uncommitted" as const;
+  }
+  if (inspection.unpushedCommitCount > 0) {
+    return "unpushed" as const;
+  }
+  return "clean" as const;
+}
+
+export async function projectWorkPlanWorktrees(params: {
+  plan: WorkPlanSnapshot;
+  inspect: (id: string) => Promise<ManagedWorktreeInspection>;
+}) {
+  const links = params.plan.steps
+    .flatMap((step) => step.worktreeLinks.map((worktreeId, index) => ({ step, worktreeId, index })))
+    .slice(0, 100);
+  return await Promise.all(
+    links.map(async ({ step, worktreeId, index }) => {
+      const key = `worktree-${step.ordinal}-${index + 1}`;
+      const stepTitle = boundedNarrative(step.title) ?? "Worktree";
+      try {
+        const inspection = await params.inspect(worktreeId);
+        const label = technicalText(inspection.record.name) ?? "Managed worktree";
+        const branch = technicalText(inspection.record.branch);
+        const baseRef = technicalText(inspection.record.baseRef);
+        const diffStat = boundedNarrative(inspection.diffStat);
+        return {
+          key,
+          label,
+          stepTitle,
+          ...(branch ? { branch } : {}),
+          ...(baseRef ? { baseRef } : {}),
+          state: inspection.state,
+          commitState: worktreeCommitState(inspection),
+          changeCount: inspection.changeCount,
+          stagedCount: inspection.stagedCount,
+          unstagedCount: inspection.unstagedCount,
+          untrackedCount: inspection.untrackedCount,
+          conflictCount: inspection.conflictCount,
+          unpushedCommitCount: inspection.unpushedCommitCount,
+          files: inspection.files.flatMap((file) => relativeFilePath(file) ?? []).slice(0, 200),
+          ...(diffStat ? { diffStat } : {}),
+          filesTruncated: inspection.filesTruncated,
+          diffStatTruncated: inspection.diffStatTruncated,
+          canTest: inspection.state === "active",
+          canPrepareCommit:
+            inspection.state === "active" &&
+            inspection.changeCount > 0 &&
+            inspection.conflictCount === 0,
+          canResolveConflicts: inspection.state === "active" && inspection.conflictCount > 0,
+          canResume: inspection.state === "restorable",
+          canRollback: inspection.state === "active" && inspection.changeCount > 0,
+        };
+      } catch {
+        return {
+          key,
+          label: "Managed worktree",
+          stepTitle,
+          state: "unavailable" as const,
+          commitState: "unavailable" as const,
+          changeCount: 0,
+          stagedCount: 0,
+          unstagedCount: 0,
+          untrackedCount: 0,
+          conflictCount: 0,
+          unpushedCommitCount: 0,
+          files: [],
+          filesTruncated: false,
+          diffStatTruncated: false,
+          canTest: false,
+          canPrepareCommit: false,
+          canResolveConflicts: false,
+          canResume: false,
+          canRollback: false,
+        };
+      }
+    }),
+  );
+}
+
 function resolveWorkerSessionFacts(
   cfg: OpenClawConfig,
   store: Record<string, SessionEntry>,
@@ -391,18 +495,39 @@ function execute(
   }
 }
 
+async function executeAsync(
+  respond: Parameters<GatewayRequestHandlers[string]>[0]["respond"],
+  operation: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    respond(true, await operation());
+  } catch (error) {
+    if (
+      error instanceof WorkPlanConflictError ||
+      error instanceof WorkPlanValidationError ||
+      error instanceof WorkPlanNotFoundError
+    ) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
+      return;
+    }
+    throw error;
+  }
+}
+
 export function createWorkPlansHandlers(
   input: {
     repository?: WorkPlanRepository;
     projectContextRepository?: ProjectContextRepository;
     cancelTask?: typeof cancelDetachedTaskRunById;
     listTasks?: typeof listTaskRecords;
+    inspectWorktree?: (id: string) => Promise<ManagedWorktreeInspection>;
   } = {},
 ): GatewayRequestHandlers {
   const repository = input.repository ?? new WorkPlanRepository();
   const projectContextRepository = input.projectContextRepository ?? new ProjectContextRepository();
   const cancelTask = input.cancelTask ?? cancelDetachedTaskRunById;
   const listTasks = input.listTasks ?? listTaskRecords;
+  const inspectWorktree = input.inspectWorktree ?? ((id) => managedWorktrees.inspect(id));
   return {
     "work.registeredProjects.list": ({ params, respond }) => {
       if (!validateWorkRegisteredProjectsListParams(params)) {
@@ -524,13 +649,14 @@ export function createWorkPlansHandlers(
       }
       execute(respond, () => ({ projects: repository.listProjects() }));
     },
-    "work.projects.get": ({ params, respond, context }) => {
+    "work.projects.get": async ({ params, respond, context }) => {
       if (!validateWorkProjectsGetParams(params)) {
         return invalid(respond, "work.projects.get", validateWorkProjectsGetParams.errors);
       }
-      execute(respond, () => {
+      await executeAsync(respond, async () => {
         const project = repository.getProject(params.projectId);
         const tasks = listTasks();
+        const selectedPlan = currentWorkPlan(project);
         let sessionContext:
           | { cfg: OpenClawConfig; store: Record<string, SessionEntry> }
           | undefined;
@@ -550,10 +676,16 @@ export function createWorkPlansHandlers(
         return {
           project: {
             ...project,
-            plans: project.plans.map((plan) =>
-              Object.assign({}, plan, {
-                workers: projectWorkPlanWorkers({ plan, tasks, resolveSessionFacts }),
-              }),
+            plans: await Promise.all(
+              project.plans.map(async (plan) =>
+                Object.assign({}, plan, {
+                  workers: projectWorkPlanWorkers({ plan, tasks, resolveSessionFacts }),
+                  worktrees:
+                    selectedPlan?.planId === plan.planId
+                      ? await projectWorkPlanWorktrees({ plan, inspect: inspectWorktree })
+                      : [],
+                }),
+              ),
             ),
           },
         };

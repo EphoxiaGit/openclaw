@@ -295,6 +295,56 @@ describe("chat live work", () => {
     expect(rendered).not.toContain("private-step");
   });
 
+  it("renders bounded managed-worktree state without authority identifiers", () => {
+    const source = project();
+    const plan = source.plans[0] as Record<string, unknown>;
+    plan.worktrees = [
+      {
+        key: "private-worktree-key",
+        label: "implementation",
+        stepTitle: "Implement the managed change",
+        branch: "openclaw/implementation",
+        baseRef: "origin/main",
+        state: "active",
+        commitState: "uncommitted",
+        changeCount: 2,
+        stagedCount: 1,
+        unstagedCount: 0,
+        untrackedCount: 1,
+        conflictCount: 0,
+        unpushedCommitCount: 0,
+        files: ["src/feature.ts", "test/feature.test.ts", "/private/rejected.ts"],
+        diffStat: "src/feature.ts | 4 ++++",
+        filesTruncated: false,
+        diffStatTruncated: false,
+        canTest: true,
+        canPrepareCommit: true,
+        canResolveConflicts: false,
+        canResume: false,
+        canRollback: true,
+      },
+    ];
+
+    const view = normalizeLiveWork(source, context());
+
+    expect(view.details?.worktrees).toEqual([
+      expect.objectContaining({
+        label: "implementation",
+        stepTitle: "Implement the managed change",
+        branch: "openclaw/implementation",
+        state: "active",
+        commitState: "uncommitted",
+        files: ["src/feature.ts", "test/feature.test.ts"],
+        canTest: true,
+        canPrepareCommit: true,
+        canRollback: true,
+      }),
+    ]);
+    const rendered = JSON.stringify(view);
+    expect(rendered).not.toContain("private-worktree-key");
+    expect(rendered).not.toContain("/private/rejected.ts");
+  });
+
   it("fails closed for project and active-plan ambiguity", async () => {
     expect(
       normalizeLiveWork(

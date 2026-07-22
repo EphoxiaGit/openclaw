@@ -446,6 +446,44 @@ const WorkPlanWorkerSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const WorkPlanWorktreeSchema = Type.Object(
+  {
+    key: NonEmptyString,
+    label: NonEmptyString,
+    stepTitle: NonEmptyString,
+    branch: Type.Optional(NonEmptyString),
+    baseRef: Type.Optional(NonEmptyString),
+    state: Type.Union([
+      Type.Literal("active"),
+      Type.Literal("restorable"),
+      Type.Literal("unavailable"),
+    ]),
+    commitState: Type.Union([
+      Type.Literal("clean"),
+      Type.Literal("uncommitted"),
+      Type.Literal("conflicted"),
+      Type.Literal("unpushed"),
+      Type.Literal("restorable"),
+      Type.Literal("unavailable"),
+    ]),
+    changeCount: Type.Integer({ minimum: 0 }),
+    stagedCount: Type.Integer({ minimum: 0 }),
+    unstagedCount: Type.Integer({ minimum: 0 }),
+    untrackedCount: Type.Integer({ minimum: 0 }),
+    conflictCount: Type.Integer({ minimum: 0 }),
+    unpushedCommitCount: Type.Integer({ minimum: 0 }),
+    files: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 200 }),
+    diffStat: Type.Optional(Type.String({ minLength: 1, maxLength: 16_000 })),
+    filesTruncated: Type.Boolean(),
+    diffStatTruncated: Type.Boolean(),
+    canTest: Type.Boolean(),
+    canPrepareCommit: Type.Boolean(),
+    canResolveConflicts: Type.Boolean(),
+    canResume: Type.Boolean(),
+    canRollback: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
 export const WorkPlanSnapshotSchema = Type.Object(
   {
     schemaVersion: Type.Literal(1),
@@ -471,6 +509,7 @@ export const WorkPlanSnapshotSchema = Type.Object(
     requirements: Type.Array(RequirementResultSchema),
     projection: ProjectionSchema,
     workers: Type.Optional(Type.Array(WorkPlanWorkerSchema, { maxItems: 100 })),
+    worktrees: Type.Optional(Type.Array(WorkPlanWorktreeSchema, { maxItems: 100 })),
   },
   { additionalProperties: false },
 );

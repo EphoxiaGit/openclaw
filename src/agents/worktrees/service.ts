@@ -29,6 +29,7 @@ import {
 import type {
   CreateManagedWorktreeParams,
   ManagedWorktreeGcResult,
+  ManagedWorktreeInspection,
   ManagedWorktreeOwnerKind,
   ManagedWorktreeRecord,
   RemoveManagedWorktreeResult,
@@ -41,6 +42,9 @@ export const WORKTREE_GC_INTERVAL_MS = 60 * 60 * 1000;
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SNAPSHOT_REF_PREFIX = "refs/openclaw/snapshots";
 const OPENCLAW_LOCK_PATTERN = /^openclaw pid=(\d+)$/;
+const INSPECTION_FILE_LIMIT = 200;
+const INSPECTION_DIFF_STAT_LIMIT = 16_000;
+const CONFLICT_STATUSES = new Set(["DD", "AU", "UD", "UA", "DU", "AA"]);
 const log = createSubsystemLogger("agents/worktrees");
 
 type ServiceOptions = {
@@ -58,8 +62,42 @@ type LockState =
   | { kind: "dead"; pid: number }
   | { kind: "foreign"; reason: string };
 
+type WorktreeStatusEntry = {
+  path: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  conflicted: boolean;
+};
+
 function resultMessage(result: GitResult): string {
   return (result.stderr || result.stdout).trim().split("\n").slice(-12).join("\n");
+}
+
+function parseWorktreeStatus(output: string): WorktreeStatusEntry[] {
+  const fields = output.split("\0");
+  const entries: WorktreeStatusEntry[] = [];
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index];
+    if (!field || field.length < 4) {
+      continue;
+    }
+    const status = field.slice(0, 2);
+    const indexStatus = status[0] ?? " ";
+    const worktreeStatus = status[1] ?? " ";
+    const renamed = indexStatus === "R" || indexStatus === "C";
+    entries.push({
+      path: field.slice(3),
+      staged: indexStatus !== " " && indexStatus !== "?",
+      unstaged: worktreeStatus !== " " && worktreeStatus !== "?",
+      untracked: status === "??",
+      conflicted: indexStatus === "U" || worktreeStatus === "U" || CONFLICT_STATUSES.has(status),
+    });
+    if (renamed) {
+      index += 1;
+    }
+  }
+  return entries;
 }
 
 function validateName(name: string): string {
@@ -450,6 +488,67 @@ export class ManagedWorktreeService {
       }
     }
     return records.filter((record) => record.removedAt === undefined || record.snapshotRef);
+  }
+
+  async inspect(id: string): Promise<ManagedWorktreeInspection> {
+    const record = getRegistryWorktree(this.env, id);
+    if (!record) {
+      throw new Error(`managed worktree not found: ${id}`);
+    }
+    if (record.removedAt !== undefined) {
+      if (!record.snapshotRef) {
+        throw new Error(`worktree ${id} is removed and has no recovery snapshot`);
+      }
+      return {
+        record,
+        state: "restorable",
+        changeCount: 0,
+        stagedCount: 0,
+        unstagedCount: 0,
+        untrackedCount: 0,
+        conflictCount: 0,
+        unpushedCommitCount: 0,
+        files: [],
+        filesTruncated: false,
+        diffStatTruncated: false,
+      };
+    }
+    if (!(await pathExists(record.path))) {
+      throw new Error(`managed worktree is unavailable: ${id}`);
+    }
+    const status = parseWorktreeStatus(
+      await requireGitRaw(record.path, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+    );
+    const diffStatRaw = await requireGitRaw(record.path, [
+      "diff",
+      "--stat",
+      "--find-renames",
+      "HEAD",
+      "--",
+    ]);
+    const unpushed = await requireGit(record.path, [
+      "rev-list",
+      "--count",
+      "HEAD",
+      "--not",
+      "--remotes",
+    ]);
+    const diffStat = diffStatRaw.trim();
+    const files = status.map((entry) => entry.path).toSorted();
+    return {
+      record,
+      state: "active",
+      changeCount: status.length,
+      stagedCount: status.filter((entry) => entry.staged).length,
+      unstagedCount: status.filter((entry) => entry.unstaged).length,
+      untrackedCount: status.filter((entry) => entry.untracked).length,
+      conflictCount: status.filter((entry) => entry.conflicted).length,
+      unpushedCommitCount: Number.parseInt(unpushed, 10) || 0,
+      files: files.slice(0, INSPECTION_FILE_LIMIT),
+      ...(diffStat ? { diffStat: diffStat.slice(0, INSPECTION_DIFF_STAT_LIMIT) } : {}),
+      filesTruncated: files.length > INSPECTION_FILE_LIMIT,
+      diffStatTruncated: diffStat.length > INSPECTION_DIFF_STAT_LIMIT,
+    };
   }
 
   findLiveByOwner(
