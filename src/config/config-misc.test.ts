@@ -573,6 +573,61 @@ describe("gateway.controlUi.allowExternalEmbedUrls", () => {
   });
 });
 
+describe("gateway.controlUi.companionEnabled", () => {
+  it("accepts the feature gate only under gateway.controlUi", () => {
+    expect(
+      OpenClawSchema.safeParse({ gateway: { controlUi: { companionEnabled: true } } }).success,
+    ).toBe(true);
+    expect(
+      OpenClawSchema.safeParse({ env: { shellEnv: { companionEnabled: true } } }).success,
+    ).toBe(false);
+  });
+});
+
+describe("gateway.controlUi Companion renderer", () => {
+  it("accepts only the fixed renderer and closed presentation vocabulary", () => {
+    expect(
+      OpenClawSchema.safeParse({
+        gateway: {
+          controlUi: {
+            companionRenderer: "airi",
+            companionPresentation: {
+              model: "native",
+              camera: "native",
+              animation: "idle",
+            },
+          },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      OpenClawSchema.safeParse({
+        gateway: { controlUi: { companionRenderer: "https://example.com/renderer" } },
+      }).success,
+    ).toBe(false);
+    expect(
+      OpenClawSchema.safeParse({
+        gateway: {
+          controlUi: {
+            companionRenderer: "airi",
+            companionPresentation: { model: "https://example.com/model.vrm" },
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      OpenClawSchema.safeParse({
+        gateway: {
+          controlUi: {
+            companionRenderer: "airi",
+            companionPresentation: { provider: "openai" },
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("gateway.controlUi.chatMessageMaxWidth", () => {
   it("accepts constrained CSS width values", () => {
     for (const value of ["960px", "82%", "min(1280px, 82%)", "calc(100% - 2rem)"]) {

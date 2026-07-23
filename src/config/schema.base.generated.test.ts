@@ -193,6 +193,21 @@ describe("base config schema", () => {
     expect(schemaAt(BASE_SCHEMA, ["gateway", "controlUi", "chatMessageMaxWidth"])?.type).toBe(
       "string",
     );
+    expect(schemaAt(BASE_SCHEMA, ["gateway", "controlUi", "companionEnabled"])?.type).toBe(
+      "boolean",
+    );
+    expect(schemaAt(BASE_SCHEMA, ["gateway", "controlUi", "companionRenderer"])?.type).toBe(
+      "string",
+    );
+    expect(schemaAt(BASE_SCHEMA, ["gateway", "controlUi", "companionPresentation"])?.type).toBe(
+      "object",
+    );
+    expect(
+      schemaAt(BASE_SCHEMA, ["gateway", "controlUi", "companionPresentation", "model"])?.enum,
+    ).toEqual(["native", "avatar-a", "avatar-b"]);
+    expect(
+      schemaAt(BASE_SCHEMA, ["gateway", "controlUi", "companionPresentation", "camera"])?.enum,
+    ).toEqual(["native", "portrait", "full"]);
   });
 
   it("does not publish metadata-only composition branches", () => {

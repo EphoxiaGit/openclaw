@@ -1117,6 +1117,20 @@ export const OpenClawSchema = z
         controlUi: z
           .object({
             enabled: z.boolean().optional(),
+            companionEnabled: z.boolean().optional(),
+            companionRenderer: z.union([z.literal("minimal"), z.literal("airi")]).optional(),
+            companionPresentation: z
+              .object({
+                model: z
+                  .union([z.literal("native"), z.literal("avatar-a"), z.literal("avatar-b")])
+                  .optional(),
+                camera: z
+                  .union([z.literal("native"), z.literal("portrait"), z.literal("full")])
+                  .optional(),
+                animation: z.literal("idle").optional(),
+              })
+              .strict()
+              .optional(),
             basePath: z.string().optional(),
             root: z.string().optional(),
             embedSandbox: z

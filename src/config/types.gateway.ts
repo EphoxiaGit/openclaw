@@ -127,6 +127,16 @@ export type TalkConfigResponse = TalkConfig & {
 export type GatewayControlUiConfig = {
   /** If false, the Gateway will not serve the Control UI (default /). */
   enabled?: boolean;
+  /** Enable the authenticated, server-owned Companion bridge (default: false). */
+  companionEnabled?: boolean;
+  /** Select the fixed local Companion renderer (default: minimal). */
+  companionRenderer?: "minimal" | "airi";
+  /** Closed presentation choices for the AIRI renderer; no URLs or provider settings. */
+  companionPresentation?: {
+    model?: "native" | "avatar-a" | "avatar-b";
+    camera?: "native" | "portrait" | "full";
+    animation?: "idle";
+  };
   /** Optional base path prefix for the Control UI (e.g. "/openclaw"). */
   basePath?: string;
   /** Optional filesystem root for Control UI assets (defaults to dist/control-ui). */
