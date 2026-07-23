@@ -490,6 +490,7 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
       }
       const context = buildRequestContext();
       context.unsubscribeAllSessionEvents(connId);
+      context.detachCompanionConnection?.(connId);
       // Detach (or, with a zero grace period, kill) any PTY shells this
       // connection owned; detached sessions stay reattachable via
       // terminal.attach until their reaper fires.

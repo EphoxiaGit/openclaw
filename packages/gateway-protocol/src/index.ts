@@ -1267,6 +1267,15 @@ export const validateTerminalAttachParams = lazyCompile<TerminalAttachParams>(
 );
 export const validateTerminalTextParams = lazyCompile<TerminalTextParams>(TerminalTextParamsSchema);
 export const validateTerminalEvent = lazyCompile<TerminalEvent>(TerminalEventSchema);
+export const validateCompanionAttachParams = lazyCompile<CompanionAttachParams>(
+  CompanionAttachParamsSchema,
+);
+export const validateCompanionDetachParams = lazyCompile<CompanionDetachParams>(
+  CompanionDetachParamsSchema,
+);
+export const validateCompanionCancelParams = lazyCompile<CompanionCancelParams>(
+  CompanionCancelParamsSchema,
+);
 export const validateChatHistoryParams = lazyCompile(ChatHistoryParamsSchema);
 export const validateChatMetadataParams = lazyCompile<ChatMetadataParams>(ChatMetadataParamsSchema);
 export const validateChatMessageGetParams = lazyCompile(ChatMessageGetParamsSchema);
