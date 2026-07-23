@@ -1,4 +1,4 @@
-import type { ChatEvent } from "../../packages/gateway-protocol/src/index.js";
+import type { ChatEvent, CompanionBootstrap } from "../../packages/gateway-protocol/src/index.js";
 import { resolveAgentMainSessionKey } from "../config/sessions/main-session.js";
 import type { SessionScope } from "../config/sessions/types.js";
 import {
@@ -9,7 +9,6 @@ import {
 import {
   COMPANION_MAIN_AGENT_ID,
   createCompanionBridge,
-  type CompanionBootstrap,
   type CompanionBridge,
   type CompanionBridgeBinding,
   type CompanionBridgeEvent,
