@@ -156,6 +156,48 @@ describe("PersonasPage", () => {
       expect(page.textContent).not.toContain("Create Lucy Persona");
       expect(page.textContent).toContain("Lifecycle");
 
+      const capabilityOwners = page.querySelector<HTMLElement>(
+        'section[aria-label="Capability owners"]',
+      );
+      expect(capabilityOwners).not.toBeNull();
+      for (const label of [
+        "Agents",
+        "Named TTS",
+        "Persona Memory",
+        "Current Persona",
+        "Dreams",
+        "Companion / AIRI",
+        "Presentation only",
+        "Security",
+        "Debug",
+      ]) {
+        expect(capabilityOwners?.textContent).toContain(label);
+      }
+      expect(capabilityOwners?.querySelectorAll("input, select, textarea")).toHaveLength(0);
+
+      for (const label of [
+        "Open Agents",
+        "Open TTS settings",
+        "Open Dreams",
+        "Open Companion",
+        "Open Security",
+        "Open Debug",
+      ]) {
+        const button = Array.from(
+          capabilityOwners?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+        ).find((candidate) => candidate.textContent?.includes(label));
+        expect(button).not.toBeUndefined();
+        button?.click();
+      }
+      expect(navigate).toHaveBeenCalledWith("agents");
+      expect(navigate).toHaveBeenCalledWith("communications", {
+        search: "?section=messages&subsection=tts",
+      });
+      expect(navigate).toHaveBeenCalledWith("dreams");
+      expect(navigate).toHaveBeenCalledWith("companion");
+      expect(navigate).toHaveBeenCalledWith("security");
+      expect(navigate).toHaveBeenCalledWith("debug");
+
       const identityTab = Array.from(page.querySelectorAll<HTMLButtonElement>(".agent-tab")).find(
         (tab) => tab.textContent?.includes("Identity & Personality"),
       );

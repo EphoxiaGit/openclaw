@@ -1708,6 +1708,7 @@
                 "pages": [
                   "web/index",
                   "web/control-ui",
+                  "web/personas-migration",
                   "web/dashboard",
                   "web/webchat",
                   "web/tui"

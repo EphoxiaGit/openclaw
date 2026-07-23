@@ -756,6 +756,103 @@ export class PersonasPage extends LitElement {
           <div>#${activeRevision.revisionNumber}</div>
         </div>
       </div>
+      <section class="personas-page__form-section" aria-label="Capability owners">
+        <div class="label">Capability owners</div>
+        <div class="card-sub">
+          Persona identity does not absorb authority from the product areas that provide its
+          capabilities.
+        </div>
+        <div class="personas-page__history">
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Agents</strong>
+              <div class="muted">Runtime, models, tools, skills, and channels.</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn--sm"
+              @click=${() => this.context.navigate("agents")}
+            >
+              Open Agents
+            </button>
+          </div>
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Named TTS</strong>
+              <div class="muted">Voice profiles and provider configuration.</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn--sm"
+              @click=${() =>
+                this.context.navigate("communications", {
+                  search: "?section=messages&subsection=tts",
+                })}
+            >
+              Open TTS settings
+            </button>
+          </div>
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Persona Memory</strong>
+              <div class="muted">Durable memory for the current Persona.</div>
+            </div>
+            <span class="pill">Current Persona</span>
+          </div>
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Dreams</strong>
+              <div class="muted">Memory consolidation and reflection.</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn--sm"
+              @click=${() => this.context.navigate("dreams")}
+            >
+              Open Dreams
+            </button>
+          </div>
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Companion / AIRI</strong>
+              <div class="muted">Presentation only; it does not own Persona authority.</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn--sm"
+              @click=${() => this.context.navigate("companion")}
+            >
+              Open Companion
+            </button>
+          </div>
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Security</strong>
+              <div class="muted">Approvals, devices, access, and authentication.</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn--sm"
+              @click=${() => this.context.navigate("security")}
+            >
+              Open Security
+            </button>
+          </div>
+          <div class="personas-page__revision-row">
+            <div>
+              <strong>Debug</strong>
+              <div class="muted">Runtime health, diagnostics, and recovery.</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn--sm"
+              @click=${() => this.context.navigate("debug")}
+            >
+              Open Debug
+            </button>
+          </div>
+        </div>
+      </section>
       <form class="stack personas-page__form" @submit=${this.updatePersona}>
         <div class="form-grid">
           <label class="field">

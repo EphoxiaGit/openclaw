@@ -584,5 +584,6 @@ Remote access setup details: [Remote access](/gateway/remote).
 
 - [Dashboard](/web/dashboard) — gateway dashboard
 - [Health Checks](/gateway/health) — gateway health monitoring
+- [Persona migration](/web/personas-migration) — capability ownership, export, cutover, and rollback boundaries
 - [TUI](/web/tui) — terminal user interface
 - [WebChat](/web/webchat) — browser-based chat interface
