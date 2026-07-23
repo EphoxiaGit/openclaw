@@ -14,6 +14,7 @@ describe("Persona gateway schemas", () => {
       description: "Companion",
       primaryAgentId: "main",
       allowedDelegateAgentIds: ["delegate"],
+      embodimentBinding: { modelRef: "model.lucy.v1" },
       revision: {
         identity: "A careful collaborator.",
         relationship: "A trusted working partner.",
@@ -25,6 +26,12 @@ describe("Persona gateway schemas", () => {
     };
     expect(Value.Check(PersonasCreateParamsSchema, input)).toBe(true);
     expect(Value.Check(PersonasCreateParamsSchema, { ...input, secret: "no" })).toBe(false);
+    expect(
+      Value.Check(PersonasCreateParamsSchema, {
+        ...input,
+        embodimentBinding: { modelRef: "https://example.test/lucy.vrm" },
+      }),
+    ).toBe(false);
   });
 
   it("keeps summaries and change events metadata-only", () => {
@@ -65,6 +72,11 @@ describe("Persona gateway schemas", () => {
               model: "multilingual-v2",
               voice: "lucy",
               providerBinding: "applied",
+            },
+            embodimentBinding: {
+              status: "bound",
+              characterRef: "character.lucy",
+              manifestRef: "manifest.lucy.v1",
             },
           },
         ],

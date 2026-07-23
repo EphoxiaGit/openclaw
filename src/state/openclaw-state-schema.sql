@@ -1665,6 +1665,20 @@ CREATE TABLE IF NOT EXISTS persona_voice_bindings (
   tts_persona_id TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS persona_embodiment_bindings (
+  persona_id TEXT NOT NULL PRIMARY KEY REFERENCES personas(persona_id) ON DELETE CASCADE,
+  character_ref TEXT,
+  model_ref TEXT,
+  scene_ref TEXT,
+  expression_map_ref TEXT,
+  manifest_ref TEXT,
+  animation_palette_ref TEXT,
+  CHECK (
+    character_ref IS NOT NULL OR model_ref IS NOT NULL OR scene_ref IS NOT NULL OR
+    expression_map_ref IS NOT NULL OR manifest_ref IS NOT NULL OR animation_palette_ref IS NOT NULL
+  )
+);
+
 CREATE TABLE IF NOT EXISTS persona_session_selections (
   session_key TEXT PRIMARY KEY,
   persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,

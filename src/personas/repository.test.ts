@@ -2,7 +2,7 @@ import path from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { cleanupTempDirs, makeTempDir } from "../../test/helpers/temp-dir.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
-import { PersonaConflictError, PersonaRepository } from "./repository.js";
+import { PersonaConflictError, PersonaRepository, PersonaValidationError } from "./repository.js";
 
 const dirs: string[] = [];
 const agents = new Set(["main", "delegate"]);
@@ -28,6 +28,11 @@ describe("PersonaRepository", () => {
       primaryAgentId: "main",
       allowedDelegateAgentIds: ["delegate"],
       ttsPersonaId: "lucy-voice",
+      embodimentBinding: {
+        characterRef: "character.lucy",
+        modelRef: "model.lucy.v1",
+        sceneRef: "scene.study",
+      },
       revision: content,
       actorId: "device:test",
       authorId: "device:test",
@@ -58,6 +63,12 @@ describe("PersonaRepository", () => {
     expect(repository.listRevisions(persona.personaId)).toHaveLength(2);
     expect(selection?.recordRevision).toBe(1);
     expect(persona.ttsPersonaId).toBe("lucy-voice");
+    expect(persona.embodimentBinding).toEqual({
+      status: "bound",
+      characterRef: "character.lucy",
+      modelRef: "model.lucy.v1",
+      sceneRef: "scene.study",
+    });
     expect(repository.listAgentReferences("delegate")).toEqual([persona.personaId]);
     expect(JSON.stringify(repository.history(persona.personaId))).not.toContain("Warm and direct");
 
@@ -67,6 +78,10 @@ describe("PersonaRepository", () => {
       revised.revision.revisionId,
     );
     expect(reopened.get(persona.personaId, agents).ttsPersonaId).toBe("lucy-voice");
+    expect(reopened.get(persona.personaId, agents).embodimentBinding).toMatchObject({
+      status: "bound",
+      characterRef: "character.lucy",
+    });
     expect(reopened.getSelection("agent:main:main")?.personaId).toBe(persona.personaId);
   });
 
@@ -106,6 +121,57 @@ describe("PersonaRepository", () => {
     expect(bound).toMatchObject({ recordRevision: 2, ttsPersonaId: "narrator" });
     expect(cleared).toMatchObject({ recordRevision: 3 });
     expect(cleared).not.toHaveProperty("ttsPersonaId");
+  });
+
+  it("updates or clears opaque embodiment references under record CAS", () => {
+    const dbPath = path.join(makeTempDir(dirs, "personas-embodiment-"), "state.sqlite");
+    const repository = new PersonaRepository({ path: dbPath });
+    const persona = repository.create({
+      slug: "lucy",
+      displayName: "Lucy",
+      description: "",
+      primaryAgentId: "main",
+      allowedDelegateAgentIds: [],
+      revision: content,
+      actorId: "device:test",
+      authorId: "device:test",
+      reason: "Initial revision",
+      idempotencyKey: "create-lucy",
+      configuredAgentIds: agents,
+    });
+    const bound = repository.update({
+      personaId: persona.personaId,
+      expectedRevision: 1,
+      idempotencyKey: "bind-embodiment",
+      actorId: "device:test",
+      configuredAgentIds: agents,
+      embodimentBinding: { manifestRef: "manifest.lucy.v1", expressionMapRef: "expressions.lucy" },
+    });
+    const cleared = repository.update({
+      personaId: persona.personaId,
+      expectedRevision: 2,
+      idempotencyKey: "clear-embodiment",
+      actorId: "device:test",
+      configuredAgentIds: agents,
+      embodimentBinding: null,
+    });
+
+    expect(bound.embodimentBinding).toEqual({
+      status: "bound",
+      expressionMapRef: "expressions.lucy",
+      manifestRef: "manifest.lucy.v1",
+    });
+    expect(cleared).toMatchObject({ recordRevision: 3, embodimentBinding: { status: "unbound" } });
+    expect(() =>
+      repository.update({
+        personaId: persona.personaId,
+        expectedRevision: 3,
+        idempotencyKey: "reject-locator",
+        actorId: "device:test",
+        configuredAgentIds: agents,
+        embodimentBinding: { modelRef: "https://example.test/model.vrm" },
+      }),
+    ).toThrow(PersonaValidationError);
   });
 
   it("rejects stale writes and clears selections when archived", () => {

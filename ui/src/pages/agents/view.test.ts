@@ -172,6 +172,7 @@ describe("renderAgents", () => {
                   ttsPersonaId: "lucy-voice",
                   provider: "elevenlabs",
                 },
+                embodimentBinding: { status: "unbound" },
               },
             ],
           },

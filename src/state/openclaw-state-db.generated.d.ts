@@ -770,6 +770,16 @@ export interface PersonaDelegateAgents {
   persona_id: string;
 }
 
+export interface PersonaEmbodimentBindings {
+  animation_palette_ref: string | null;
+  character_ref: string | null;
+  expression_map_ref: string | null;
+  manifest_ref: string | null;
+  model_ref: string | null;
+  persona_id: string;
+  scene_ref: string | null;
+}
+
 export interface PersonaMutationReceipts {
   created_at: number;
   idempotency_key: string;
@@ -1405,6 +1415,7 @@ export interface DB {
   node_pairing_pending: NodePairingPending;
   official_external_plugin_catalog_snapshots: OfficialExternalPluginCatalogSnapshots;
   persona_delegate_agents: PersonaDelegateAgents;
+  persona_embodiment_bindings: PersonaEmbodimentBindings;
   persona_mutation_receipts: PersonaMutationReceipts;
   persona_revisions: PersonaRevisions;
   persona_session_selections: PersonaSessionSelections;

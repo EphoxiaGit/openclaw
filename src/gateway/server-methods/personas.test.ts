@@ -17,6 +17,7 @@ const persona = {
   createdAt: 1,
   updatedAt: 1,
   missingAgentIds: [],
+  embodimentBinding: { status: "unbound" as const },
 };
 const projectedPersona = { ...persona, voiceBinding: { status: "unbound" as const } };
 const revision = {
@@ -147,6 +148,37 @@ describe("Persona gateway handlers", () => {
       { dropIfSlow: true },
     );
     expect(JSON.stringify(broadcast.mock.calls)).not.toContain("behaviorGuidance");
+  });
+
+  it("passes opaque embodiment updates through the Persona CAS boundary", async () => {
+    const update = vi.fn(() => ({
+      ...persona,
+      recordRevision: 2,
+      embodimentBinding: { status: "bound" as const, modelRef: "model.lucy.v1" },
+    }));
+    const { respond } = await invoke(
+      createPersonaHandlers({ repository: repository({ update }) }),
+      "personas.update",
+      {
+        personaId: "persona-1",
+        expectedRevision: 1,
+        idempotencyKey: "bind-embodiment",
+        embodimentBinding: { modelRef: "model.lucy.v1" },
+      },
+    );
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ embodimentBinding: { modelRef: "model.lucy.v1" } }),
+    );
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      {
+        persona: expect.objectContaining({
+          embodimentBinding: { status: "bound", modelRef: "model.lucy.v1" },
+        }),
+      },
+      undefined,
+    );
   });
 
   it("maps selection CAS conflicts and emits no event", async () => {

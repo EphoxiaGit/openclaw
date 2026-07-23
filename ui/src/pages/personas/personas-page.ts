@@ -10,10 +10,25 @@ import { subtitleForRoute, titleForRoute } from "../../app-navigation.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 
 type Persona = PersonasListResult["personas"][number];
-type PersonasPanel = "overview" | "identity" | "agents" | "voice" | "revisions";
+type PersonasPanel = "overview" | "identity" | "agents" | "voice" | "embodiment" | "revisions";
 type PersonasMode = "browse" | "create" | "import";
 type TtsPersonaOption = { id: string; label?: string; description?: string; provider?: string };
 type TtsPersonasResult = { personas: TtsPersonaOption[] };
+type EmbodimentRefKey =
+  | "characterRef"
+  | "modelRef"
+  | "sceneRef"
+  | "expressionMapRef"
+  | "manifestRef"
+  | "animationPaletteRef";
+const EMBODIMENT_FIELDS = [
+  ["characterRef", "Character / card reference"],
+  ["modelRef", "Model reference"],
+  ["sceneRef", "Scene reference"],
+  ["expressionMapRef", "Expression map reference"],
+  ["manifestRef", "Manifest reference"],
+  ["animationPaletteRef", "Animation palette reference"],
+] as const satisfies ReadonlyArray<readonly [EmbodimentRefKey, string]>;
 type TtsSpeakResult = {
   audioBase64: string;
   mimeType?: string;
@@ -328,6 +343,34 @@ export class PersonasPage extends LitElement {
     }
   }
 
+  private async bindEmbodiment(event: SubmitEvent) {
+    event.preventDefault();
+    if (!this.detail) return;
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    const embodimentBinding = Object.fromEntries(
+      EMBODIMENT_FIELDS.map(([key]) => key)
+        .map((key) => [key, String(form.get(key) || "").trim()] as const)
+        .filter(([, value]) => value.length > 0),
+    );
+    this.busy = true;
+    this.error = null;
+    try {
+      const personaId = this.detail.persona.personaId;
+      await this.context.personas.update({
+        personaId,
+        expectedRevision: this.detail.persona.recordRevision,
+        idempotencyKey: crypto.randomUUID(),
+        embodimentBinding: Object.keys(embodimentBinding).length > 0 ? embodimentBinding : null,
+      });
+      await this.context.personas.refresh(true);
+      await this.select(personaId);
+    } catch (error) {
+      this.error = String(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   private async previewVoice(event: SubmitEvent) {
     event.preventDefault();
     if (!this.detail?.persona.voiceBinding.ttsPersonaId) {
@@ -427,6 +470,7 @@ export class PersonasPage extends LitElement {
         count: detail.persona.allowedDelegateAgentIds.length + 1,
       },
       { id: "voice", label: "Voice" },
+      { id: "embodiment", label: "Embodiment" },
       { id: "revisions", label: "Revisions", count: detail.revisions.length },
     ];
     return html`<div class="agent-tabs" role="tablist" aria-label="Persona settings">
@@ -703,6 +747,59 @@ ${activeRevision.content.behaviorGuidance}</textarea
     </section>`;
   }
 
+  private renderEmbodiment(detail: PersonasGetResult) {
+    const binding = detail.persona.embodimentBinding;
+    const value = (key: EmbodimentRefKey) =>
+      binding.status === "bound" ? (binding[key] ?? "") : "";
+    return html`<section class="card">
+      <div class="card-title">Embodiment</div>
+      <div class="card-sub">
+        AIRI renders these references as presentation only. OpenClaw retains Agent authority and
+        stores only opaque identifiers, never asset locations.
+      </div>
+      <div class="agent-kv personas-page__form">
+        <div class="label">Status</div>
+        <div>${binding.status}</div>
+      </div>
+      <form class="stack personas-page__form" @submit=${this.bindEmbodiment}>
+        <div class="form-grid">
+          ${EMBODIMENT_FIELDS.map(
+            ([key, label]) => html`<label class="field">
+              <span>${label}</span>
+              <input
+                name=${key}
+                .value=${value(key)}
+                maxlength="128"
+                pattern="[A-Za-z0-9][A-Za-z0-9._-]*"
+              />
+            </label>`,
+          )}
+        </div>
+        <div class="personas-page__actions personas-page__actions--start">
+          <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>
+            Save embodiment
+          </button>
+          <button
+            type="button"
+            class="btn btn--sm"
+            ?disabled=${this.busy || binding.status === "unbound"}
+            @click=${() => {
+              const form = this.renderRoot.querySelector<HTMLFormElement>(
+                'form input[name="characterRef"]',
+              )?.form;
+              form
+                ?.querySelectorAll<HTMLInputElement>("input")
+                .forEach((input) => (input.value = ""));
+              form?.requestSubmit();
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      </form>
+    </section>`;
+  }
+
   private renderRevisions(detail: PersonasGetResult) {
     return html`<section class="card">
       <div class="card-title">Revision history</div>
@@ -741,7 +838,9 @@ ${activeRevision.content.behaviorGuidance}</textarea
           ? this.renderAgentBinding(detail)
           : this.panel === "voice"
             ? this.renderVoice(detail)
-            : this.renderRevisions(detail)}`;
+            : this.panel === "embodiment"
+              ? this.renderEmbodiment(detail)
+              : this.renderRevisions(detail)}`;
   }
 
   private renderCreate() {

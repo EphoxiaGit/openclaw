@@ -16,6 +16,7 @@ import {
   PersonaNotFoundError,
   PersonaValidationError,
   type Persona,
+  type PersonaEmbodimentRefs,
   type PersonaRevision,
   type PersonaRevisionContent,
   type PersonaSelection,
@@ -27,9 +28,20 @@ import {
 type Options = OpenClawStateDatabaseOptions & { now?: () => number };
 type Row = Record<string, string | number | null>;
 type PersonaVoiceDatabase = Pick<OpenClawStateKyselyDatabase, "persona_voice_bindings">;
+type PersonaEmbodimentDatabase = Pick<OpenClawStateKyselyDatabase, "persona_embodiment_bindings">;
 const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/u;
+const OPAQUE_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const MAX_DELEGATES = 16;
+
+const EMBODIMENT_COLUMNS = {
+  characterRef: "character_ref",
+  modelRef: "model_ref",
+  sceneRef: "scene_ref",
+  expressionMapRef: "expression_map_ref",
+  manifestRef: "manifest_ref",
+  animationPaletteRef: "animation_palette_ref",
+} as const;
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) {
@@ -99,6 +111,27 @@ function validateAgents(
   }
 }
 
+function validateEmbodimentBinding(value: PersonaEmbodimentRefs): PersonaEmbodimentRefs {
+  const result: PersonaEmbodimentRefs = {};
+  const unknownKey = Object.keys(value).find((key) => !Object.hasOwn(EMBODIMENT_COLUMNS, key));
+  if (unknownKey) {
+    throw new PersonaValidationError(`embodimentBinding contains unknown field: ${unknownKey}`);
+  }
+  for (const key of Object.keys(EMBODIMENT_COLUMNS) as Array<keyof PersonaEmbodimentRefs>) {
+    const ref = value[key];
+    if (ref === undefined) continue;
+    const normalized = text(ref, key, 128);
+    if (!OPAQUE_REF.test(normalized)) {
+      throw new PersonaValidationError(`${key} must be an opaque, locator-free reference`);
+    }
+    result[key] = normalized;
+  }
+  if (Object.keys(result).length === 0) {
+    throw new PersonaValidationError("embodimentBinding must contain at least one reference");
+  }
+  return result;
+}
+
 export class PersonaRepository {
   readonly #db: DatabaseSync;
   readonly #now: () => number;
@@ -147,6 +180,7 @@ export class PersonaRepository {
     primaryAgentId: string;
     allowedDelegateAgentIds: string[];
     ttsPersonaId?: string;
+    embodimentBinding?: PersonaEmbodimentRefs;
     revision: PersonaRevisionContent;
     actorId: string;
     authorId: string;
@@ -199,6 +233,7 @@ export class PersonaRepository {
         );
       this.#replaceDelegates(personaId, input.allowedDelegateAgentIds);
       this.#replaceVoiceBinding(personaId, input.ttsPersonaId);
+      this.#replaceEmbodimentBinding(personaId, input.embodimentBinding);
       const result = this.get(personaId, input.configuredAgentIds);
       this.#transition(personaId, "create", input.actorId, requestHash, { recordRevision: 1 }, now);
       this.#receipt(`create:${slug}`, input.idempotencyKey, requestHash, result, now);
@@ -217,6 +252,7 @@ export class PersonaRepository {
     primaryAgentId?: string;
     allowedDelegateAgentIds?: string[];
     ttsPersonaId?: string | null;
+    embodimentBinding?: PersonaEmbodimentRefs | null;
   }): Persona {
     const requestHash = hash({ ...input, configuredAgentIds: undefined });
     return this.#mutate(
@@ -249,6 +285,9 @@ export class PersonaRepository {
         this.#replaceDelegates(input.personaId, delegates);
         if (input.ttsPersonaId !== undefined) {
           this.#replaceVoiceBinding(input.personaId, input.ttsPersonaId ?? undefined);
+        }
+        if (input.embodimentBinding !== undefined) {
+          this.#replaceEmbodimentBinding(input.personaId, input.embodimentBinding ?? undefined);
         }
       },
     );
@@ -593,6 +632,46 @@ export class PersonaRepository {
     );
     return row?.tts_persona_id;
   }
+  #replaceEmbodimentBinding(personaId: string, binding: PersonaEmbodimentRefs | undefined) {
+    const embodimentDb = getNodeSqliteKysely<PersonaEmbodimentDatabase>(this.#db);
+    executeSqliteQuerySync(
+      this.#db,
+      embodimentDb.deleteFrom("persona_embodiment_bindings").where("persona_id", "=", personaId),
+    );
+    if (!binding) return;
+    const refs = validateEmbodimentBinding(binding);
+    executeSqliteQuerySync(
+      this.#db,
+      embodimentDb.insertInto("persona_embodiment_bindings").values({
+        persona_id: personaId,
+        character_ref: refs.characterRef ?? null,
+        model_ref: refs.modelRef ?? null,
+        scene_ref: refs.sceneRef ?? null,
+        expression_map_ref: refs.expressionMapRef ?? null,
+        manifest_ref: refs.manifestRef ?? null,
+        animation_palette_ref: refs.animationPaletteRef ?? null,
+      }),
+    );
+  }
+  #embodimentBinding(personaId: string): Persona["embodimentBinding"] {
+    const embodimentDb = getNodeSqliteKysely<PersonaEmbodimentDatabase>(this.#db);
+    const row = executeSqliteQueryTakeFirstSync(
+      this.#db,
+      embodimentDb
+        .selectFrom("persona_embodiment_bindings")
+        .selectAll()
+        .where("persona_id", "=", personaId),
+    );
+    if (!row) return { status: "unbound" };
+    const refs: PersonaEmbodimentRefs = {};
+    for (const [key, column] of Object.entries(EMBODIMENT_COLUMNS) as Array<
+      [keyof PersonaEmbodimentRefs, (typeof EMBODIMENT_COLUMNS)[keyof PersonaEmbodimentRefs]]
+    >) {
+      const value = row[column];
+      if (value) refs[key] = value;
+    }
+    return { status: "bound", ...refs };
+  }
   #assertReferences(row: Row, configured: ReadonlySet<string>) {
     validateAgents(
       String(row.primary_agent_id),
@@ -618,6 +697,7 @@ export class PersonaRepository {
       updatedAt: Number(row.updated_at),
       missingAgentIds: ids.filter((id) => !configured.has(id)),
       ...(ttsPersonaId ? { ttsPersonaId } : {}),
+      embodimentBinding: this.#embodimentBinding(String(row.persona_id)),
     };
   }
   #revision(row: Row): PersonaRevision {

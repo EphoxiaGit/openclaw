@@ -18,6 +18,7 @@ const persona = {
   updatedAt: 1,
   missingAgentIds: [],
   voiceBinding: { status: "unbound" as const },
+  embodimentBinding: { status: "unbound" as const },
 };
 
 const detail: PersonasGetResult = {
@@ -95,7 +96,7 @@ describe("PersonasPage", () => {
       });
 
       expect(page.querySelector(".agents-toolbar .agents-select")).not.toBeNull();
-      expect(page.querySelectorAll(".agent-tab")).toHaveLength(5);
+      expect(page.querySelectorAll(".agent-tab")).toHaveLength(6);
       expect(page.querySelector(".agents-main > .card")).not.toBeNull();
       expect(page.querySelector(".personas-page__setup-grid")).toBeNull();
       expect(page.textContent).not.toContain("Create Lucy Persona");
@@ -115,6 +116,14 @@ describe("PersonasPage", () => {
       await page.updateComplete;
       expect(page.textContent).toContain("No named TTS personas are configured");
       expect(page.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+
+      const embodimentTab = Array.from(page.querySelectorAll<HTMLButtonElement>(".agent-tab")).find(
+        (tab) => tab.textContent?.includes("Embodiment"),
+      );
+      embodimentTab?.click();
+      await page.updateComplete;
+      expect(page.textContent).toContain("AIRI renders these references");
+      expect(page.querySelector('input[name="manifestRef"]')).not.toBeNull();
     } finally {
       page.remove();
     }

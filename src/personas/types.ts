@@ -28,6 +28,19 @@ export type PersonaRevision = {
   createdAt: number;
 };
 
+export type PersonaEmbodimentRefs = {
+  characterRef?: string;
+  modelRef?: string;
+  sceneRef?: string;
+  expressionMapRef?: string;
+  manifestRef?: string;
+  animationPaletteRef?: string;
+};
+
+export type PersonaEmbodimentBinding =
+  | { status: "unbound" }
+  | ({ status: "bound" } & PersonaEmbodimentRefs);
+
 export type Persona = {
   personaId: string;
   slug: string;
@@ -42,6 +55,7 @@ export type Persona = {
   updatedAt: number;
   missingAgentIds: string[];
   ttsPersonaId?: string;
+  embodimentBinding: PersonaEmbodimentBinding;
 };
 
 export type PersonaSelection = {

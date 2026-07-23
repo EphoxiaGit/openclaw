@@ -5,6 +5,29 @@ import { NonEmptyString } from "./primitives.js";
 const Id = Type.String({ minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$" });
 const AgentId = Type.String({ minLength: 1, maxLength: 64, pattern: "^[a-z0-9][a-z0-9_-]*$" });
 const TtsPersonaId = Type.String({ minLength: 1, maxLength: 128 });
+const EmbodimentRef = Type.String({
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+});
+const EmbodimentRefsSchema = Type.Object(
+  {
+    characterRef: Type.Optional(EmbodimentRef),
+    modelRef: Type.Optional(EmbodimentRef),
+    sceneRef: Type.Optional(EmbodimentRef),
+    expressionMapRef: Type.Optional(EmbodimentRef),
+    manifestRef: Type.Optional(EmbodimentRef),
+    animationPaletteRef: Type.Optional(EmbodimentRef),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+const EmbodimentBindingSchema = Type.Union([
+  Type.Object({ status: Type.Literal("unbound") }, { additionalProperties: false }),
+  Type.Object(
+    { status: Type.Literal("bound"), ...EmbodimentRefsSchema.properties },
+    { additionalProperties: false, minProperties: 2 },
+  ),
+]);
 const Status = Type.Union([Type.Literal("active"), Type.Literal("archived")]);
 const VoiceBindingSchema = Type.Object(
   {
@@ -56,6 +79,7 @@ const PersonaSchema = Type.Object(
     updatedAt: Type.Integer(),
     missingAgentIds: Type.Array(AgentId, { maxItems: 17, uniqueItems: true }),
     voiceBinding: VoiceBindingSchema,
+    embodimentBinding: EmbodimentBindingSchema,
   },
   { additionalProperties: false },
 );
@@ -116,6 +140,7 @@ export const PersonasCreateParamsSchema = Type.Object(
     primaryAgentId: AgentId,
     allowedDelegateAgentIds: Type.Array(AgentId, { maxItems: 16, uniqueItems: true }),
     ttsPersonaId: Type.Optional(TtsPersonaId),
+    embodimentBinding: Type.Optional(EmbodimentRefsSchema),
     revision: PersonaRevisionContentSchema,
     idempotencyKey: Type.String({ minLength: 1, maxLength: 128 }),
   },
@@ -142,6 +167,7 @@ export const PersonasUpdateParamsSchema = Type.Object(
       Type.Array(AgentId, { maxItems: 16, uniqueItems: true }),
     ),
     ttsPersonaId: Type.Optional(Type.Union([TtsPersonaId, Type.Null()])),
+    embodimentBinding: Type.Optional(Type.Union([EmbodimentRefsSchema, Type.Null()])),
   },
   { additionalProperties: false },
 );
