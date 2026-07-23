@@ -412,6 +412,7 @@ export function createOpenClawCodingTools(options?: {
   oneShotCliRun?: boolean;
   /** Stable run identifier for this agent invocation. */
   runId?: string;
+  persona?: { personaId: string; personaRevisionId: string; displayName: string };
   /** Device-scoped operator session allowed to review approvals initiated by this run. */
   approvalReviewerDeviceId?: string;
   /** Diagnostic trace context for hook/log correlation during this run. */
@@ -920,6 +921,9 @@ export function createOpenClawCodingTools(options?: {
             requesterSenderId: options?.senderId,
             senderIsOwner: options?.senderIsOwner,
             sessionId: options?.sessionId,
+            runId: options?.runId,
+            runSessionKey: options?.runSessionKey,
+            persona: options?.persona,
             oneShotCliRun: options?.oneShotCliRun,
             sandboxBrowserBridgeUrl: sandbox?.browser?.bridgeUrl,
             allowHostBrowserControl: sandbox ? sandbox.browserAllowHostControl : true,
@@ -993,6 +997,7 @@ export function createOpenClawCodingTools(options?: {
           agentSessionKey: options?.sessionKey,
           runId: options?.runId,
           runSessionKey: options?.runSessionKey,
+          persona: options?.persona,
           agentChannel: resolveGatewayMessageChannel(options?.messageProvider),
           agentAccountId: options?.agentAccountId,
           agentTo: options?.messageTo,

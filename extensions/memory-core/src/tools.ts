@@ -22,6 +22,7 @@ import {
   resolveMemoryDreamingConfig,
   resolveMemoryDeepDreamingConfig,
 } from "openclaw/plugin-sdk/memory-core-host-status";
+import { PersonaMemoryRepository } from "openclaw/plugin-sdk/persona-memory-runtime";
 import { asRecord } from "./dreaming-shared.js";
 import { filterMemorySearchHitsBySessionVisibility } from "./session-search-visibility.js";
 import { recordShortTermRecalls } from "./short-term-promotion.js";
@@ -414,6 +415,7 @@ export function createMemorySearchTool(options: {
   agentSessionKey?: string;
   sandboxed?: boolean;
   oneShotCliRun?: boolean;
+  persona?: { personaId: string; personaRevisionId: string; displayName: string };
 }) {
   return createMemoryTool({
     options,
@@ -685,12 +687,34 @@ export function createMemorySearchTool(options: {
               // Wiki and memory scores use incomparable scales, so corpus=all first
               // balances candidate selection and then backfills any unused slots.
               const effectiveMax = Math.max(1, maxResults ?? 10);
-              const results = mergeMemorySearchCorpusResults({
+              const mergedResults = mergeMemorySearchCorpusResults({
                 memoryResults: surfacedMemoryResults,
                 supplementResults,
                 maxResults: effectiveMax,
                 balanceCorpora: requestedCorpus === "all",
               });
+              const persona =
+                requestedCorpus === "wiki" || requestedCorpus === "sessions"
+                  ? undefined
+                  : options.persona;
+              const personaResults = persona
+                ? new PersonaMemoryRepository()
+                    .list(persona.personaId, { query })
+                    .map((memory) => ({
+                      path: `persona://${memory.recordId}`,
+                      startLine: 1,
+                      endLine: 1,
+                      score: memory.confidence,
+                      snippet: memory.content,
+                      source: "memory" as const,
+                      corpus: "persona" as const,
+                      personaId: memory.personaId,
+                      recordRevision: memory.recordRevision,
+                      sensitivity: memory.sensitivity,
+                      conflictStatus: memory.conflictStatus,
+                    }))
+                : [];
+              const results = [...personaResults, ...mergedResults].slice(0, effectiveMax);
               if (searchDebug) {
                 const finalToolMs = Math.max(0, Date.now() - toolStartedAt);
                 searchDebug = {

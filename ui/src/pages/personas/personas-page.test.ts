@@ -98,7 +98,7 @@ describe("PersonasPage", () => {
       });
 
       expect(page.querySelector(".agents-toolbar .agents-select")).not.toBeNull();
-      expect(page.querySelectorAll(".agent-tab")).toHaveLength(6);
+      expect(page.querySelectorAll(".agent-tab")).toHaveLength(7);
       expect(page.querySelector(".agents-main > .card")).not.toBeNull();
       expect(page.querySelector(".personas-page__setup-grid")).toBeNull();
       expect(page.textContent).not.toContain("Create Lucy Persona");
@@ -136,6 +136,37 @@ describe("PersonasPage", () => {
     } finally {
       page.remove();
     }
+  });
+
+  it("renders governed Persona memory controls", () => {
+    const page = new PersonasPage();
+    const container = document.createElement("div");
+    const internal = page as unknown as {
+      memories: Array<Record<string, unknown>>;
+      renderMemory: () => ReturnType<typeof page.render>;
+    };
+    internal.memories = [
+      {
+        recordId: "memory-1",
+        personaId: persona.personaId,
+        key: "favorite-color",
+        content: "Blue",
+        confidence: 0.8,
+        sensitivity: "normal",
+        validFrom: 1,
+        conflictStatus: "conflicted",
+        recordRevision: 2,
+        updatedAt: 2,
+      },
+    ];
+
+    render(internal.renderMemory(), container);
+
+    expect(container.textContent).toContain("Persona Memory");
+    expect(container.textContent).toContain("favorite-color");
+    expect(container.querySelector('select[name="conflictStatus"]')).not.toBeNull();
+    expect(container.querySelector('button[type="submit"]')?.textContent).toContain("Remember");
+    expect(container.textContent).toContain("Export JSON");
   });
 
   it("ignores a stale Persona response after the selection changes", async () => {

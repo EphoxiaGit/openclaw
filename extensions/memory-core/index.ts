@@ -29,6 +29,8 @@ type MemoryToolOptions = {
   agentSessionKey?: string;
   sandboxed?: boolean;
   oneShotCliRun?: boolean;
+  runId?: string;
+  persona?: OpenClawPluginToolContext["persona"];
 };
 
 const loadMemoryToolsModule = createLazyRuntimeModule(() => import("./src/tools.js"));
@@ -139,6 +141,57 @@ function createLazyMemoryGetTool(options: MemoryToolOptions): AnyAgentTool | nul
   });
 }
 
+const MemoryRememberSchema = {
+  type: "object",
+  properties: {
+    key: { type: "string", minLength: 1, maxLength: 160 },
+    content: { type: "string", minLength: 1, maxLength: 8_000 },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    sensitivity: { type: "string", enum: ["normal", "sensitive"] },
+    validUntil: { type: "integer" },
+    expiresAt: { type: "integer" },
+  },
+  required: ["key", "content", "confidence", "sensitivity"],
+  additionalProperties: false,
+} as const satisfies TSchema;
+
+function createLazyMemoryRememberTool(options: MemoryToolOptions): AnyAgentTool | null {
+  if (!options.persona || !options.agentSessionKey || !options.runId || !options.agentId) {
+    return null;
+  }
+  return {
+    label: "Persona Memory Remember",
+    name: "memory_remember",
+    description:
+      "Store a durable fact for the selected Persona. Persona identity is trusted run context and is not accepted as an argument.",
+    parameters: MemoryRememberSchema,
+    execute: async (toolCallId, params) => {
+      const { PersonaMemoryRepository } =
+        await import("openclaw/plugin-sdk/persona-memory-runtime");
+      const input = params as {
+        key: string;
+        content: string;
+        confidence: number;
+        sensitivity: "normal" | "sensitive";
+        validUntil?: number;
+        expiresAt?: number;
+      };
+      const memory = new PersonaMemoryRepository().create(options.persona!.personaId, {
+        ...input,
+        provenance: {
+          actorId: `assistant:${options.agentId}`,
+          sessionKey: options.agentSessionKey!,
+          runId: options.runId!,
+          source: "assistant",
+        },
+        reason: "Remembered by the active Persona",
+        idempotencyKey: `${options.runId}:${toolCallId}`,
+      });
+      return jsonResult({ memory });
+    },
+  };
+}
+
 function resolveMemoryToolOptions(ctx: OpenClawPluginToolContext): MemoryToolOptions {
   const getConfig = () => ctx.getRuntimeConfig?.() ?? ctx.runtimeConfig ?? ctx.config;
   return {
@@ -148,6 +201,8 @@ function resolveMemoryToolOptions(ctx: OpenClawPluginToolContext): MemoryToolOpt
     agentSessionKey: ctx.sessionKey,
     sandboxed: ctx.sandboxed,
     oneShotCliRun: ctx.oneShotCliRun,
+    runId: ctx.runId,
+    persona: ctx.persona,
   };
 }
 
@@ -196,6 +251,10 @@ export default definePluginEntry({
 
     api.registerTool((ctx) => createLazyMemoryGetTool(resolveMemoryToolOptions(ctx)), {
       names: ["memory_get"],
+    });
+
+    api.registerTool((ctx) => createLazyMemoryRememberTool(resolveMemoryToolOptions(ctx)), {
+      names: ["memory_remember"],
     });
 
     api.registerCommand({

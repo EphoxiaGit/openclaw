@@ -86,6 +86,7 @@ export function buildEmbeddedRunBaseParams(params: {
   // Runtime policy keys may differ from session keys for direct-message scoped policy.
   return {
     sessionFile: params.run.sessionFile,
+    persona: params.run.persona,
     workspaceDir: params.run.workspaceDir,
     cwd: params.run.cwd,
     agentDir: params.run.agentDir,

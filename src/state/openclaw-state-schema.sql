@@ -1710,6 +1710,60 @@ CREATE TABLE IF NOT EXISTS persona_transitions (
 CREATE INDEX IF NOT EXISTS idx_persona_transitions_persona
   ON persona_transitions(persona_id, sequence);
 
+CREATE TABLE IF NOT EXISTS persona_memory_records (
+  record_id TEXT PRIMARY KEY NOT NULL,
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  memory_key TEXT NOT NULL,
+  content TEXT NOT NULL,
+  provenance_json TEXT NOT NULL,
+  confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  sensitivity TEXT NOT NULL CHECK (sensitivity IN ('normal', 'sensitive')),
+  valid_from INTEGER NOT NULL,
+  valid_until INTEGER,
+  expires_at INTEGER,
+  conflict_status TEXT NOT NULL CHECK (conflict_status IN ('clear', 'conflicted')),
+  record_revision INTEGER NOT NULL CHECK (record_revision >= 1),
+  current_revision_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE (persona_id, memory_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_persona_memory_records_persona_validity
+  ON persona_memory_records(persona_id, valid_from, valid_until, expires_at);
+
+CREATE TABLE IF NOT EXISTS persona_memory_revisions (
+  revision_id TEXT PRIMARY KEY NOT NULL,
+  record_id TEXT NOT NULL REFERENCES persona_memory_records(record_id) ON DELETE CASCADE,
+  revision_number INTEGER NOT NULL CHECK (revision_number >= 1),
+  content TEXT NOT NULL,
+  provenance_json TEXT NOT NULL,
+  confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  sensitivity TEXT NOT NULL CHECK (sensitivity IN ('normal', 'sensitive')),
+  valid_from INTEGER NOT NULL,
+  valid_until INTEGER,
+  expires_at INTEGER,
+  conflict_status TEXT NOT NULL CHECK (conflict_status IN ('clear', 'conflicted')),
+  reason TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE (record_id, revision_number)
+);
+
+CREATE TRIGGER IF NOT EXISTS persona_memory_revisions_immutable
+BEFORE UPDATE ON persona_memory_revisions
+BEGIN
+  SELECT RAISE(ABORT, 'persona memory revisions are immutable');
+END;
+
+CREATE TABLE IF NOT EXISTS persona_memory_mutation_receipts (
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (persona_id, idempotency_key)
+);
+
 CREATE TABLE IF NOT EXISTS work_input_requests (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
   request_id TEXT NOT NULL UNIQUE,

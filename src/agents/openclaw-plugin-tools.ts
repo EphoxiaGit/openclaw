@@ -34,6 +34,9 @@ type ResolveOpenClawPluginToolsOptions = OpenClawPluginToolOptions & {
   modelId?: string;
   allowMediaInvokeCommands?: boolean;
   requesterAgentIdOverride?: string;
+  runId?: string;
+  runSessionKey?: string;
+  persona?: { personaId: string; personaRevisionId: string; displayName: string };
   requireExplicitMessageTarget?: boolean;
   disableMessageTool?: boolean;
   disablePluginTools?: boolean;

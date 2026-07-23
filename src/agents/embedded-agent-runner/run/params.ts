@@ -60,6 +60,8 @@ export type CurrentInboundPromptContext = {
 export type RunEmbeddedAgentParams = {
   sessionId: string;
   sessionKey?: string;
+  /** Trusted Gateway-resolved Persona attribution for plugin tool factories. */
+  persona?: { personaId: string; personaRevisionId: string; displayName: string };
   /** Storage-neutral transcript/session target. Defaults to sessionId/sessionKey/agentId. */
   sessionTarget?: AgentRunSessionTarget;
   /** Immutable gateway lifecycle ownership captured when this execution was admitted. */

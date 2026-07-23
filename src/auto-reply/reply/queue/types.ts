@@ -102,6 +102,7 @@ export type FollowupRun = {
     agentDir: string;
     sessionId: string;
     sessionKey?: string;
+    persona?: { personaId: string; personaRevisionId: string; displayName: string };
     runtimePolicySessionKey?: string;
     messageProvider?: string;
     chatType?: ChatType;

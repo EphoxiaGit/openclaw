@@ -97,6 +97,7 @@ export function createOpenClawTools(
     runSessionKey?: string;
     agentChannel?: GatewayMessageChannel;
     runId?: string;
+    persona?: { personaId: string; personaRevisionId: string; displayName: string };
     agentAccountId?: string;
     /** Delivery target for topic/thread routing. */
     agentTo?: string;

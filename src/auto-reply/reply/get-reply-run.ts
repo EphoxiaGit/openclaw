@@ -1493,6 +1493,7 @@ export async function runPreparedReply(
       agentDir,
       sessionId: preparedSessionState.sessionId,
       sessionKey,
+      persona: ctx.PersonaRun ?? sessionCtx.PersonaRun,
       runtimePolicySessionKey,
       messageProvider,
       chatType: replyRoute.chatType,

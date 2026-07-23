@@ -780,6 +780,48 @@ export interface PersonaEmbodimentBindings {
   scene_ref: string | null;
 }
 
+export interface PersonaMemoryMutationReceipts {
+  created_at: number;
+  idempotency_key: string;
+  persona_id: string;
+  request_hash: string;
+  result_json: string;
+}
+
+export interface PersonaMemoryRecords {
+  confidence: number;
+  conflict_status: string;
+  content: string;
+  created_at: number;
+  current_revision_id: string;
+  expires_at: number | null;
+  memory_key: string;
+  persona_id: string;
+  provenance_json: string;
+  record_id: string;
+  record_revision: number;
+  sensitivity: string;
+  updated_at: number;
+  valid_from: number;
+  valid_until: number | null;
+}
+
+export interface PersonaMemoryRevisions {
+  confidence: number;
+  conflict_status: string;
+  content: string;
+  created_at: number;
+  expires_at: number | null;
+  provenance_json: string;
+  reason: string;
+  record_id: string;
+  revision_id: string;
+  revision_number: number;
+  sensitivity: string;
+  valid_from: number;
+  valid_until: number | null;
+}
+
 export interface PersonaMutationReceipts {
   created_at: number;
   idempotency_key: string;
@@ -1416,6 +1458,9 @@ export interface DB {
   official_external_plugin_catalog_snapshots: OfficialExternalPluginCatalogSnapshots;
   persona_delegate_agents: PersonaDelegateAgents;
   persona_embodiment_bindings: PersonaEmbodimentBindings;
+  persona_memory_mutation_receipts: PersonaMemoryMutationReceipts;
+  persona_memory_records: PersonaMemoryRecords;
+  persona_memory_revisions: PersonaMemoryRevisions;
   persona_mutation_receipts: PersonaMutationReceipts;
   persona_revisions: PersonaRevisions;
   persona_session_selections: PersonaSessionSelections;

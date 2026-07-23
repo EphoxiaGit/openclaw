@@ -10,10 +10,32 @@ import { subtitleForRoute, titleForRoute } from "../../app-navigation.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 
 type Persona = PersonasListResult["personas"][number];
-type PersonasPanel = "overview" | "identity" | "agents" | "voice" | "embodiment" | "revisions";
+type PersonasPanel =
+  | "overview"
+  | "identity"
+  | "agents"
+  | "memory"
+  | "voice"
+  | "embodiment"
+  | "revisions";
 type PersonasMode = "browse" | "create" | "import";
 type TtsPersonaOption = { id: string; label?: string; description?: string; provider?: string };
 type TtsPersonasResult = { personas: TtsPersonaOption[] };
+type PersonaMemory = {
+  recordId: string;
+  personaId: string;
+  key: string;
+  content: string;
+  confidence: number;
+  sensitivity: "normal" | "sensitive";
+  validFrom: number;
+  validUntil?: number;
+  expiresAt?: number;
+  conflictStatus: "clear" | "conflicted";
+  recordRevision: number;
+  updatedAt: number;
+};
+type PersonaMemoryListResult = { memories: PersonaMemory[] };
 type EmbodimentRefKey =
   | "characterRef"
   | "modelRef"
@@ -61,6 +83,8 @@ export class PersonasPage extends LitElement {
   @state() private lucyPreview: { agentId: string; identity: string; soul: string } | null = null;
   @state() private lucyAgentId = "";
   @state() private ttsPersonas: TtsPersonaOption[] = [];
+  @state() private memories: PersonaMemory[] = [];
+  @state() private memoryLoading = false;
   private selectionRequest = 0;
   private ttsPersonasRequest = 0;
   private voiceGeneration = 0;
@@ -140,6 +164,7 @@ export class PersonasPage extends LitElement {
       const detail = await this.context.personas.get(personaId);
       if (request === this.selectionRequest && this.selectedId === personaId) {
         this.detail = detail;
+        this.memories = [];
         void this.loadTtsPersonas(detail.persona.primaryAgentId);
       }
     } catch (error) {
@@ -147,6 +172,109 @@ export class PersonasPage extends LitElement {
         this.error = String(error);
       }
     }
+  }
+
+  private async loadMemories() {
+    const client = this.context.gateway.snapshot.client;
+    const personaId = this.detail?.persona.personaId;
+    if (!client || !personaId) return;
+    this.memoryLoading = true;
+    try {
+      const result = await client.request<PersonaMemoryListResult>("personas.memory.list", {
+        personaId,
+        includeInvalid: true,
+      });
+      if (this.detail?.persona.personaId === personaId) this.memories = result.memories;
+    } catch (error) {
+      this.error = String(error);
+    } finally {
+      this.memoryLoading = false;
+    }
+  }
+
+  private async createMemory(event: SubmitEvent) {
+    event.preventDefault();
+    const client = this.context.gateway.snapshot.client;
+    const personaId = this.detail?.persona.personaId;
+    if (!client || !personaId) return;
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    this.busy = true;
+    try {
+      await client.request("personas.memory.create", {
+        personaId,
+        memory: {
+          key: String(form.get("key") ?? ""),
+          content: String(form.get("content") ?? ""),
+          confidence: Number(form.get("confidence") ?? 0.8),
+          sensitivity: String(form.get("sensitivity") ?? "normal"),
+          conflictStatus: "clear",
+          reason: "Created in Persona Memory",
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      (event.currentTarget as HTMLFormElement).reset();
+      await this.loadMemories();
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async correctMemory(event: SubmitEvent, memory: PersonaMemory) {
+    event.preventDefault();
+    const client = this.context.gateway.snapshot.client;
+    if (!client) return;
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    this.busy = true;
+    try {
+      await client.request("personas.memory.correct", {
+        personaId: memory.personaId,
+        recordId: memory.recordId,
+        expectedRevision: memory.recordRevision,
+        memory: {
+          key: memory.key,
+          content: String(form.get("content") ?? memory.content),
+          confidence: Number(form.get("confidence") ?? memory.confidence),
+          sensitivity: String(form.get("sensitivity") ?? memory.sensitivity),
+          conflictStatus: String(form.get("conflictStatus") ?? memory.conflictStatus),
+          validFrom: memory.validFrom,
+          ...(memory.validUntil === undefined ? {} : { validUntil: memory.validUntil }),
+          ...(memory.expiresAt === undefined ? {} : { expiresAt: memory.expiresAt }),
+          reason: "Corrected in Persona Memory",
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      await this.loadMemories();
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async deleteMemory(memory: PersonaMemory) {
+    const client = this.context.gateway.snapshot.client;
+    if (!client || !confirm(`Delete memory “${memory.key}”?`)) return;
+    await client.request("personas.memory.delete", {
+      personaId: memory.personaId,
+      recordId: memory.recordId,
+      expectedRevision: memory.recordRevision,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await this.loadMemories();
+  }
+
+  private async exportMemory() {
+    const client = this.context.gateway.snapshot.client;
+    const personaId = this.detail?.persona.personaId;
+    if (!client || !personaId) return;
+    const result = await client.request<{ filename: string; json: string }>(
+      "personas.memory.export",
+      { personaId },
+    );
+    const url = URL.createObjectURL(new Blob([result.json], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = result.filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   private async previewLucy() {
@@ -470,6 +598,7 @@ export class PersonasPage extends LitElement {
         count: detail.persona.allowedDelegateAgentIds.length + 1,
       },
       { id: "voice", label: "Voice" },
+      { id: "memory", label: "Memory", count: this.memories.length },
       { id: "embodiment", label: "Embodiment" },
       { id: "revisions", label: "Revisions", count: detail.revisions.length },
     ];
@@ -482,6 +611,7 @@ export class PersonasPage extends LitElement {
           aria-selected=${this.panel === tab.id ? "true" : "false"}
           @click=${() => {
             this.panel = tab.id;
+            if (tab.id === "memory") void this.loadMemories();
           }}
         >
           ${tab.label}${tab.count == null
@@ -846,6 +976,128 @@ ${activeRevision.content.behaviorGuidance}</textarea
     </section>`;
   }
 
+  private renderMemory() {
+    return html`<section class="card">
+      <div class="personas-page__section-header">
+        <div>
+          <div class="card-title">Persona Memory</div>
+          <div class="card-sub">
+            Durable memory follows this Persona when its primary Agent changes.
+          </div>
+        </div>
+        <button type="button" class="btn btn--sm" @click=${() => void this.exportMemory()}>
+          Export JSON
+        </button>
+      </div>
+      <form class="stack personas-page__form" @submit=${this.createMemory}>
+        <div class="form-grid personas-page__identity-grid">
+          <label class="field"><span>Key</span><input name="key" maxlength="160" required /></label>
+          <label class="field"
+            ><span>Confidence</span
+            ><input
+              name="confidence"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.8"
+              required
+          /></label>
+          <label class="field"
+            ><span>Sensitivity</span
+            ><select name="sensitivity">
+              <option value="normal">Normal</option>
+              <option value="sensitive">Sensitive</option>
+            </select></label
+          >
+        </div>
+        <label class="field"
+          ><span>Memory</span><textarea name="content" maxlength="8000" required></textarea>
+        </label>
+        <div class="personas-page__actions">
+          <button class="btn btn--sm primary" type="submit" ?disabled=${this.busy}>Remember</button>
+        </div>
+      </form>
+      <div class="personas-page__history">
+        ${this.memoryLoading
+          ? html`<div class="muted">Loading memory…</div>`
+          : this.memories.length === 0
+            ? html`<div class="muted">No Persona memories recorded.</div>`
+            : this.memories.map(
+                (memory) => html`<form
+                  class="personas-page__revision-row stack"
+                  @submit=${(event: SubmitEvent) => this.correctMemory(event, memory)}
+                >
+                  <div>
+                    <strong>${memory.key}</strong>
+                    <span class="pill">r${memory.recordRevision}</span>
+                  </div>
+                  <label class="field"
+                    ><span>Memory</span
+                    ><textarea name="content" maxlength="8000" .value=${memory.content}></textarea>
+                  </label>
+                  <div class="form-grid personas-page__identity-grid">
+                    <label class="field"
+                      ><span>Confidence</span
+                      ><input
+                        name="confidence"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        .value=${String(memory.confidence)}
+                    /></label>
+                    <label class="field"
+                      ><span>Sensitivity</span
+                      ><select name="sensitivity">
+                        <option value="normal" ?selected=${memory.sensitivity === "normal"}>
+                          Normal
+                        </option>
+                        <option value="sensitive" ?selected=${memory.sensitivity === "sensitive"}>
+                          Sensitive
+                        </option>
+                      </select></label
+                    >
+                    <label class="field"
+                      ><span>Conflict</span
+                      ><select name="conflictStatus">
+                        <option value="clear" ?selected=${memory.conflictStatus === "clear"}>
+                          Clear
+                        </option>
+                        <option
+                          value="conflicted"
+                          ?selected=${memory.conflictStatus === "conflicted"}
+                        >
+                          Conflicted
+                        </option>
+                      </select></label
+                    >
+                  </div>
+                  <div class="muted">
+                    Valid from
+                    ${new Date(memory.validFrom).toLocaleString()}${memory.validUntil
+                      ? ` until ${new Date(memory.validUntil).toLocaleString()}`
+                      : ""}${memory.expiresAt
+                      ? ` · expires ${new Date(memory.expiresAt).toLocaleString()}`
+                      : ""}
+                  </div>
+                  <div class="personas-page__actions">
+                    <button class="btn btn--sm primary" type="submit" ?disabled=${this.busy}>
+                      Correct</button
+                    ><button
+                      class="btn btn--sm danger"
+                      type="button"
+                      @click=${() => void this.deleteMemory(memory)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </form>`,
+              )}
+      </div>
+    </section>`;
+  }
+
   private renderSelected(detail: PersonasGetResult) {
     return html`${this.renderTabs(detail)}${this.panel === "overview"
       ? this.renderOverview(detail)
@@ -853,11 +1105,13 @@ ${activeRevision.content.behaviorGuidance}</textarea
         ? this.renderIdentity(detail)
         : this.panel === "agents"
           ? this.renderAgentBinding(detail)
-          : this.panel === "voice"
-            ? this.renderVoice(detail)
-            : this.panel === "embodiment"
-              ? this.renderEmbodiment(detail)
-              : this.renderRevisions(detail)}`;
+          : this.panel === "memory"
+            ? this.renderMemory()
+            : this.panel === "voice"
+              ? this.renderVoice(detail)
+              : this.panel === "embodiment"
+                ? this.renderEmbodiment(detail)
+                : this.renderRevisions(detail)}`;
   }
 
   private renderCreate() {

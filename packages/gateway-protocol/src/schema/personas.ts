@@ -241,6 +241,100 @@ export const PersonasHistoryResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const PersonaMemoryProvenanceSchema = Type.Object(
+  {
+    actorId: NonEmptyString,
+    sessionKey: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+    runId: Type.Optional(NonEmptyString),
+    source: Type.Union([Type.Literal("assistant"), Type.Literal("operator")]),
+  },
+  { additionalProperties: false },
+);
+const PersonaMemoryRecordSchema = Type.Object(
+  {
+    recordId: Id,
+    personaId: Id,
+    key: Type.String({ minLength: 1, maxLength: 160 }),
+    content: Type.String({ minLength: 1, maxLength: 8_000 }),
+    provenance: PersonaMemoryProvenanceSchema,
+    confidence: Type.Number({ minimum: 0, maximum: 1 }),
+    sensitivity: Type.Union([Type.Literal("normal"), Type.Literal("sensitive")]),
+    validFrom: Type.Integer(),
+    validUntil: Type.Optional(Type.Integer()),
+    expiresAt: Type.Optional(Type.Integer()),
+    conflictStatus: Type.Union([Type.Literal("clear"), Type.Literal("conflicted")]),
+    recordRevision: Type.Integer({ minimum: 1 }),
+    currentRevisionId: Id,
+    createdAt: Type.Integer(),
+    updatedAt: Type.Integer(),
+  },
+  { additionalProperties: false },
+);
+const PersonaMemoryWriteSchema = Type.Object(
+  {
+    key: Type.String({ minLength: 1, maxLength: 160 }),
+    content: Type.String({ minLength: 1, maxLength: 8_000 }),
+    confidence: Type.Number({ minimum: 0, maximum: 1 }),
+    sensitivity: Type.Union([Type.Literal("normal"), Type.Literal("sensitive")]),
+    validFrom: Type.Optional(Type.Integer()),
+    validUntil: Type.Optional(Type.Integer()),
+    expiresAt: Type.Optional(Type.Integer()),
+    conflictStatus: Type.Optional(Type.Union([Type.Literal("clear"), Type.Literal("conflicted")])),
+    reason: Type.String({ minLength: 1, maxLength: 500 }),
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 200 }),
+  },
+  { additionalProperties: false },
+);
+export const PersonasMemoryListParamsSchema = Type.Object(
+  {
+    personaId: Id,
+    query: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    includeInvalid: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+export const PersonasMemoryListResultSchema = Type.Object(
+  { memories: Type.Array(PersonaMemoryRecordSchema, { maxItems: 10_000 }) },
+  { additionalProperties: false },
+);
+export const PersonasMemoryCreateParamsSchema = Type.Object(
+  { personaId: Id, memory: PersonaMemoryWriteSchema },
+  { additionalProperties: false },
+);
+export const PersonasMemoryCorrectParamsSchema = Type.Object(
+  {
+    personaId: Id,
+    recordId: Id,
+    expectedRevision: Type.Integer({ minimum: 1 }),
+    memory: PersonaMemoryWriteSchema,
+  },
+  { additionalProperties: false },
+);
+export const PersonasMemoryMutationResultSchema = Type.Object(
+  { memory: PersonaMemoryRecordSchema },
+  { additionalProperties: false },
+);
+export const PersonasMemoryDeleteParamsSchema = Type.Object(
+  {
+    personaId: Id,
+    recordId: Id,
+    expectedRevision: Type.Integer({ minimum: 1 }),
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 200 }),
+  },
+  { additionalProperties: false },
+);
+export const PersonasMemoryDeleteResultSchema = Type.Object(
+  { deleted: Type.Literal(true), recordId: Id },
+  { additionalProperties: false },
+);
+export const PersonasMemoryExportParamsSchema = Type.Object(
+  { personaId: Id },
+  { additionalProperties: false },
+);
+export const PersonasMemoryExportResultSchema = Type.Object(
+  { filename: NonEmptyString, json: Type.String() },
+  { additionalProperties: false },
+);
 export const PersonaChangedEventSchema = Type.Object(
   {
     action: Type.Union([
@@ -279,5 +373,7 @@ export type PersonasLifecycleParams = Static<typeof PersonasLifecycleParamsSchem
 export type PersonasSelectionGetParams = Static<typeof PersonasSelectionGetParamsSchema>;
 export type PersonasSelectionSetParams = Static<typeof PersonasSelectionSetParamsSchema>;
 export type PersonasHistoryParams = Static<typeof PersonasHistoryParamsSchema>;
+export type PersonasMemoryListResult = Static<typeof PersonasMemoryListResultSchema>;
+export type PersonasMemoryCreateParams = Static<typeof PersonasMemoryCreateParamsSchema>;
 export type PersonaChangedEvent = Static<typeof PersonaChangedEventSchema>;
 export type PersonaSelectionChangedEvent = Static<typeof PersonaSelectionChangedEventSchema>;

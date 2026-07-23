@@ -26,6 +26,13 @@ export type OpenClawPluginToolContext = {
   sessionKey?: string;
   /** Ephemeral session UUID - regenerated on /new and /reset. Use for per-conversation isolation. */
   sessionId?: string;
+  runId?: string;
+  /** Gateway-resolved Persona attribution. Never sourced from model tool arguments. */
+  persona?: {
+    personaId: string;
+    personaRevisionId: string;
+    displayName: string;
+  };
   /**
    * Runtime-supplied active model metadata for informational use, diagnostics,
    * and plugin-owned policy decisions. This is not a security boundary against

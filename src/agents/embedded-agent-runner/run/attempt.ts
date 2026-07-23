@@ -1380,6 +1380,7 @@ export async function runEmbeddedAttempt(
                 : undefined,
             sessionId: params.sessionId,
             runId: params.runId,
+            persona: params.persona,
             approvalReviewerDeviceId: params.approvalReviewerDeviceId,
             oneShotCliRun: params.oneShotCliRun,
             toolSearchCatalogRef,

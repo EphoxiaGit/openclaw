@@ -268,6 +268,7 @@
   "memory-core-host-status",
   "memory-core-host-runtime-cli",
   "memory-core-host-runtime-core",
+  "persona-memory-runtime",
   "memory-core-host-runtime-files",
   "memory-host-core",
   "memory-host-events",

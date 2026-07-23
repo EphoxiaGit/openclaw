@@ -28,6 +28,10 @@ export type OpenClawPluginToolOptions = {
   senderIsOwner?: boolean;
   requesterAgentIdOverride?: string;
   sessionId?: string;
+  runId?: string;
+  /** Live run session key when sandbox policy uses a different scoping key. */
+  runSessionKey?: string;
+  persona?: { personaId: string; personaRevisionId: string; displayName: string };
   /**
    * Explicit one-shot local CLI runs should not keep plugin-owned process
    * resources alive after emitting their result.
@@ -87,6 +91,8 @@ export function resolveOpenClawPluginToolInputs(params: {
       agentId: sessionAgentId,
       sessionKey: options?.agentSessionKey,
       sessionId: options?.sessionId,
+      runId: options?.runId,
+      persona: options?.persona,
       activeModel,
       browser: {
         sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,

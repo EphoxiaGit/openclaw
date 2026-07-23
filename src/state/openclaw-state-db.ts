@@ -31,7 +31,7 @@ import { OPENCLAW_STATE_SCHEMA_SQL } from "./openclaw-state-schema.generated.js"
  * tables, private file permissions, cached handles, and audit rows for
  * migrations/backups that operate on local state.
  */
-export const OPENCLAW_STATE_SCHEMA_VERSION = 3;
+export const OPENCLAW_STATE_SCHEMA_VERSION = 4;
 /** Shared timeout used by state and agent SQLite handles before surfacing busy errors. */
 export const OPENCLAW_SQLITE_BUSY_TIMEOUT_MS = 30_000;
 const OPENCLAW_STATE_DIR_MODE = 0o700;

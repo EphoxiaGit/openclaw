@@ -4551,6 +4551,15 @@ export const chatHandlers: GatewayRequestHandlers = {
           : {}),
         GatewayClientScopes: client?.connect?.scopes ?? [],
         ...(personaRunContext ? { GroupSystemPrompt: personaRunContext.systemPrompt } : {}),
+        ...(personaRunContext
+          ? {
+              PersonaRun: {
+                personaId: personaRunContext.personaId,
+                personaRevisionId: personaRunContext.personaRevisionId,
+                displayName: personaRunContext.displayName,
+              },
+            }
+          : {}),
       };
       const isInternalTextSlashCommandTurn =
         ctx.Provider === INTERNAL_MESSAGE_CHANNEL && ctx.CommandSource === "text";

@@ -8,12 +8,23 @@ import {
   PersonasHistoryParamsSchema,
   PersonasLifecycleParamsSchema,
   PersonasListParamsSchema,
+  PersonasMemoryCorrectParamsSchema,
+  PersonasMemoryCreateParamsSchema,
+  PersonasMemoryDeleteParamsSchema,
+  PersonasMemoryExportParamsSchema,
+  PersonasMemoryListParamsSchema,
   PersonasReviseParamsSchema,
   PersonasSelectionGetParamsSchema,
   PersonasSelectionSetParamsSchema,
   PersonasUpdateParamsSchema,
 } from "../../../packages/gateway-protocol/src/schema/personas.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
+import { PersonaMemoryRepository } from "../../personas/memory-repository.js";
+import {
+  PersonaMemoryConflictError,
+  PersonaMemoryNotFoundError,
+  PersonaMemoryValidationError,
+} from "../../personas/memory-types.js";
 import {
   PersonaConflictError,
   PersonaNotFoundError,
@@ -42,6 +53,12 @@ function handle(
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
     } else if (error instanceof PersonaValidationError) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
+    } else if (
+      error instanceof PersonaMemoryNotFoundError ||
+      error instanceof PersonaMemoryConflictError ||
+      error instanceof PersonaMemoryValidationError
+    ) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
     } else {
       throw error;
     }
@@ -49,9 +66,10 @@ function handle(
 }
 
 export function createPersonaHandlers(
-  input: { repository?: PersonaRepository } = {},
+  input: { repository?: PersonaRepository; memoryRepository?: PersonaMemoryRepository } = {},
 ): GatewayRequestHandlers {
   const repository = input.repository ?? new PersonaRepository();
+  const memoryRepository = input.memoryRepository ?? new PersonaMemoryRepository();
   const configured = (context: Parameters<GatewayRequestHandlers[string]>[0]["context"]) =>
     new Set(listAgentIds(context.getRuntimeConfig()));
   return {
@@ -249,6 +267,92 @@ export function createPersonaHandlers(
             : {}),
         };
       });
+    },
+    "personas.memory.list": ({ params, respond }) => {
+      if (!Value.Check(PersonasMemoryListParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.memory.list params"),
+        );
+      }
+      handle(respond, () => ({
+        memories: memoryRepository.list(params.personaId, {
+          query: params.query,
+          includeInvalid: params.includeInvalid,
+        }),
+      }));
+    },
+    "personas.memory.create": ({ params, respond, client }) => {
+      if (!Value.Check(PersonasMemoryCreateParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.memory.create params"),
+        );
+      }
+      handle(respond, () => ({
+        memory: memoryRepository.create(params.personaId, {
+          ...params.memory,
+          provenance: {
+            actorId: actorId(client),
+            source: "operator",
+          },
+        }),
+      }));
+    },
+    "personas.memory.correct": ({ params, respond, client }) => {
+      if (!Value.Check(PersonasMemoryCorrectParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.memory.correct params"),
+        );
+      }
+      handle(respond, () => ({
+        memory: memoryRepository.correct(
+          params.personaId,
+          params.recordId,
+          params.expectedRevision,
+          {
+            ...params.memory,
+            provenance: {
+              actorId: actorId(client),
+              source: "operator",
+            },
+          },
+        ),
+      }));
+    },
+    "personas.memory.delete": ({ params, respond }) => {
+      if (!Value.Check(PersonasMemoryDeleteParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.memory.delete params"),
+        );
+      }
+      handle(respond, () => {
+        return memoryRepository.delete(
+          params.personaId,
+          params.recordId,
+          params.expectedRevision,
+          params.idempotencyKey,
+        );
+      });
+    },
+    "personas.memory.export": ({ params, respond }) => {
+      if (!Value.Check(PersonasMemoryExportParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.memory.export params"),
+        );
+      }
+      handle(respond, () => ({
+        filename: `${params.personaId}-memory.json`,
+        json: memoryRepository.exportJson(params.personaId),
+      }));
     },
   };
 

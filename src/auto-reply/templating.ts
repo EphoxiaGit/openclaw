@@ -242,6 +242,8 @@ export type MsgContext = {
   MemberRoleIds?: string[];
   GroupMembers?: string;
   GroupSystemPrompt?: string;
+  /** Trusted Gateway-resolved Persona attribution for this run. */
+  PersonaRun?: { personaId: string; personaRevisionId: string; displayName: string };
   /**
    * Canonical inbound supplemental facts for new channel code. `finalizeInboundContext`
    * projects these to the existing flat reply/forward/thread/group prompt fields.
