@@ -704,7 +704,22 @@ ${activeRevision.content.behaviorGuidance}</textarea
           </select>
         </label>
         ${this.ttsPersonas.length === 0
-          ? html`<div class="muted">No named TTS personas are configured on this server.</div>`
+          ? html`<div class="stack">
+              <div class="muted">
+                Named voice profiles are configured in Settings under Communications → Messages.
+                Configure one there, then return here to bind it to this Persona.
+              </div>
+              <div class="personas-page__actions personas-page__actions--start">
+                <button
+                  type="button"
+                  class="btn btn--sm"
+                  @click=${() =>
+                    this.context.navigate("communications", { search: "?section=messages" })}
+                >
+                  Configure voice settings
+                </button>
+              </div>
+            </div>`
           : nothing}
         <div class="personas-page__actions personas-page__actions--start">
           <button type="submit" class="btn btn--sm primary" ?disabled=${this.busy}>

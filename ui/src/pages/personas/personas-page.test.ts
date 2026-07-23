@@ -67,6 +67,7 @@ describe("PersonasPage", () => {
 
   it("uses the same selector, tabs, and contained panel structure as Agents", async () => {
     const page = new PersonasPage();
+    const navigate = vi.fn();
     (page as unknown as { context: ApplicationContext }).context = {
       personas: {
         state: { list: { personas: [persona] }, loading: false, error: null },
@@ -87,6 +88,7 @@ describe("PersonasPage", () => {
         ensureList: vi.fn(async () => undefined),
       },
       gateway: { snapshot: { client: null }, subscribe: () => () => undefined },
+      navigate,
     } as unknown as ApplicationContext;
 
     document.body.append(page);
@@ -114,8 +116,13 @@ describe("PersonasPage", () => {
       );
       voiceTab?.click();
       await page.updateComplete;
-      expect(page.textContent).toContain("No named TTS personas are configured");
+      expect(page.textContent).toContain("Named voice profiles are configured in Settings");
       expect(page.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+      const configureVoice = Array.from(page.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.includes("Configure voice settings"),
+      );
+      configureVoice?.click();
+      expect(navigate).toHaveBeenCalledWith("communications", { search: "?section=messages" });
 
       const embodimentTab = Array.from(page.querySelectorAll<HTMLButtonElement>(".agent-tab")).find(
         (tab) => tab.textContent?.includes("Embodiment"),
