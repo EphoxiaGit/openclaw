@@ -307,6 +307,9 @@ export const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "agents.workspace.list", scope: "operator.read" },
   { name: "agents.workspace.get", scope: "operator.read" },
   { name: "tts.speak", scope: "operator.write" },
+  { name: "companion.attach", scope: "operator.read" },
+  { name: "companion.detach", scope: "operator.read" },
+  { name: "companion.cancel", scope: "operator.write" },
 ] as const;
 
 const CORE_GATEWAY_METHOD_SPEC_BY_NAME: ReadonlyMap<string, CoreGatewayMethodSpec> = new Map(

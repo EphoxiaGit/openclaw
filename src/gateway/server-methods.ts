@@ -106,6 +106,10 @@ const loadChatHandlers = lazyHandlerModule(
   () => import("./server-methods/chat.js"),
   (module) => module.chatHandlers,
 );
+const loadCompanionHandlers = lazyHandlerModule(
+  () => import("./server-methods/companion.js"),
+  (module) => module.companionHandlers,
+);
 const loadCommandsHandlers = lazyHandlerModule(
   () => import("./server-methods/commands.js"),
   (module) => module.commandsHandlers,
@@ -311,6 +315,10 @@ function authorizeGatewayMethod(
 }
 
 export const coreGatewayHandlers: GatewayRequestHandlers = {
+  ...createLazyCoreHandlers({
+    methods: ["companion.attach", "companion.detach", "companion.cancel"],
+    loadHandlers: loadCompanionHandlers,
+  }),
   ...createLazyCoreHandlers({
     methods: ["connect"],
     loadHandlers: loadConnectHandlers,

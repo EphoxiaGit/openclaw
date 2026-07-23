@@ -11,6 +11,7 @@ export * from "./schema/agents-workspace.js";
 export * from "./schema/artifacts.js";
 export * from "./schema/audit.js";
 export * from "./schema/channels.js";
+export * from "./schema/companion.js";
 export * from "./schema/commands.js";
 export * from "./schema/config.js";
 export * from "./schema/crestodian.js";

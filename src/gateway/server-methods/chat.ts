@@ -4403,6 +4403,12 @@ export const chatHandlers: GatewayRequestHandlers = {
         { config: cfg },
       );
       respond(true, ackPayload, undefined, { runId: clientRunId });
+      context.onCompanionChatSendStarted?.({
+        status: "started",
+        runId: clientRunId,
+        sessionKey,
+        agentId: selectedAgent.agentId,
+      });
       const chatSendAckedAtMs = chatSendTiming?.ackedAtMs ?? performance.now();
       const titleSource = stripInlineDirectiveTagsForDisplay(rawMessage).text;
       if (isDashboardSessionTitleCandidate({ sessionKey, userMessage: titleSource })) {

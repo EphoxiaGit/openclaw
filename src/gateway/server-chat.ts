@@ -949,6 +949,11 @@ export function createAgentEventHandler({
     payload: unknown,
     opts?: { agentId?: string; controlUiVisible?: boolean; dropIfSlow?: boolean },
   ) => {
+    if (payload && typeof payload === "object" && "runId" in payload && "state" in payload) {
+      onCompanionChatEvent?.(
+        payload as import("../../packages/gateway-protocol/src/index.js").ChatEvent,
+      );
+    }
     const deliverySessionKey = resolveSessionDeliveryKey(sessionKey, opts?.agentId);
     if (opts?.controlUiVisible ?? true) {
       broadcast("chat", payload, { dropIfSlow: opts?.dropIfSlow });
