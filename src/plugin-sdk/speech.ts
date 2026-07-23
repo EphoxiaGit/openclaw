@@ -8,6 +8,7 @@ export type { SpeechProviderPlugin } from "../plugins/types.js";
 export type {
   SpeechDirectiveTokenParseContext,
   SpeechDirectiveTokenParseResult,
+  SpeechExpressionIntent,
   SpeechListVoicesRequest,
   SpeechModelOverridePolicy,
   SpeechProviderConfig,

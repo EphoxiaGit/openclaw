@@ -54,6 +54,49 @@ const Traits = Type.Object(
   },
   { additionalProperties: false },
 );
+const AffectDimensionSchema = Type.Union([
+  Type.Literal("energy"),
+  Type.Literal("focus"),
+  Type.Literal("warmth"),
+  Type.Literal("playfulness"),
+]);
+const AffectVectorSchema = Type.Object(
+  {
+    energy: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    focus: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    warmth: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    playfulness: Type.Integer({ minimum: 0, maximum: 10_000 }),
+  },
+  { additionalProperties: false },
+);
+const AffectHalfLivesSchema = Type.Object(
+  {
+    energy: Type.Integer({ minimum: 1_000, maximum: 2_592_000_000 }),
+    focus: Type.Integer({ minimum: 1_000, maximum: 2_592_000_000 }),
+    warmth: Type.Integer({ minimum: 1_000, maximum: 2_592_000_000 }),
+    playfulness: Type.Integer({ minimum: 1_000, maximum: 2_592_000_000 }),
+  },
+  { additionalProperties: false },
+);
+const SpeechExpressionSchema = Type.Object(
+  {
+    energy: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    warmth: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    urgency: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    pace: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    emphasis: Type.Integer({ minimum: 0, maximum: 10_000 }),
+    playfulness: Type.Integer({ minimum: 0, maximum: 10_000 }),
+  },
+  { additionalProperties: false },
+);
+const AffectProfileSchema = Type.Object(
+  {
+    baseline: AffectVectorSchema,
+    halfLivesMs: AffectHalfLivesSchema,
+    expression: SpeechExpressionSchema,
+  },
+  { additionalProperties: false },
+);
 export const PersonaRevisionContentSchema = Type.Object(
   {
     identity: Type.String({ minLength: 1, maxLength: 2_000 }),
@@ -61,6 +104,7 @@ export const PersonaRevisionContentSchema = Type.Object(
     communicationStyle: Type.String({ minLength: 1, maxLength: 2_000 }),
     behaviorGuidance: Type.String({ minLength: 1, maxLength: 4_000 }),
     traits: Traits,
+    affect: Type.Optional(AffectProfileSchema),
   },
   { additionalProperties: false },
 );
@@ -80,6 +124,110 @@ const PersonaSchema = Type.Object(
     missingAgentIds: Type.Array(AgentId, { maxItems: 17, uniqueItems: true }),
     voiceBinding: VoiceBindingSchema,
     embodimentBinding: EmbodimentBindingSchema,
+  },
+  { additionalProperties: false },
+);
+const AffectEvidenceSchema = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal("explicit_feedback"),
+      Type.Literal("interaction"),
+      Type.Literal("operator_observation"),
+    ]),
+    referenceId: Id,
+  },
+  { additionalProperties: false },
+);
+const AffectImpulseSchema = Type.Object(
+  {
+    sequence: Type.Integer({ minimum: 1 }),
+    impulseId: Id,
+    personaId: Id,
+    personaRevisionId: Id,
+    operation: Type.Union([Type.Literal("apply"), Type.Literal("retract")]),
+    targetImpulseId: Type.Optional(Id),
+    dimension: Type.Optional(AffectDimensionSchema),
+    delta: Type.Optional(Type.Integer({ minimum: -10_000, maximum: 10_000 })),
+    halfLifeMs: Type.Optional(Type.Integer({ minimum: 1_000, maximum: 2_592_000_000 })),
+    reason: Type.Union([
+      Type.Literal("interaction"),
+      Type.Literal("time_rhythm"),
+      Type.Literal("manual_override"),
+      Type.Literal("owner_correction"),
+    ]),
+    actorId: NonEmptyString,
+    source: Type.Union([Type.Literal("assistant"), Type.Literal("operator")]),
+    evidence: Type.Array(AffectEvidenceSchema, { minItems: 1, maxItems: 16 }),
+    createdAt: Type.Integer({ minimum: 0 }),
+    expiresAt: Type.Optional(Type.Integer({ minimum: 0 })),
+  },
+  { additionalProperties: false },
+);
+const PersonaAffectSnapshotSchema = Type.Object(
+  {
+    personaId: Id,
+    personaRevisionId: Id,
+    evaluatedAt: Type.Integer({ minimum: 0 }),
+    baseline: AffectVectorSchema,
+    values: AffectVectorSchema,
+    impulseLogDigest: Type.String({ minLength: 64, maxLength: 64 }),
+    projection: Type.Object(
+      {
+        tone: Type.Union([
+          Type.Literal("calm"),
+          Type.Literal("focused"),
+          Type.Literal("warm"),
+          Type.Literal("bright"),
+        ]),
+        pacing: Type.Union([Type.Literal("slow"), Type.Literal("steady"), Type.Literal("brisk")]),
+        ttsExpression: SpeechExpressionSchema,
+        airiExpression: Type.Union([
+          Type.Literal("emotion.neutral"),
+          Type.Literal("emotion.curious"),
+          Type.Literal("emotion.concerned"),
+          Type.Literal("emotion.sleepy"),
+        ]),
+      },
+      { additionalProperties: false },
+    ),
+    recentImpulses: Type.Array(AffectImpulseSchema, { maxItems: 50 }),
+  },
+  { additionalProperties: false },
+);
+const PersonaExperimentEvidenceSchema = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal("explicit_feedback"),
+      Type.Literal("interruption_or_correction_rate"),
+      Type.Literal("response_completion"),
+      Type.Literal("repeated_clarification"),
+      Type.Literal("task_success"),
+    ]),
+    referenceId: Id,
+  },
+  { additionalProperties: false },
+);
+const PersonaExperimentPatchSchema = Type.Object(
+  {
+    traits: Type.Optional(Type.Partial(Traits)),
+    expression: Type.Optional(Type.Partial(SpeechExpressionSchema)),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+const PersonaExperimentProposalSchema = Type.Object(
+  {
+    experimentId: Id,
+    personaId: Id,
+    baseRevisionId: Id,
+    status: Type.Union([Type.Literal("proposed"), Type.Literal("accepted")]),
+    hypothesis: Type.String({ minLength: 1, maxLength: 500 }),
+    patch: PersonaExperimentPatchSchema,
+    evidence: Type.Array(PersonaExperimentEvidenceSchema, { minItems: 1, maxItems: 16 }),
+    proposerId: NonEmptyString,
+    createdAt: Type.Integer({ minimum: 0 }),
+    decidedAt: Type.Optional(Type.Integer({ minimum: 0 })),
+    decidedBy: Type.Optional(NonEmptyString),
+    acceptedRevisionId: Type.Optional(Id),
   },
   { additionalProperties: false },
 );
@@ -129,6 +277,8 @@ export const PersonasGetResultSchema = Type.Object(
     persona: PersonaSchema,
     activeRevision: RevisionSchema,
     revisions: Type.Array(RevisionSchema, { maxItems: 1_000 }),
+    affect: Type.Optional(PersonaAffectSnapshotSchema),
+    experiments: Type.Optional(Type.Array(PersonaExperimentProposalSchema, { maxItems: 1_000 })),
   },
   { additionalProperties: false },
 );
@@ -238,6 +388,73 @@ export const PersonasHistoryResultSchema = Type.Object(
   {
     transitions: Type.Array(TransitionSchema, { maxItems: 100 }),
     nextCursor: Type.Optional(Type.Integer({ minimum: 1 })),
+  },
+  { additionalProperties: false },
+);
+export const PersonasAffectImpulseParamsSchema = Type.Union([
+  Type.Object(
+    {
+      personaId: Id,
+      operation: Type.Literal("apply"),
+      dimension: AffectDimensionSchema,
+      delta: Type.Integer({ minimum: -10_000, maximum: 10_000 }),
+      halfLifeMs: Type.Integer({ minimum: 1_000, maximum: 2_592_000_000 }),
+      expiresAt: Type.Optional(Type.Integer({ minimum: 0 })),
+      reason: Type.Union([
+        Type.Literal("interaction"),
+        Type.Literal("time_rhythm"),
+        Type.Literal("manual_override"),
+      ]),
+      evidence: Type.Array(AffectEvidenceSchema, { minItems: 1, maxItems: 16 }),
+      idempotencyKey: Type.String({ minLength: 1, maxLength: 128 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      personaId: Id,
+      operation: Type.Literal("retract"),
+      targetImpulseId: Id,
+      reason: Type.Literal("owner_correction"),
+      evidence: Type.Array(AffectEvidenceSchema, { minItems: 1, maxItems: 16 }),
+      idempotencyKey: Type.String({ minLength: 1, maxLength: 128 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+export const PersonasAffectImpulseResultSchema = Type.Object(
+  {
+    impulse: AffectImpulseSchema,
+    affect: PersonaAffectSnapshotSchema,
+  },
+  { additionalProperties: false },
+);
+export const PersonasExperimentsProposeParamsSchema = Type.Object(
+  {
+    personaId: Id,
+    hypothesis: Type.String({ minLength: 1, maxLength: 500 }),
+    patch: PersonaExperimentPatchSchema,
+    evidence: Type.Array(PersonaExperimentEvidenceSchema, { minItems: 1, maxItems: 16 }),
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 128 }),
+  },
+  { additionalProperties: false },
+);
+export const PersonasExperimentsProposeResultSchema = Type.Object(
+  { experiment: PersonaExperimentProposalSchema },
+  { additionalProperties: false },
+);
+export const PersonasExperimentsAcceptParamsSchema = Type.Object(
+  {
+    ...MutateBase,
+    experimentId: Id,
+  },
+  { additionalProperties: false },
+);
+export const PersonasExperimentsAcceptResultSchema = Type.Object(
+  {
+    persona: PersonaSchema,
+    revision: RevisionSchema,
+    experiment: PersonaExperimentProposalSchema,
   },
   { additionalProperties: false },
 );
@@ -439,6 +656,11 @@ export type PersonasLifecycleParams = Static<typeof PersonasLifecycleParamsSchem
 export type PersonasSelectionGetParams = Static<typeof PersonasSelectionGetParamsSchema>;
 export type PersonasSelectionSetParams = Static<typeof PersonasSelectionSetParamsSchema>;
 export type PersonasHistoryParams = Static<typeof PersonasHistoryParamsSchema>;
+export type PersonasAffectImpulseParams = Static<typeof PersonasAffectImpulseParamsSchema>;
+export type PersonasExperimentsProposeParams = Static<
+  typeof PersonasExperimentsProposeParamsSchema
+>;
+export type PersonasExperimentsAcceptParams = Static<typeof PersonasExperimentsAcceptParamsSchema>;
 export type PersonasMemoryListResult = Static<typeof PersonasMemoryListResultSchema>;
 export type PersonasMemoryCreateParams = Static<typeof PersonasMemoryCreateParamsSchema>;
 export type PersonasCognitionListResult = Static<typeof PersonasCognitionListResultSchema>;

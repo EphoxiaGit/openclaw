@@ -39,9 +39,61 @@ const detail: PersonasGetResult = {
     createdAt: 1,
   },
   revisions: [],
+  affect: {
+    personaId: persona.personaId,
+    personaRevisionId: "revision-1",
+    evaluatedAt: 1,
+    baseline: {
+      energy: 5000,
+      focus: 7000,
+      warmth: 7000,
+      playfulness: 2000,
+    },
+    values: {
+      energy: 6000,
+      focus: 7000,
+      warmth: 7000,
+      playfulness: 2000,
+    },
+    impulseLogDigest: "a".repeat(64),
+    projection: {
+      tone: "focused",
+      pacing: "steady",
+      ttsExpression: {
+        energy: 6000,
+        warmth: 7000,
+        urgency: 2500,
+        pace: 5500,
+        emphasis: 5000,
+        playfulness: 2000,
+      },
+      airiExpression: "emotion.curious",
+    },
+    recentImpulses: [],
+  },
+  experiments: [],
 };
 
 describe("PersonasPage", () => {
+  it("renders inspectable affect and allowlisted experiment controls", () => {
+    const page = new PersonasPage();
+    const container = document.createElement("div");
+    const template = (
+      page as unknown as {
+        renderAffect: (value: PersonasGetResult) => ReturnType<typeof page.render>;
+      }
+    ).renderAffect(detail);
+
+    render(template, container);
+
+    expect(container.textContent).toContain("Bounded affect");
+    expect(container.textContent).toContain("AIRI expression");
+    expect(container.textContent).toContain("Persona experiments");
+    expect(container.querySelector('select[name="field"] option[value="traits.warmth"]')).not.toBe(
+      null,
+    );
+  });
+
   it("keeps a ready current binding selectable when discovery omits it", () => {
     const page = new PersonasPage();
     const container = document.createElement("div");
@@ -98,7 +150,7 @@ describe("PersonasPage", () => {
       });
 
       expect(page.querySelector(".agents-toolbar .agents-select")).not.toBeNull();
-      expect(page.querySelectorAll(".agent-tab")).toHaveLength(7);
+      expect(page.querySelectorAll(".agent-tab")).toHaveLength(8);
       expect(page.querySelector(".agents-main > .card")).not.toBeNull();
       expect(page.querySelector(".personas-page__setup-grid")).toBeNull();
       expect(page.textContent).not.toContain("Create Lucy Persona");

@@ -11,6 +11,7 @@ import {
   runOpenClawStateWriteTransaction,
   type OpenClawStateDatabaseOptions,
 } from "../state/openclaw-state-db.js";
+import { validatePersonaAffectProfile } from "./affect.js";
 import {
   PersonaConflictError,
   PersonaNotFoundError,
@@ -72,7 +73,10 @@ function validateContent(value: PersonaRevisionContent): PersonaRevisionContent 
     throw new PersonaValidationError("revision content must be an object");
   }
   const keys = Object.keys(value).toSorted();
-  if (keys.join(",") !== "behaviorGuidance,communicationStyle,identity,relationship,traits") {
+  if (
+    keys.join(",") !== "affect,behaviorGuidance,communicationStyle,identity,relationship,traits" &&
+    keys.join(",") !== "behaviorGuidance,communicationStyle,identity,relationship,traits"
+  ) {
     throw new PersonaValidationError("revision content contains unknown fields");
   }
   const traitKeys = Object.keys(value.traits ?? {}).toSorted();
@@ -90,6 +94,7 @@ function validateContent(value: PersonaRevisionContent): PersonaRevisionContent 
     communicationStyle: text(value.communicationStyle, "communicationStyle", 2_000),
     behaviorGuidance: text(value.behaviorGuidance, "behaviorGuidance", 4_000),
     traits: { ...value.traits },
+    ...(value.affect ? { affect: validatePersonaAffectProfile(value.affect) } : {}),
   };
 }
 

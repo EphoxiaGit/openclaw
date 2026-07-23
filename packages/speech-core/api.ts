@@ -33,6 +33,7 @@ export type {
   ResolvedTtsModelOverrides,
   SpeechDirectiveTokenParseContext,
   SpeechDirectiveTokenParseResult,
+  SpeechExpressionIntent,
   SpeechListVoicesRequest,
   SpeechModelOverridePolicy,
   SpeechProviderConfig,

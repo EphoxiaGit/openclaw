@@ -15,6 +15,16 @@ export type SpeechProviderConfig = Record<string, unknown>;
 /** Provider-owned per-request directive/persona overrides. */
 export type SpeechProviderOverrides = Record<string, unknown>;
 
+/** Provider-neutral expression intent. Providers may ignore unsupported fields. */
+export type SpeechExpressionIntent = Readonly<{
+  energy: number;
+  warmth: number;
+  urgency: number;
+  pace: number;
+  emphasis: number;
+  playfulness: number;
+}>;
+
 /** Policy controlling which [[tts:*]] directive fields can affect synthesis. */
 export type SpeechModelOverridePolicy = {
   enabled: boolean;

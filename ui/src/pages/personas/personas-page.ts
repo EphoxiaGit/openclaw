@@ -13,6 +13,7 @@ type Persona = PersonasListResult["personas"][number];
 type PersonasPanel =
   | "overview"
   | "identity"
+  | "affect"
   | "agents"
   | "memory"
   | "voice"
@@ -36,6 +37,7 @@ type PersonaMemory = {
   updatedAt: number;
 };
 type PersonaMemoryListResult = { memories: PersonaMemory[] };
+type PersonaExperiment = NonNullable<PersonasGetResult["experiments"]>[number];
 type EmbodimentRefKey =
   | "characterRef"
   | "modelRef"
@@ -471,6 +473,109 @@ export class PersonasPage extends LitElement {
     }
   }
 
+  private async applyAffectImpulse(event: SubmitEvent) {
+    event.preventDefault();
+    const client = this.context.gateway.snapshot.client;
+    const personaId = this.detail?.persona.personaId;
+    if (!client || !personaId) return;
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    const durationMinutes = Number(form.get("durationMinutes") ?? 60);
+    this.busy = true;
+    try {
+      await client.request("personas.affect.impulse", {
+        personaId,
+        operation: "apply",
+        dimension: String(form.get("dimension")),
+        delta: Number(form.get("delta")),
+        halfLifeMs: Number(form.get("halfLifeMinutes")) * 60_000,
+        expiresAt: Date.now() + durationMinutes * 60_000,
+        reason: "manual_override",
+        evidence: [
+          {
+            kind: "operator_observation",
+            referenceId: String(form.get("referenceId")),
+          },
+        ],
+        idempotencyKey: crypto.randomUUID(),
+      });
+      await this.select(personaId);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async retractAffectImpulse(impulseId: string) {
+    const client = this.context.gateway.snapshot.client;
+    const personaId = this.detail?.persona.personaId;
+    if (!client || !personaId) return;
+    this.busy = true;
+    try {
+      await client.request("personas.affect.impulse", {
+        personaId,
+        operation: "retract",
+        targetImpulseId: impulseId,
+        reason: "owner_correction",
+        evidence: [{ kind: "operator_observation", referenceId: `correction:${impulseId}` }],
+        idempotencyKey: crypto.randomUUID(),
+      });
+      await this.select(personaId);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async proposeExperiment(event: SubmitEvent) {
+    event.preventDefault();
+    const client = this.context.gateway.snapshot.client;
+    const personaId = this.detail?.persona.personaId;
+    if (!client || !personaId) return;
+    const form = new FormData(event.currentTarget as HTMLFormElement);
+    const [group, field] = String(form.get("field")).split(".");
+    const value = Number(form.get("value"));
+    const patch =
+      group === "traits"
+        ? { traits: { [field]: value / 10_000 } }
+        : { expression: { [field]: value } };
+    this.busy = true;
+    try {
+      await client.request("personas.experiments.propose", {
+        personaId,
+        hypothesis: String(form.get("hypothesis")),
+        patch,
+        evidence: [
+          {
+            kind: String(form.get("evidenceKind")),
+            referenceId: String(form.get("referenceId")),
+          },
+        ],
+        idempotencyKey: crypto.randomUUID(),
+      });
+      (event.currentTarget as HTMLFormElement).reset();
+      await this.select(personaId);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async acceptExperiment(experiment: PersonaExperiment) {
+    const client = this.context.gateway.snapshot.client;
+    const detail = this.detail;
+    if (!client || !detail) return;
+    this.busy = true;
+    try {
+      await client.request("personas.experiments.accept", {
+        personaId: detail.persona.personaId,
+        experimentId: experiment.experimentId,
+        expectedRevision: detail.persona.recordRevision,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      await this.context.personas.refresh(true);
+      await this.select(detail.persona.personaId);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   private async bindEmbodiment(event: SubmitEvent) {
     event.preventDefault();
     if (!this.detail) return;
@@ -592,6 +697,11 @@ export class PersonasPage extends LitElement {
     const tabs: Array<{ id: PersonasPanel; label: string; count?: number }> = [
       { id: "overview", label: "Overview" },
       { id: "identity", label: "Identity & Personality" },
+      {
+        id: "affect",
+        label: "Affect & Experiments",
+        count: detail.experiments?.filter((experiment) => experiment.status === "proposed").length,
+      },
       {
         id: "agents",
         label: "Agent Binding",
@@ -793,6 +903,184 @@ ${activeRevision.content.behaviorGuidance}</textarea
         </div>
       </form>
     </section>`;
+  }
+
+  private renderAffect(detail: PersonasGetResult) {
+    const affect = detail.affect;
+    const experiments = detail.experiments ?? [];
+    if (!affect) {
+      return html`<section class="card">
+        <div class="muted">Affect state is unavailable.</div>
+      </section>`;
+    }
+    const retracted = new Set(
+      affect.recentImpulses
+        .filter((impulse) => impulse.operation === "retract")
+        .map((impulse) => impulse.targetImpulseId),
+    );
+    return html`<section class="card">
+        <div class="card-title">Bounded affect</div>
+        <div class="card-sub">
+          Deterministic values decay toward the immutable Persona revision baseline. Projection is
+          limited to tone, pacing, provider-neutral TTS expression, and AIRI expression.
+        </div>
+        <div class="agents-overview-grid personas-page__summary">
+          ${Object.entries(affect.values).map(
+            ([dimension, value]) => html`<div class="agent-kv">
+              <div class="label">${dimension}</div>
+              <div>${value} <span class="muted">/ 10000</span></div>
+            </div>`,
+          )}
+        </div>
+        <div class="agents-overview-grid personas-page__summary">
+          <div class="agent-kv">
+            <div class="label">Tone</div>
+            <div>${affect.projection.tone}</div>
+          </div>
+          <div class="agent-kv">
+            <div class="label">Pacing</div>
+            <div>${affect.projection.pacing}</div>
+          </div>
+          <div class="agent-kv">
+            <div class="label">TTS energy</div>
+            <div>${affect.projection.ttsExpression.energy}</div>
+          </div>
+          <div class="agent-kv">
+            <div class="label">AIRI expression</div>
+            <div>${affect.projection.airiExpression}</div>
+          </div>
+        </div>
+        <form class="stack personas-page__form" @submit=${this.applyAffectImpulse}>
+          <div class="label">Manual override impulse</div>
+          <div class="form-grid personas-page__identity-grid">
+            <label class="field"
+              ><span>Dimension</span
+              ><select name="dimension">
+                ${Object.keys(affect.values).map(
+                  (dimension) => html`<option value=${dimension}>${dimension}</option>`,
+                )}
+              </select></label
+            >
+            <label class="field"
+              ><span>Delta</span
+              ><input name="delta" type="number" min="-10000" max="10000" value="500" required
+            /></label>
+            <label class="field"
+              ><span>Half-life minutes</span
+              ><input name="halfLifeMinutes" type="number" min="1" value="60" required
+            /></label>
+            <label class="field"
+              ><span>Expires after minutes</span
+              ><input name="durationMinutes" type="number" min="1" value="240" required
+            /></label>
+            <label class="field full"
+              ><span>Evidence reference</span
+              ><input name="referenceId" maxlength="128" placeholder="feedback-2026-07-23" required
+            /></label>
+          </div>
+          <div class="personas-page__actions">
+            <button class="btn btn--sm primary" type="submit" ?disabled=${this.busy}>
+              Record override
+            </button>
+          </div>
+        </form>
+        <div class="personas-page__history">
+          ${affect.recentImpulses.map(
+            (impulse) => html`<div class="personas-page__revision-row">
+              <div>
+                <strong>${impulse.operation}</strong>
+                <span class="muted">
+                  · ${impulse.dimension ?? impulse.targetImpulseId} · ${impulse.reason}</span
+                >
+              </div>
+              ${impulse.operation === "apply" && !retracted.has(impulse.impulseId)
+                ? html`<button
+                    type="button"
+                    class="btn btn--sm"
+                    ?disabled=${this.busy}
+                    @click=${() => void this.retractAffectImpulse(impulse.impulseId)}
+                  >
+                    Correct
+                  </button>`
+                : nothing}
+            </div>`,
+          )}
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-title">Persona experiments</div>
+        <div class="card-sub">
+          Proposals may change only allowlisted traits or expression preferences. Acceptance creates
+          a new immutable Persona revision and grants no runtime authority.
+        </div>
+        <form class="stack personas-page__form" @submit=${this.proposeExperiment}>
+          <div class="form-grid personas-page__identity-grid">
+            <label class="field full"
+              ><span>Hypothesis</span><input name="hypothesis" maxlength="500" required
+            /></label>
+            <label class="field"
+              ><span>Allowlisted field</span
+              ><select name="field">
+                <option value="traits.warmth">Trait · warmth</option>
+                <option value="traits.directness">Trait · directness</option>
+                <option value="traits.playfulness">Trait · playfulness</option>
+                <option value="traits.formality">Trait · formality</option>
+                <option value="expression.energy">Expression · energy</option>
+                <option value="expression.warmth">Expression · warmth</option>
+                <option value="expression.urgency">Expression · urgency</option>
+                <option value="expression.pace">Expression · pace</option>
+                <option value="expression.emphasis">Expression · emphasis</option>
+                <option value="expression.playfulness">Expression · playfulness</option>
+              </select></label
+            >
+            <label class="field"
+              ><span>Value (0–10000)</span
+              ><input name="value" type="number" min="0" max="10000" required
+            /></label>
+            <label class="field"
+              ><span>Evidence kind</span
+              ><select name="evidenceKind">
+                <option value="explicit_feedback">Explicit feedback</option>
+                <option value="interruption_or_correction_rate">Interruption / correction</option>
+                <option value="response_completion">Response completion</option>
+                <option value="repeated_clarification">Repeated clarification</option>
+                <option value="task_success">Task success</option>
+              </select></label
+            >
+            <label class="field"
+              ><span>Evidence reference</span><input name="referenceId" maxlength="128" required
+            /></label>
+          </div>
+          <div class="personas-page__actions">
+            <button class="btn btn--sm primary" type="submit" ?disabled=${this.busy}>
+              Propose
+            </button>
+          </div>
+        </form>
+        <div class="personas-page__history">
+          ${experiments.length === 0
+            ? html`<div class="muted">No experiments proposed.</div>`
+            : experiments.map(
+                (experiment) => html`<div class="personas-page__revision-row">
+                  <div>
+                    <strong>${experiment.hypothesis}</strong>
+                    <div class="muted">${JSON.stringify(experiment.patch)}</div>
+                  </div>
+                  ${experiment.status === "proposed" &&
+                  experiment.baseRevisionId === detail.persona.activeRevisionId
+                    ? html`<button
+                        type="button"
+                        class="btn btn--sm primary"
+                        ?disabled=${this.busy}
+                        @click=${() => void this.acceptExperiment(experiment)}
+                      >
+                        Accept
+                      </button>`
+                    : html`<span class="pill">${experiment.status}</span>`}
+                </div>`,
+              )}
+        </div>
+      </section>`;
   }
 
   private renderVoice(detail: PersonasGetResult) {
@@ -1103,15 +1391,17 @@ ${activeRevision.content.behaviorGuidance}</textarea
       ? this.renderOverview(detail)
       : this.panel === "identity"
         ? this.renderIdentity(detail)
-        : this.panel === "agents"
-          ? this.renderAgentBinding(detail)
-          : this.panel === "memory"
-            ? this.renderMemory()
-            : this.panel === "voice"
-              ? this.renderVoice(detail)
-              : this.panel === "embodiment"
-                ? this.renderEmbodiment(detail)
-                : this.renderRevisions(detail)}`;
+        : this.panel === "affect"
+          ? this.renderAffect(detail)
+          : this.panel === "agents"
+            ? this.renderAgentBinding(detail)
+            : this.panel === "memory"
+              ? this.renderMemory()
+              : this.panel === "voice"
+                ? this.renderVoice(detail)
+                : this.panel === "embodiment"
+                  ? this.renderEmbodiment(detail)
+                  : this.renderRevisions(detail)}`;
   }
 
   private renderCreate() {

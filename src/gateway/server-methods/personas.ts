@@ -4,11 +4,14 @@ import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/i
 import {
   PersonaChangedEventSchema,
   PersonaSelectionChangedEventSchema,
+  PersonasAffectImpulseParamsSchema,
   PersonasCognitionListParamsSchema,
   PersonasCognitionStartParamsSchema,
   PersonasCreateParamsSchema,
   PersonasGetParamsSchema,
   PersonasHistoryParamsSchema,
+  PersonasExperimentsAcceptParamsSchema,
+  PersonasExperimentsProposeParamsSchema,
   PersonasLifecycleParamsSchema,
   PersonasListParamsSchema,
   PersonasMemoryCorrectParamsSchema,
@@ -23,6 +26,7 @@ import {
 } from "../../../packages/gateway-protocol/src/schema/personas.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
 import { MEMORY_DREAMING_SYSTEM_EVENT_TEXT } from "../../memory-host-sdk/dreaming.js";
+import { PersonaAffectRepository } from "../../personas/affect-repository.js";
 import {
   CognitiveOpportunityConflictError,
   CognitiveOpportunityNotFoundError,
@@ -89,11 +93,14 @@ function handle(
 export function createPersonaHandlers(
   input: {
     repository?: PersonaRepository;
+    affectRepository?: PersonaAffectRepository;
     memoryRepository?: PersonaMemoryRepository;
     cognitiveOpportunityRepository?: CognitiveOpportunityRepository;
   } = {},
 ): GatewayRequestHandlers {
   const repository = input.repository ?? new PersonaRepository();
+  let affectRepository = input.affectRepository;
+  const affect = () => (affectRepository ??= new PersonaAffectRepository());
   const memoryRepository = input.memoryRepository ?? new PersonaMemoryRepository();
   const cognitiveOpportunityRepository =
     input.cognitiveOpportunityRepository ?? new CognitiveOpportunityRepository();
@@ -127,6 +134,70 @@ export function createPersonaHandlers(
           persona: projectPersonaWithVoice(context.getRuntimeConfig(), persona),
           activeRevision: repository.getRevision(persona.activeRevisionId),
           revisions,
+          affect: affect().snapshot(persona.personaId),
+          experiments: affect().listExperiments(persona.personaId),
+        };
+      });
+    },
+    "personas.affect.impulse": ({ params, respond, client }) => {
+      if (!Value.Check(PersonasAffectImpulseParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.affect.impulse params"),
+        );
+      }
+      handle(respond, () =>
+        affect().appendImpulse({
+          ...params,
+          source: "operator",
+          actorId: actorId(client),
+        }),
+      );
+    },
+    "personas.experiments.propose": ({ params, respond, client }) => {
+      if (!Value.Check(PersonasExperimentsProposeParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.experiments.propose params"),
+        );
+      }
+      handle(respond, () => ({
+        experiment: affect().proposeExperiment({
+          ...params,
+          proposerId: actorId(client),
+        }),
+      }));
+    },
+    "personas.experiments.accept": ({ params, respond, context, client }) => {
+      if (!Value.Check(PersonasExperimentsAcceptParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.experiments.accept params"),
+        );
+      }
+      handle(respond, () => {
+        const result = affect().acceptExperiment({
+          ...params,
+          actorId: actorId(client),
+          configuredAgentIds: configured(context),
+        });
+        context.broadcast(
+          "persona.changed",
+          {
+            action: "revise",
+            personaId: result.persona.personaId,
+            status: result.persona.status,
+            recordRevision: result.persona.recordRevision,
+            activeRevisionId: result.persona.activeRevisionId,
+          },
+          { dropIfSlow: true },
+        );
+        return {
+          ...result,
+          persona: projectPersonaWithVoice(context.getRuntimeConfig(), result.persona),
         };
       });
     },

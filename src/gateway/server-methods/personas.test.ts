@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PersonaAffectRepository } from "../../personas/affect-repository.js";
 import type { PersonaRepository } from "../../personas/repository.js";
 import { PersonaConflictError, PersonaValidationError } from "../../personas/types.js";
 import { createPersonaHandlers } from "./personas.js";
@@ -78,6 +79,35 @@ async function invoke(
 }
 
 describe("Persona gateway handlers", () => {
+  it("records manual affect only as an operator-scoped impulse", async () => {
+    const appendImpulse = vi.fn(() => ({ impulse: {}, affect: {} }));
+    const { respond } = await invoke(
+      createPersonaHandlers({
+        repository: repository(),
+        affectRepository: { appendImpulse } as unknown as PersonaAffectRepository,
+      }),
+      "personas.affect.impulse",
+      {
+        personaId: "persona-1",
+        operation: "apply",
+        dimension: "energy",
+        delta: 500,
+        halfLifeMs: 3_600_000,
+        reason: "manual_override",
+        evidence: [{ kind: "operator_observation", referenceId: "observation-1" }],
+        idempotencyKey: "affect-1",
+      },
+    );
+
+    expect(appendImpulse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "operator",
+        actorId: "device:test-device",
+      }),
+    );
+    expect(respond).toHaveBeenCalledWith(true, expect.anything(), undefined);
+  });
+
   it("rejects invalid input before repository mutation", async () => {
     const create = vi.fn();
     const { respond } = await invoke(

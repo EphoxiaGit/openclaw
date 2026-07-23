@@ -2,8 +2,10 @@ import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
   PersonaChangedEventSchema,
+  PersonasAffectImpulseParamsSchema,
   PersonasCognitionStartParamsSchema,
   PersonasCreateParamsSchema,
+  PersonasExperimentsProposeParamsSchema,
   PersonasListResultSchema,
 } from "./schema/personas.js";
 
@@ -67,6 +69,38 @@ describe("Persona gateway schemas", () => {
     expect(Value.Check(PersonasCognitionStartParamsSchema, { ...input, continuous: true })).toBe(
       false,
     );
+  });
+
+  it("keeps affect and experiment mutations bounded to presentation fields", () => {
+    const impulse = {
+      personaId: "persona-1",
+      operation: "apply",
+      dimension: "energy",
+      delta: 500,
+      halfLifeMs: 3_600_000,
+      reason: "manual_override",
+      evidence: [{ kind: "operator_observation", referenceId: "observation-1" }],
+      idempotencyKey: "affect-1",
+    };
+    expect(Value.Check(PersonasAffectImpulseParamsSchema, impulse)).toBe(true);
+    expect(Value.Check(PersonasAffectImpulseParamsSchema, { ...impulse, provider: "x" })).toBe(
+      false,
+    );
+
+    const experiment = {
+      personaId: "persona-1",
+      hypothesis: "A warmer tone reduces repeated clarification.",
+      patch: { traits: { warmth: 0.85 } },
+      evidence: [{ kind: "repeated_clarification", referenceId: "clarification-rate-1" }],
+      idempotencyKey: "experiment-1",
+    };
+    expect(Value.Check(PersonasExperimentsProposeParamsSchema, experiment)).toBe(true);
+    expect(
+      Value.Check(PersonasExperimentsProposeParamsSchema, {
+        ...experiment,
+        patch: { provider: "forbidden" },
+      }),
+    ).toBe(false);
   });
 
   it("exposes effective named TTS binding metadata without provider credentials", () => {

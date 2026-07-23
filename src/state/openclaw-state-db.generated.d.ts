@@ -764,6 +764,24 @@ export interface OfficialExternalPluginCatalogSnapshots {
   updated_at_ms: number;
 }
 
+export interface PersonaAffectImpulses {
+  actor_id: string;
+  created_at: number;
+  delta: number | null;
+  dimension: string | null;
+  evidence_json: string;
+  expires_at: number | null;
+  half_life_ms: number | null;
+  impulse_id: string;
+  operation: string;
+  persona_id: string;
+  persona_revision_id: string;
+  reason: string;
+  sequence: Generated<number>;
+  source: string;
+  target_impulse_id: string | null;
+}
+
 export interface PersonaCognitiveOpportunities {
   agent_id: string;
   approval_request_id: string | null;
@@ -797,6 +815,21 @@ export interface PersonaEmbodimentBindings {
   model_ref: string | null;
   persona_id: string;
   scene_ref: string | null;
+}
+
+export interface PersonaExperiments {
+  accepted_revision_id: string | null;
+  base_revision_id: string;
+  created_at: number;
+  decided_at: number | null;
+  decided_by: string | null;
+  evidence_json: string;
+  experiment_id: string;
+  hypothesis: string;
+  patch_json: string;
+  persona_id: string;
+  proposer_id: string;
+  status: string;
 }
 
 export interface PersonaMemoryMutationReceipts {
@@ -1475,9 +1508,11 @@ export interface DB {
   node_pairing_paired: NodePairingPaired;
   node_pairing_pending: NodePairingPending;
   official_external_plugin_catalog_snapshots: OfficialExternalPluginCatalogSnapshots;
+  persona_affect_impulses: PersonaAffectImpulses;
   persona_cognitive_opportunities: PersonaCognitiveOpportunities;
   persona_delegate_agents: PersonaDelegateAgents;
   persona_embodiment_bindings: PersonaEmbodimentBindings;
+  persona_experiments: PersonaExperiments;
   persona_memory_mutation_receipts: PersonaMemoryMutationReceipts;
   persona_memory_records: PersonaMemoryRecords;
   persona_memory_revisions: PersonaMemoryRevisions;

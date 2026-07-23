@@ -1710,6 +1710,52 @@ CREATE TABLE IF NOT EXISTS persona_transitions (
 CREATE INDEX IF NOT EXISTS idx_persona_transitions_persona
   ON persona_transitions(persona_id, sequence);
 
+CREATE TABLE IF NOT EXISTS persona_affect_impulses (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  impulse_id TEXT NOT NULL UNIQUE,
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  persona_revision_id TEXT NOT NULL REFERENCES persona_revisions(revision_id) ON DELETE CASCADE,
+  operation TEXT NOT NULL CHECK (operation IN ('apply', 'retract')),
+  target_impulse_id TEXT,
+  dimension TEXT,
+  delta INTEGER,
+  half_life_ms INTEGER,
+  reason TEXT NOT NULL CHECK (
+    reason IN ('interaction', 'time_rhythm', 'manual_override', 'owner_correction')
+  ),
+  actor_id TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('assistant', 'operator')),
+  evidence_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  CHECK (
+    (operation = 'apply' AND target_impulse_id IS NULL AND dimension IS NOT NULL AND delta IS NOT NULL AND half_life_ms IS NOT NULL)
+    OR
+    (operation = 'retract' AND target_impulse_id IS NOT NULL AND dimension IS NULL AND delta IS NULL AND half_life_ms IS NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_persona_affect_impulses_revision
+  ON persona_affect_impulses(persona_id, persona_revision_id, sequence);
+
+CREATE TABLE IF NOT EXISTS persona_experiments (
+  experiment_id TEXT PRIMARY KEY NOT NULL,
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  base_revision_id TEXT NOT NULL REFERENCES persona_revisions(revision_id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('proposed', 'accepted')),
+  hypothesis TEXT NOT NULL,
+  patch_json TEXT NOT NULL,
+  evidence_json TEXT NOT NULL,
+  proposer_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER,
+  decided_by TEXT,
+  accepted_revision_id TEXT REFERENCES persona_revisions(revision_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_persona_experiments_persona
+  ON persona_experiments(persona_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS persona_memory_records (
   record_id TEXT PRIMARY KEY NOT NULL,
   persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
