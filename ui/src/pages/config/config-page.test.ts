@@ -14,6 +14,15 @@ describe("configSelectionFromSearch", () => {
     });
   });
 
+  it("opens a linked Settings subsection", () => {
+    expect(configSelectionFromSearch("communications", "?section=messages&subsection=tts")).toEqual(
+      {
+        activeSection: "messages",
+        activeSubsection: "tts",
+      },
+    );
+  });
+
   it("falls back when a linked section does not belong to the page", () => {
     expect(configSelectionFromSearch("communications", "?section=gateway")).toEqual({
       activeSection: "messages",

@@ -122,7 +122,9 @@ describe("PersonasPage", () => {
         (button) => button.textContent?.includes("Configure voice settings"),
       );
       configureVoice?.click();
-      expect(navigate).toHaveBeenCalledWith("communications", { search: "?section=messages" });
+      expect(navigate).toHaveBeenCalledWith("communications", {
+        search: "?section=messages&subsection=tts",
+      });
 
       const embodimentTab = Array.from(page.querySelectorAll<HTMLButtonElement>(".agent-tab")).find(
         (tab) => tab.textContent?.includes("Embodiment"),

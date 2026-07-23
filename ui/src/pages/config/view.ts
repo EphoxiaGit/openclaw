@@ -1370,8 +1370,7 @@ export function renderConfig(props: ConfigProps) {
     props.activeSection && !isVirtualSection
       ? resolveSectionMeta(props.activeSection, activeSectionSchema)
       : null;
-  // Config subsections are always rendered as a single page per section.
-  const effectiveSubsection = null;
+  const effectiveSubsection = props.activeSubsection;
 
   const topTabs = [
     ...(showRootTab

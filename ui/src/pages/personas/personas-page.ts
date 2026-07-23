@@ -714,7 +714,9 @@ ${activeRevision.content.behaviorGuidance}</textarea
                   type="button"
                   class="btn btn--sm"
                   @click=${() =>
-                    this.context.navigate("communications", { search: "?section=messages" })}
+                    this.context.navigate("communications", {
+                      search: "?section=messages&subsection=tts",
+                    })}
                 >
                   Configure voice settings
                 </button>

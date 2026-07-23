@@ -188,11 +188,12 @@ function normalizeConfigSelection(
 }
 
 export function configSelectionFromSearch(pageId: ConfigPageId, search: string): ConfigSelection {
-  const section = new URLSearchParams(search).get("section");
+  const params = new URLSearchParams(search);
+  const section = params.get("section");
   if (!section) {
     return defaultConfigSelection(pageId);
   }
-  return normalizeConfigSelection(pageId, section, null);
+  return normalizeConfigSelection(pageId, section, params.get("subsection"));
 }
 
 function configPageTitle(pageId: ConfigPageId): string {

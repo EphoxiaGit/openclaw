@@ -420,6 +420,41 @@ describe("config view", () => {
     expect(onWebPushSubscribe).toHaveBeenCalledOnce();
   });
 
+  it("renders only the linked config subsection", () => {
+    const { container } = renderConfigView({
+      activeSection: "messages",
+      activeSubsection: "tts",
+      includeSections: ["messages"],
+      schema: {
+        type: "object",
+        properties: {
+          messages: {
+            type: "object",
+            properties: {
+              inbox: { type: "string" },
+              tts: {
+                type: "object",
+                properties: {
+                  provider: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+      uiHints: {
+        "messages.inbox": { label: "Inbox Mode" },
+        "messages.tts": { label: "Message Text-to-Speech" },
+        "messages.tts.provider": { label: "TTS Provider" },
+      },
+      formValue: { messages: { inbox: "smart", tts: { provider: "elevenlabs" } } },
+      originalValue: { messages: { inbox: "smart", tts: { provider: "elevenlabs" } } },
+    });
+
+    expect(normalizedText(container)).toContain("TTS Provider");
+    expect(normalizedText(container)).not.toContain("Inbox Mode");
+  });
+
   it("resets config content scroll when switching top-tab sections", async () => {
     const { container } = renderConfigView({
       activeSection: "channels",
