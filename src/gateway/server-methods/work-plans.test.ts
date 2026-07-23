@@ -2,6 +2,8 @@ import path from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupTempDirs, makeTempDir } from "../../../test/helpers/temp-dir.js";
 import type { ManagedWorktreeInspection } from "../../agents/worktrees/types.js";
+import { executeSqliteQuerySync, getNodeSqliteKysely } from "../../infra/kysely-sync.js";
+import type { DB as OpenClawStateKyselyDatabase } from "../../state/openclaw-state-db.generated.js";
 import {
   closeOpenClawStateDatabaseForTest,
   openOpenClawStateDatabase,
@@ -225,6 +227,37 @@ describe("work-plan worker projection", () => {
   it("cancels the authoritative task through an opaque worker key", async () => {
     const dbPath = path.join(makeTempDir(dirs, "work-plan-worker-cancel-"), "state.sqlite");
     const repository = new WorkPlanRepository({ path: dbPath, now: () => 100 });
+    const task: TaskRecord = {
+      taskId: "private-task-id",
+      runtime: "subagent",
+      requesterSessionKey: "agent:main:main",
+      ownerKey: "private-owner",
+      scopeKind: "session",
+      task: "private prompt",
+      status: "running",
+      deliveryStatus: "pending",
+      notifyPolicy: "done_only",
+      createdAt: 100,
+    };
+    const database = openOpenClawStateDatabase({ path: dbPath });
+    const stateDb = getNodeSqliteKysely<Pick<OpenClawStateKyselyDatabase, "task_runs">>(
+      database.db,
+    );
+    executeSqliteQuerySync(
+      database.db,
+      stateDb.insertInto("task_runs").values({
+        task_id: task.taskId,
+        runtime: task.runtime,
+        requester_session_key: task.requesterSessionKey,
+        owner_key: task.ownerKey,
+        scope_kind: task.scopeKind,
+        task: task.task,
+        status: task.status,
+        delivery_status: task.deliveryStatus,
+        notify_policy: task.notifyPolicy,
+        created_at: task.createdAt,
+      }),
+    );
     const project = repository.createProject({
       projectId: "project-cancel",
       primaryConversationId: "agent:main:main",
@@ -257,18 +290,6 @@ describe("work-plan worker projection", () => {
         ownerId: "private-task-id",
       },
     });
-    const task: TaskRecord = {
-      taskId: "private-task-id",
-      runtime: "subagent",
-      requesterSessionKey: "agent:main:main",
-      ownerKey: "private-owner",
-      scopeKind: "session",
-      task: "private prompt",
-      status: "running",
-      deliveryStatus: "pending",
-      notifyPolicy: "done_only",
-      createdAt: 100,
-    };
     const cancelTask = vi.fn(async () => ({ found: true, cancelled: true, task }));
     const handlers = createWorkPlansHandlers({
       repository,
