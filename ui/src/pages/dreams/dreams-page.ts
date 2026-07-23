@@ -20,6 +20,7 @@ import {
   copyDreamingArchivePath,
   createDreamingState,
   dedupeDreamDiary,
+  loadCognitiveOpportunities,
   loadDreamDiary,
   loadDreamingStatus,
   loadWikiImportInsights,
@@ -28,6 +29,7 @@ import {
   resetGroundedShortTerm,
   resetDreamDiary,
   resolveConfiguredDreaming,
+  startCognitiveOpportunity,
   updateDreamingEnabled,
   type DreamingState,
 } from "./dreaming.ts";
@@ -124,6 +126,7 @@ class DreamsPage extends LitElement {
     this.subscriptions = [
       this.context.gateway.subscribe((snapshot) => this.applyGatewaySnapshot(snapshot)),
       this.context.agents.subscribe(() => this.applyAgentsState()),
+      this.context.personas.subscribe(() => this.applyPersonasState()),
       this.context.runtimeConfig.subscribe(() => {
         this.syncConfigSnapshot();
         this.requestUpdate();
@@ -175,6 +178,7 @@ class DreamsPage extends LitElement {
     if (!this.awaitingRouteData && snapshot.connected && (clientChanged || becameConnected)) {
       void this.loadAll();
     }
+    this.applyPersonasState();
     this.requestUpdate();
   }
 
@@ -187,6 +191,27 @@ class DreamsPage extends LitElement {
         this.routeDataEnabled = false;
         this.loadSelectedAgentData();
       }
+    }
+    this.requestUpdate();
+  }
+
+  private applyPersonasState() {
+    const personas = this.resolvePersonaOptions();
+    const current = personas.find((persona) => persona.id === this.dreaming.selectedPersonaId);
+    const selected =
+      current ??
+      personas.find((persona) => persona.agentId === this.dreaming.selectedAgentId) ??
+      personas[0];
+    const nextPersonaId = selected?.id ?? null;
+    const nextAgentId = selected?.agentId ?? this.dreaming.selectedAgentId;
+    const changed =
+      nextPersonaId !== this.dreaming.selectedPersonaId ||
+      nextAgentId !== this.dreaming.selectedAgentId;
+    this.dreaming.selectedPersonaId = nextPersonaId;
+    this.dreaming.selectedAgentId = nextAgentId;
+    if (changed && !this.awaitingRouteData) {
+      this.routeDataEnabled = false;
+      this.loadSelectedAgentData();
     }
     this.requestUpdate();
   }
@@ -211,6 +236,7 @@ class DreamsPage extends LitElement {
       ...data.state,
       configSnapshot: this.context.runtimeConfig.state.configSnapshot ?? data.state.configSnapshot,
     };
+    this.applyPersonasState();
   }
 
   private syncConfigSnapshot() {
@@ -234,6 +260,19 @@ class DreamsPage extends LitElement {
       agentsList: this.context.agents.state.agentsList,
       sessionKey,
     });
+  }
+
+  private resolvePersonaOptions() {
+    return (this.context.personas.state.list?.personas ?? [])
+      .filter(
+        (persona) =>
+          persona.status === "active" && !persona.missingAgentIds.includes(persona.primaryAgentId),
+      )
+      .map((persona) => ({
+        id: persona.personaId,
+        label: persona.displayName,
+        agentId: persona.primaryAgentId,
+      }));
   }
 
   private async runDreamingTask<T>(task: (state: DreamingState) => Promise<T>): Promise<T> {
@@ -264,6 +303,7 @@ class DreamsPage extends LitElement {
     await Promise.all([
       this.runDreamingTask(loadDreamingStatus),
       this.runDreamingTask(loadDreamDiary),
+      this.runDreamingTask(loadCognitiveOpportunities),
       this.runDreamingTask(loadWikiImportInsights),
       this.runDreamingTask(loadWikiMemoryPalace),
     ]);
@@ -273,6 +313,7 @@ class DreamsPage extends LitElement {
     void Promise.all([
       this.runDreamingTask(loadDreamingStatus),
       this.runDreamingTask(loadDreamDiary),
+      this.runDreamingTask(loadCognitiveOpportunities),
     ]);
   }
 
@@ -281,7 +322,20 @@ class DreamsPage extends LitElement {
       return;
     }
     this.routeDataEnabled = false;
+    this.dreaming.selectedPersonaId = null;
+    this.dreaming.cognitiveOpportunities = [];
     this.dreaming.selectedAgentId = agentId;
+    this.loadSelectedAgentData();
+  }
+
+  private selectPersona(personaId: string) {
+    const persona = this.resolvePersonaOptions().find((entry) => entry.id === personaId);
+    if (!persona || persona.id === this.dreaming.selectedPersonaId) {
+      return;
+    }
+    this.routeDataEnabled = false;
+    this.dreaming.selectedPersonaId = persona.id;
+    this.dreaming.selectedAgentId = persona.agentId;
     this.loadSelectedAgentData();
   }
 
@@ -395,6 +449,12 @@ class DreamsPage extends LitElement {
         active: dreamingOn,
         selectedAgentId,
         agentOptions: this.resolveAgentOptions(),
+        selectedPersonaId: dreaming.selectedPersonaId,
+        personaOptions: this.resolvePersonaOptions(),
+        cognitiveOpportunities: dreaming.cognitiveOpportunities,
+        cognitiveOpportunitiesLoading: dreaming.cognitiveOpportunitiesLoading,
+        cognitiveOpportunitiesError: dreaming.cognitiveOpportunitiesError,
+        cognitiveOpportunityStarting: dreaming.cognitiveOpportunityStarting,
         shortTermCount: dreaming.dreamingStatus?.shortTermCount ?? 0,
         groundedSignalCount: dreaming.dreamingStatus?.groundedSignalCount ?? 0,
         totalSignalCount: dreaming.dreamingStatus?.totalSignalCount ?? 0,
@@ -428,6 +488,8 @@ class DreamsPage extends LitElement {
         wikiMemoryPalace: dreaming.wikiMemoryPalace,
         onRefresh: () => void this.loadAll(true),
         onSelectAgent: (agentId) => this.selectAgent(agentId),
+        onSelectPersona: (personaId) => this.selectPersona(personaId),
+        onStartCognitiveOpportunity: () => void this.runDreamingTask(startCognitiveOpportunity),
         onRefreshDiary: () => void this.runDreamingTask(loadDreamDiary),
         onRefreshImports: () =>
           void this.context.runtimeConfig.refresh().then(() => {

@@ -1,5 +1,9 @@
 import type { GatewayBrowserClient, GatewayHelloOk } from "../../api/gateway.ts";
-import type { ConfigSnapshot } from "../../api/types.ts";
+import type {
+  ConfigSnapshot,
+  PersonasCognitionListResult,
+  PersonasCognitionStartParams,
+} from "../../api/types.ts";
 import type { RuntimeConfigCapability } from "../../lib/config/index.ts";
 import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
 import { isPluginEnabledInConfigSnapshot } from "../../lib/plugin-activation.ts";
@@ -213,6 +217,11 @@ export type DreamingState = {
   configSnapshot: ConfigSnapshot | null;
   applySessionKey: string;
   selectedAgentId: string | null;
+  selectedPersonaId: string | null;
+  cognitiveOpportunities: PersonasCognitionListResult["opportunities"];
+  cognitiveOpportunitiesLoading: boolean;
+  cognitiveOpportunitiesError: string | null;
+  cognitiveOpportunityStarting: boolean;
   dreamingStatusRequestAgentId?: string | null;
   dreamingStatusRequestGeneration?: number;
   dreamingStatusActiveRequestGeneration?: number | null;
@@ -256,6 +265,11 @@ export function createDreamingState(
     configSnapshot: initial.configSnapshot ?? null,
     applySessionKey: initial.applySessionKey ?? "main",
     selectedAgentId: initial.selectedAgentId ?? null,
+    selectedPersonaId: null,
+    cognitiveOpportunities: [],
+    cognitiveOpportunitiesLoading: false,
+    cognitiveOpportunitiesError: null,
+    cognitiveOpportunityStarting: false,
     dreamingStatusLoading: false,
     dreamingStatusError: null,
     dreamingStatus: null,
@@ -275,6 +289,62 @@ export function createDreamingState(
     wikiMemoryPalace: null,
     lastError: null,
   };
+}
+
+export async function loadCognitiveOpportunities(state: DreamingState): Promise<void> {
+  if (!state.client || !state.connected || !state.selectedPersonaId) {
+    state.cognitiveOpportunities = [];
+    return;
+  }
+  const personaId = state.selectedPersonaId;
+  state.cognitiveOpportunitiesLoading = true;
+  state.cognitiveOpportunitiesError = null;
+  try {
+    const result = await state.client.request<PersonasCognitionListResult>(
+      "personas.cognition.list",
+      { personaId, limit: 10 },
+    );
+    if (state.selectedPersonaId === personaId) {
+      state.cognitiveOpportunities = result.opportunities;
+    }
+  } catch (error) {
+    if (state.selectedPersonaId === personaId) {
+      state.cognitiveOpportunitiesError = String(error);
+    }
+  } finally {
+    if (state.selectedPersonaId === personaId) {
+      state.cognitiveOpportunitiesLoading = false;
+    }
+  }
+}
+
+export async function startCognitiveOpportunity(state: DreamingState): Promise<boolean> {
+  if (
+    !state.client ||
+    !state.connected ||
+    !state.selectedPersonaId ||
+    state.cognitiveOpportunityStarting
+  ) {
+    return false;
+  }
+  state.cognitiveOpportunityStarting = true;
+  state.cognitiveOpportunitiesError = null;
+  try {
+    const params: PersonasCognitionStartParams = {
+      personaId: state.selectedPersonaId,
+      sessionKey: state.applySessionKey,
+      source: "explicit",
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await state.client.request("personas.cognition.start", params);
+    await loadCognitiveOpportunities(state);
+    return true;
+  } catch (error) {
+    state.cognitiveOpportunitiesError = String(error);
+    return false;
+  } finally {
+    state.cognitiveOpportunityStarting = false;
+  }
 }
 
 type DreamingConfigCapability = Pick<

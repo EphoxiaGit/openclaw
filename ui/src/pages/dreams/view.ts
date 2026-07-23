@@ -2,6 +2,7 @@
 import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import type { PersonasCognitionListResult } from "../../api/types.ts";
 import { toSanitizedMarkdownHtml } from "../../components/markdown.ts";
 import { t } from "../../i18n/index.ts";
 import type { DreamingEntry, WikiImportInsights, WikiMemoryPalace } from "./dreaming.ts";
@@ -94,11 +95,21 @@ type DreamingAgentOption = {
   label: string;
 };
 
+type DreamingPersonaOption = DreamingAgentOption & {
+  agentId: string;
+};
+
 type DreamingProps = {
   viewState: DreamingViewState;
   active: boolean;
   selectedAgentId: string;
   agentOptions: DreamingAgentOption[];
+  selectedPersonaId: string | null;
+  personaOptions: DreamingPersonaOption[];
+  cognitiveOpportunities: PersonasCognitionListResult["opportunities"];
+  cognitiveOpportunitiesLoading: boolean;
+  cognitiveOpportunitiesError: string | null;
+  cognitiveOpportunityStarting: boolean;
   shortTermCount: number;
   groundedSignalCount: number;
   totalSignalCount: number;
@@ -132,6 +143,8 @@ type DreamingProps = {
   wikiMemoryPalace: WikiMemoryPalace | null;
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
+  onSelectPersona: (personaId: string) => void;
+  onStartCognitiveOpportunity: () => void;
   onRefreshDiary: () => void;
   onRefreshImports: () => void;
   onRefreshMemoryPalace: () => void;
@@ -335,32 +348,75 @@ export function renderDreaming(props: DreamingProps) {
             ${t("dreaming.tabs.advanced")}
           </button>
         </nav>
-        ${props.agentOptions.length > 1
-          ? html`<label class="field dreams__agent-select">
-              <span class="sr-only">${t("dreaming.agentSelect.label")}</span>
-              <select
-                data-dreaming-agent-select="true"
-                aria-label=${t("dreaming.agentSelect.ariaLabel")}
-                .value=${props.selectedAgentId}
-                @change=${(e: Event) => {
-                  const nextAgentId = (e.target as HTMLSelectElement).value;
-                  if (nextAgentId === props.selectedAgentId) {
-                    return;
-                  }
-                  props.onSelectAgent(nextAgentId);
-                }}
+        <div class="dreams__identity-controls">
+          ${props.personaOptions.length > 0
+            ? html`<label class="field dreams__agent-select">
+                <span class="sr-only">${t("dreaming.personaSelect.label")}</span>
+                <select
+                  data-dreaming-persona-select="true"
+                  aria-label=${t("dreaming.personaSelect.ariaLabel")}
+                  .value=${props.selectedPersonaId ?? ""}
+                  @change=${(e: Event) => {
+                    const personaId = (e.target as HTMLSelectElement).value;
+                    if (personaId && personaId !== props.selectedPersonaId) {
+                      props.onSelectPersona(personaId);
+                    }
+                  }}
+                >
+                  ${repeat(
+                    props.personaOptions,
+                    (entry) => entry.id,
+                    (entry) =>
+                      html`<option
+                        value=${entry.id}
+                        ?selected=${entry.id === props.selectedPersonaId}
+                      >
+                        ${entry.label} · ${entry.agentId}
+                      </option>`,
+                  )}
+                </select>
+              </label>`
+            : props.agentOptions.length > 1
+              ? html`<label class="field dreams__agent-select">
+                  <span class="sr-only">${t("dreaming.agentSelect.label")}</span>
+                  <select
+                    data-dreaming-agent-select="true"
+                    aria-label=${t("dreaming.agentSelect.ariaLabel")}
+                    .value=${props.selectedAgentId}
+                    @change=${(e: Event) => {
+                      const nextAgentId = (e.target as HTMLSelectElement).value;
+                      if (nextAgentId === props.selectedAgentId) {
+                        return;
+                      }
+                      props.onSelectAgent(nextAgentId);
+                    }}
+                  >
+                    ${repeat(
+                      props.agentOptions,
+                      (entry) => entry.id,
+                      (entry) =>
+                        html`<option
+                          value=${entry.id}
+                          ?selected=${entry.id === props.selectedAgentId}
+                        >
+                          ${entry.label}
+                        </option>`,
+                    )}
+                  </select>
+                </label>`
+              : nothing}
+          ${props.selectedPersonaId
+            ? html`<button
+                class="btn btn--primary btn--sm"
+                ?disabled=${props.cognitiveOpportunityStarting}
+                @click=${() => props.onStartCognitiveOpportunity()}
               >
-                ${repeat(
-                  props.agentOptions,
-                  (entry) => entry.id,
-                  (entry) =>
-                    html`<option value=${entry.id} ?selected=${entry.id === props.selectedAgentId}>
-                      ${entry.label}
-                    </option>`,
-                )}
-              </select>
-            </label>`
-          : nothing}
+                ${props.cognitiveOpportunityStarting
+                  ? t("dreaming.cognition.queuing")
+                  : t("dreaming.cognition.reflect")}
+              </button>`
+            : nothing}
+        </div>
       </div>
 
       ${state.activeSubTab === "scene"
@@ -947,6 +1003,7 @@ function renderAdvancedSection(props: DreamingProps) {
         : nothing}
 
       <div class="dreams-advanced__sections">
+        ${renderCognitiveOpportunities(props)}
         ${renderAdvancedEntryList({
           titleKey: "dreaming.advanced.stagedTitle",
           descriptionKey: "dreaming.advanced.stagedDescription",
@@ -1035,6 +1092,48 @@ function renderAdvancedSection(props: DreamingProps) {
       ${props.statusError
         ? html`<div class="dreams__controls-error">${props.statusError}</div>`
         : nothing}
+    </section>
+  `;
+}
+
+function renderCognitiveOpportunities(props: DreamingProps) {
+  if (!props.selectedPersonaId) {
+    return nothing;
+  }
+  return html`
+    <section class="dreams-advanced__section">
+      <div class="dreams-advanced__section-header">
+        <div class="dreams-advanced__section-copy">
+          <h3 class="dreams-advanced__section-title">${t("dreaming.cognition.title")}</h3>
+          <p class="dreams-advanced__section-description">${t("dreaming.cognition.description")}</p>
+        </div>
+        <span class="dreams-advanced__section-count">
+          ${props.cognitiveOpportunitiesLoading
+            ? t("dreaming.cognition.loading")
+            : props.cognitiveOpportunities.length}
+        </span>
+      </div>
+      ${props.cognitiveOpportunitiesError
+        ? html`<div class="dreams-advanced__empty">${props.cognitiveOpportunitiesError}</div>`
+        : props.cognitiveOpportunities.length === 0
+          ? html`<div class="dreams-advanced__empty">${t("dreaming.cognition.empty")}</div>`
+          : html`<div class="dreams-advanced__list">
+              ${props.cognitiveOpportunities.map(
+                (opportunity) => html`
+                  <article class="dreams-advanced__item">
+                    <span class="dreams-advanced__badge">
+                      ${opportunity.outputKind?.replaceAll("_", " ") ?? opportunity.status}
+                    </span>
+                    <div class="dreams-advanced__snippet">
+                      ${opportunity.outputSummary ?? t("dreaming.cognition.waiting")}
+                    </div>
+                    <div class="dreams-advanced__meta">
+                      ${opportunity.status} · ${new Date(opportunity.updatedAt).toLocaleString()}
+                    </div>
+                  </article>
+                `,
+              )}
+            </div>`}
     </section>
   `;
 }

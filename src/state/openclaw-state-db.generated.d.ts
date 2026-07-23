@@ -764,6 +764,25 @@ export interface OfficialExternalPluginCatalogSnapshots {
   updated_at_ms: number;
 }
 
+export interface PersonaCognitiveOpportunities {
+  agent_id: string;
+  approval_request_id: string | null;
+  completed_at: number | null;
+  created_at: number;
+  idempotency_key: string;
+  opportunity_id: string;
+  output_kind: string | null;
+  output_summary: string | null;
+  persona_id: string;
+  record_revision: number;
+  request_hash: string;
+  session_key: string;
+  source: string;
+  status: string;
+  task_flow_id: string | null;
+  updated_at: number;
+}
+
 export interface PersonaDelegateAgents {
   agent_id: string;
   ordinal: number;
@@ -1456,6 +1475,7 @@ export interface DB {
   node_pairing_paired: NodePairingPaired;
   node_pairing_pending: NodePairingPending;
   official_external_plugin_catalog_snapshots: OfficialExternalPluginCatalogSnapshots;
+  persona_cognitive_opportunities: PersonaCognitiveOpportunities;
   persona_delegate_agents: PersonaDelegateAgents;
   persona_embodiment_bindings: PersonaEmbodimentBindings;
   persona_memory_mutation_receipts: PersonaMemoryMutationReceipts;

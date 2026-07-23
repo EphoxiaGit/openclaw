@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { Value } from "typebox/value";
 import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/index.js";
 import {
   PersonaChangedEventSchema,
   PersonaSelectionChangedEventSchema,
+  PersonasCognitionListParamsSchema,
+  PersonasCognitionStartParamsSchema,
   PersonasCreateParamsSchema,
   PersonasGetParamsSchema,
   PersonasHistoryParamsSchema,
@@ -19,6 +22,14 @@ import {
   PersonasUpdateParamsSchema,
 } from "../../../packages/gateway-protocol/src/schema/personas.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
+import { MEMORY_DREAMING_SYSTEM_EVENT_TEXT } from "../../memory-host-sdk/dreaming.js";
+import {
+  CognitiveOpportunityConflictError,
+  CognitiveOpportunityNotFoundError,
+  CognitiveOpportunityRepository,
+  CognitiveOpportunityValidationError,
+  type CognitiveOutputKind,
+} from "../../personas/cognitive-opportunity.js";
 import { PersonaMemoryRepository } from "../../personas/memory-repository.js";
 import {
   PersonaMemoryConflictError,
@@ -32,7 +43,12 @@ import {
   PersonaValidationError,
 } from "../../personas/repository.js";
 import { projectPersonaWithVoice } from "../../personas/voice-binding.js";
+import { toAgentStoreSessionKey } from "../../routing/session-key.js";
+import { createManagedTaskFlow, failFlow, finishFlow } from "../../tasks/task-flow-registry.js";
+import { WorkInputService } from "../../work-inputs/service.js";
+import { WorkInputConflictError, WorkInputValidationError } from "../../work-inputs/types.js";
 import type { GatewayClient, GatewayRequestHandlers } from "./types.js";
+import { createGatewayWorkInputOwner } from "./work-input-owner.js";
 
 function actorId(client: GatewayClient | null): string {
   return client?.connect.device?.id
@@ -56,7 +72,12 @@ function handle(
     } else if (
       error instanceof PersonaMemoryNotFoundError ||
       error instanceof PersonaMemoryConflictError ||
-      error instanceof PersonaMemoryValidationError
+      error instanceof PersonaMemoryValidationError ||
+      error instanceof CognitiveOpportunityNotFoundError ||
+      error instanceof CognitiveOpportunityConflictError ||
+      error instanceof CognitiveOpportunityValidationError ||
+      error instanceof WorkInputConflictError ||
+      error instanceof WorkInputValidationError
     ) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
     } else {
@@ -66,10 +87,16 @@ function handle(
 }
 
 export function createPersonaHandlers(
-  input: { repository?: PersonaRepository; memoryRepository?: PersonaMemoryRepository } = {},
+  input: {
+    repository?: PersonaRepository;
+    memoryRepository?: PersonaMemoryRepository;
+    cognitiveOpportunityRepository?: CognitiveOpportunityRepository;
+  } = {},
 ): GatewayRequestHandlers {
   const repository = input.repository ?? new PersonaRepository();
   const memoryRepository = input.memoryRepository ?? new PersonaMemoryRepository();
+  const cognitiveOpportunityRepository =
+    input.cognitiveOpportunityRepository ?? new CognitiveOpportunityRepository();
   const configured = (context: Parameters<GatewayRequestHandlers[string]>[0]["context"]) =>
     new Set(listAgentIds(context.getRuntimeConfig()));
   return {
@@ -268,6 +295,151 @@ export function createPersonaHandlers(
         };
       });
     },
+    "personas.cognition.list": ({ params, respond, context }) => {
+      if (!Value.Check(PersonasCognitionListParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.cognition.list params"),
+        );
+      }
+      handle(respond, () => {
+        repository.get(params.personaId, configured(context));
+        return {
+          opportunities: cognitiveOpportunityRepository.list(params.personaId, params.limit),
+        };
+      });
+    },
+    "personas.cognition.start": ({ params, respond, context }) => {
+      if (!Value.Check(PersonasCognitionStartParamsSchema, params)) {
+        return respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid personas.cognition.start params"),
+        );
+      }
+      handle(respond, () => {
+        const persona = repository.get(params.personaId, configured(context));
+        if (persona.status !== "active") {
+          throw new CognitiveOpportunityValidationError("archived Personas cannot reflect");
+        }
+        const sessionKey = toAgentStoreSessionKey({
+          agentId: persona.primaryAgentId,
+          requestKey: params.sessionKey,
+        });
+        let opportunity = cognitiveOpportunityRepository.create({
+          opportunityId: randomUUID(),
+          personaId: persona.personaId,
+          agentId: persona.primaryAgentId,
+          sessionKey,
+          source: params.source ?? "explicit",
+          idempotencyKey: params.idempotencyKey,
+          output: params.output,
+        });
+        if (opportunity.taskFlowId || opportunity.status !== "queued") {
+          return { opportunity };
+        }
+        const flow = createManagedTaskFlow({
+          ownerKey: `persona:${persona.personaId}:cognition`,
+          controllerId: "core/persona-cognition",
+          status: "running",
+          goal: `Reflect for ${persona.displayName}`,
+          currentStep: params.output ? "review_output" : "queue_dreaming",
+          stateJson: {
+            kind: "persona_cognitive_opportunity",
+            opportunityId: opportunity.opportunityId,
+            personaId: persona.personaId,
+            ...(params.output ? { outputKind: params.output.kind } : {}),
+          },
+        });
+        if (!flow) {
+          opportunity = cognitiveOpportunityRepository.update(
+            opportunity.opportunityId,
+            opportunity.recordRevision,
+            { status: "failed" },
+          );
+          return { opportunity };
+        }
+        opportunity = cognitiveOpportunityRepository.update(
+          opportunity.opportunityId,
+          opportunity.recordRevision,
+          { status: "running", taskFlowId: flow.flowId },
+        );
+
+        if (!params.output) {
+          const wake = context.cron.wake({
+            mode: "now",
+            text: MEMORY_DREAMING_SYSTEM_EVENT_TEXT,
+            agentId: persona.primaryAgentId,
+          });
+          if (!wake.ok) {
+            failFlow({
+              flowId: flow.flowId,
+              expectedRevision: flow.revision,
+              currentStep: "dreaming_wake_failed",
+            });
+            opportunity = cognitiveOpportunityRepository.update(
+              opportunity.opportunityId,
+              opportunity.recordRevision,
+              { status: "failed" },
+            );
+            return { opportunity };
+          }
+          finishFlow({
+            flowId: flow.flowId,
+            expectedRevision: flow.revision,
+            currentStep: "dreaming_queued",
+          });
+          opportunity = cognitiveOpportunityRepository.update(
+            opportunity.opportunityId,
+            opportunity.recordRevision,
+            {
+              status: "completed",
+              output: {
+                kind: "no_op",
+                summary: "Queued the Persona's backing Agent for its native Dreams cycle.",
+              },
+            },
+          );
+          return { opportunity };
+        }
+
+        if (!requiresCognitiveOutputApproval(params.output.kind)) {
+          finishFlow({
+            flowId: flow.flowId,
+            expectedRevision: flow.revision,
+            currentStep: "output_recorded",
+          });
+          opportunity = cognitiveOpportunityRepository.update(
+            opportunity.opportunityId,
+            opportunity.recordRevision,
+            { status: "completed", output: params.output },
+          );
+          return { opportunity };
+        }
+
+        const inputService = new WorkInputService(undefined, createGatewayWorkInputOwner(context));
+        const approval = inputService.create({
+          kind: "approval",
+          sessionKey,
+          prompt: `Review ${params.output.kind.replaceAll("_", " ")} from ${persona.displayName}`,
+          description: params.output.summary,
+          creator: { type: "system", label: "Persona cognition" },
+          flow: { flowId: flow.flowId, expectedRevision: flow.revision },
+          decisions: ["approve", "reject"],
+        });
+        opportunity = cognitiveOpportunityRepository.update(
+          opportunity.opportunityId,
+          opportunity.recordRevision,
+          {
+            status: "waiting_review",
+            output: params.output,
+            approvalRequestId: approval.request.id,
+          },
+        );
+        return { opportunity };
+      });
+    },
     "personas.memory.list": ({ params, respond }) => {
       if (!Value.Check(PersonasMemoryListParamsSchema, params)) {
         return respond(
@@ -355,6 +527,10 @@ export function createPersonaHandlers(
       }));
     },
   };
+
+  function requiresCognitiveOutputApproval(kind: CognitiveOutputKind): boolean {
+    return kind !== "internal_memo" && kind !== "no_op";
+  }
 
   function lifecycle(
     params: unknown,

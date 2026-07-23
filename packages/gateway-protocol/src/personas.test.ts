@@ -2,6 +2,7 @@ import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
   PersonaChangedEventSchema,
+  PersonasCognitionStartParamsSchema,
   PersonasCreateParamsSchema,
   PersonasListResultSchema,
 } from "./schema/personas.js";
@@ -46,6 +47,26 @@ describe("Persona gateway schemas", () => {
         content: "must not cross the event boundary",
       }),
     ).toBe(false);
+  });
+
+  it("accepts only closed cognitive opportunity outputs", () => {
+    const input = {
+      personaId: "persona-1",
+      sessionKey: "agent:main:main",
+      source: "explicit",
+      output: { kind: "project_suggestion", summary: "Review the next milestone." },
+      idempotencyKey: "reflect-1",
+    };
+    expect(Value.Check(PersonasCognitionStartParamsSchema, input)).toBe(true);
+    expect(
+      Value.Check(PersonasCognitionStartParamsSchema, {
+        ...input,
+        output: { kind: "execute_tool", summary: "Run it." },
+      }),
+    ).toBe(false);
+    expect(Value.Check(PersonasCognitionStartParamsSchema, { ...input, continuous: true })).toBe(
+      false,
+    );
   });
 
   it("exposes effective named TTS binding metadata without provider credentials", () => {

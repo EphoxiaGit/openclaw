@@ -335,6 +335,72 @@ export const PersonasMemoryExportResultSchema = Type.Object(
   { filename: NonEmptyString, json: Type.String() },
   { additionalProperties: false },
 );
+const CognitiveOutputKindSchema = Type.Union([
+  Type.Literal("memory_candidate"),
+  Type.Literal("internal_memo"),
+  Type.Literal("project_suggestion"),
+  Type.Literal("follow_up"),
+  Type.Literal("persona_experiment_proposal"),
+  Type.Literal("no_op"),
+]);
+const CognitiveOpportunitySchema = Type.Object(
+  {
+    opportunityId: Id,
+    personaId: Id,
+    agentId: AgentId,
+    sessionKey: Type.String({ minLength: 1, maxLength: 512 }),
+    source: Type.Union([Type.Literal("explicit"), Type.Literal("scheduled")]),
+    status: Type.Union([
+      Type.Literal("queued"),
+      Type.Literal("running"),
+      Type.Literal("waiting_review"),
+      Type.Literal("completed"),
+      Type.Literal("failed"),
+    ]),
+    outputKind: Type.Optional(CognitiveOutputKindSchema),
+    outputSummary: Type.Optional(Type.String({ minLength: 1, maxLength: 4_000 })),
+    taskFlowId: Type.Optional(Id),
+    approvalRequestId: Type.Optional(Id),
+    recordRevision: Type.Integer({ minimum: 1 }),
+    createdAt: Type.Integer(),
+    updatedAt: Type.Integer(),
+    completedAt: Type.Optional(Type.Integer()),
+  },
+  { additionalProperties: false },
+);
+export const PersonasCognitionListParamsSchema = Type.Object(
+  {
+    personaId: Id,
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  },
+  { additionalProperties: false },
+);
+export const PersonasCognitionListResultSchema = Type.Object(
+  { opportunities: Type.Array(CognitiveOpportunitySchema, { maxItems: 100 }) },
+  { additionalProperties: false },
+);
+export const PersonasCognitionStartParamsSchema = Type.Object(
+  {
+    personaId: Id,
+    sessionKey: Type.String({ minLength: 1, maxLength: 512 }),
+    source: Type.Optional(Type.Union([Type.Literal("explicit"), Type.Literal("scheduled")])),
+    output: Type.Optional(
+      Type.Object(
+        {
+          kind: CognitiveOutputKindSchema,
+          summary: Type.String({ minLength: 1, maxLength: 4_000 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    idempotencyKey: Type.String({ minLength: 1, maxLength: 200 }),
+  },
+  { additionalProperties: false },
+);
+export const PersonasCognitionStartResultSchema = Type.Object(
+  { opportunity: CognitiveOpportunitySchema },
+  { additionalProperties: false },
+);
 export const PersonaChangedEventSchema = Type.Object(
   {
     action: Type.Union([
@@ -375,5 +441,7 @@ export type PersonasSelectionSetParams = Static<typeof PersonasSelectionSetParam
 export type PersonasHistoryParams = Static<typeof PersonasHistoryParamsSchema>;
 export type PersonasMemoryListResult = Static<typeof PersonasMemoryListResultSchema>;
 export type PersonasMemoryCreateParams = Static<typeof PersonasMemoryCreateParamsSchema>;
+export type PersonasCognitionListResult = Static<typeof PersonasCognitionListResultSchema>;
+export type PersonasCognitionStartParams = Static<typeof PersonasCognitionStartParamsSchema>;
 export type PersonaChangedEvent = Static<typeof PersonaChangedEventSchema>;
 export type PersonaSelectionChangedEvent = Static<typeof PersonaSelectionChangedEventSchema>;

@@ -29,6 +29,28 @@ function buildProps(overrides?: Partial<DreamingProps>): DreamingProps {
       { id: "main", label: "main" },
       { id: "ceo", label: "ceo" },
     ],
+    selectedPersonaId: "lucy",
+    personaOptions: [{ id: "lucy", label: "Lucy", agentId: "main" }],
+    cognitiveOpportunities: [
+      {
+        opportunityId: "reflection-1",
+        personaId: "lucy",
+        agentId: "main",
+        sessionKey: "agent:main:main",
+        source: "explicit",
+        status: "completed",
+        outputKind: "no_op",
+        outputSummary: "Queued the Persona's backing Agent for its native Dreams cycle.",
+        taskFlowId: "flow-1",
+        recordRevision: 3,
+        createdAt: 1_775_000_000_000,
+        updatedAt: 1_775_000_000_100,
+        completedAt: 1_775_000_000_100,
+      },
+    ],
+    cognitiveOpportunitiesLoading: false,
+    cognitiveOpportunitiesError: null,
+    cognitiveOpportunityStarting: false,
     shortTermCount: 47,
     groundedSignalCount: 9,
     totalSignalCount: 182,
@@ -201,6 +223,8 @@ function buildProps(overrides?: Partial<DreamingProps>): DreamingProps {
     },
     onRefresh: () => {},
     onSelectAgent: () => {},
+    onSelectPersona: () => {},
+    onStartCognitiveOpportunity: () => {},
     onRefreshDiary: () => {},
     onRefreshImports: () => {},
     onRefreshMemoryPalace: () => {},
@@ -287,10 +311,13 @@ describe("dreaming view", () => {
       "off",
     );
 
-    const buttons = [...container.querySelectorAll("button")].map((node) =>
+    const buttons = [...container.querySelectorAll(".dreams__tab")].map((node) =>
       node.textContent?.trim(),
     );
     expect(buttons).toEqual(["Scene", "Diary", "Advanced"]);
+    expect(container.querySelector(".dreams__identity-controls button")?.textContent?.trim()).toBe(
+      "Reflect now",
+    );
     expectElement(container, ".dreams__bubble");
     const text = container.querySelector(".dreams__bubble-text");
     expect(text?.textContent).toBe("reindexing old chats\u2026");
@@ -752,6 +779,7 @@ describe("dreaming view", () => {
       (node) => node.textContent?.trim(),
     );
     expect(sectionTitles).toEqual([
+      "Persona reflections",
       "From the Daily Log",
       "Waiting for Promotion",
       "Recent Promotions",
@@ -759,9 +787,9 @@ describe("dreaming view", () => {
     expect(compactText(container.querySelector(".dreams-advanced__summary"))).toBe(
       "1 from daily log · 47 waiting · 12 promoted today",
     );
-    expect(
-      container.querySelector(".dreams-advanced__item .dreams-advanced__snippet")?.textContent,
-    ).toBe("Emma prefers shorter, lower-pressure check-ins.");
+    expect(container.querySelector("[data-entry-key] .dreams-advanced__snippet")?.textContent).toBe(
+      "Emma prefers shorter, lower-pressure check-ins.",
+    );
     setDreamAdvancedWaitingSort("recent");
     setDreamSubTab("scene");
   });

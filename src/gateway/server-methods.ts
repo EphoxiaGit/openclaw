@@ -531,6 +531,8 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
       "personas.selection.get",
       "personas.selection.set",
       "personas.history",
+      "personas.cognition.list",
+      "personas.cognition.start",
       "personas.memory.list",
       "personas.memory.create",
       "personas.memory.correct",

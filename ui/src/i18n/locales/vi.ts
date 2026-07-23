@@ -1068,6 +1068,20 @@ export const vi: TranslationMap = {
       label: "Agent",
       ariaLabel: "Dreaming agent",
     },
+    personaSelect: {
+      label: "Persona",
+      ariaLabel: "Dreaming Persona",
+    },
+    cognition: {
+      reflect: "Reflect now",
+      queuing: "Queuing…",
+      title: "Persona reflections",
+      description:
+        "Bounded reflection runs through the backing Agent, TaskFlow, and existing review paths.",
+      loading: "Loading…",
+      empty: "No Persona reflections yet.",
+      waiting: "Reflection is waiting for review.",
+    },
     tabs: {
       scene: "Cảnh",
       diary: "Nhật ký",

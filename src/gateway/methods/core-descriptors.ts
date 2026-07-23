@@ -112,6 +112,8 @@ export const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "personas.selection.get", scope: "operator.read" },
   { name: "personas.selection.set", scope: "operator.write" },
   { name: "personas.history", scope: "operator.read" },
+  { name: "personas.cognition.list", scope: "operator.read" },
+  { name: "personas.cognition.start", scope: "operator.write" },
   { name: "personas.memory.list", scope: "operator.read" },
   { name: "personas.memory.create", scope: "operator.write" },
   { name: "personas.memory.correct", scope: "operator.write" },

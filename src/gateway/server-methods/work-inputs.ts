@@ -1,16 +1,13 @@
 import { Value } from "typebox/value";
 import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/index.js";
 import {
-  WorkInputChangedEventSchema,
-  WorkInputRequestedEventSchema,
   WorkInputsCancelParamsSchema,
   WorkInputsGetParamsSchema,
   WorkInputsListParamsSchema,
   WorkInputsResolveParamsSchema,
 } from "../../../packages/gateway-protocol/src/schema/work-inputs.js";
-import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { resolveInboundMediaReference } from "../../media/media-reference.js";
-import { WorkInputService, type WorkInputCreateOwner } from "../../work-inputs/service.js";
+import { WorkInputService } from "../../work-inputs/service.js";
 import {
   WorkInputConflictError,
   WorkInputNotFoundError,
@@ -19,9 +16,12 @@ import {
 } from "../../work-inputs/types.js";
 import { WorkPlanRepository } from "../../work-plans/repository.js";
 import { validateManagedArtifactReference } from "./artifacts.js";
-import { appendInjectedAssistantMessageToTranscript } from "./chat-transcript-inject.js";
 import type { GatewayClient, GatewayRequestHandlers } from "./types.js";
-import type { GatewayRequestContext } from "./types.js";
+import {
+  assertGatewayWorkInputVisible,
+  broadcastGatewayWorkInputChanged,
+  projectGatewayWorkInputTranscript,
+} from "./work-input-owner.js";
 
 function actorId(client: GatewayClient | null): string {
   return client?.connect.device?.id
@@ -31,81 +31,6 @@ function actorId(client: GatewayClient | null): string {
 
 function publicResult(record: WorkInputRecord) {
   return { request: record.request, ...(record.response ? { response: record.response } : {}) };
-}
-
-function safeTranscriptSummary(record: WorkInputRecord): string {
-  const response = record.response;
-  const responseSummary = response
-    ? [
-        response.text?.slice(0, 500),
-        response.choiceIds?.length ? `choices=${response.choiceIds.join(",")}` : undefined,
-        response.fileRefs?.length ? `managedFiles=${response.fileRefs.length}` : undefined,
-        response.artifactRefs?.length ? `artifacts=${response.artifactRefs.length}` : undefined,
-        response.secretRefs?.length
-          ? `secretRefs=${response.secretRefs.map((ref) => `${ref.source}:${ref.provider}`).join(",")}`
-          : undefined,
-      ]
-        .filter(Boolean)
-        .join("; ")
-    : undefined;
-  return [
-    `Work input ${record.request.id} (${record.request.kind}) is ${record.request.status}.`,
-    `Prompt: ${record.request.prompt.slice(0, 500)}`,
-    ...(responseSummary ? [`Response: ${responseSummary}`] : []),
-  ].join("\n");
-}
-
-function projectTranscript(record: WorkInputRecord, cfg: OpenClawConfig) {
-  void appendInjectedAssistantMessageToTranscript({
-    sessionKey: record.request.sessionKey,
-    message: safeTranscriptSummary(record),
-    label: "Work input",
-    idempotencyKey: `work-input:${record.request.id}:${record.request.revision}`,
-    config: cfg,
-  });
-}
-
-function recipientIds(context: GatewayRequestContext, sessionKey: string): ReadonlySet<string> {
-  return context.getSessionMessageSubscriberConnIds?.(sessionKey) ?? new Set<string>();
-}
-
-function assertVisible(
-  context: GatewayRequestContext,
-  client: GatewayClient | null,
-  sessionKey: string,
-): void {
-  if (!client?.connId) {
-    return;
-  }
-  if (!recipientIds(context, sessionKey).has(client.connId)) {
-    throw new WorkInputConflictError("work input is outside the active session visibility scope");
-  }
-}
-
-function broadcastChanged(context: GatewayRequestContext, record: WorkInputRecord): void {
-  context.broadcastToConnIds(
-    "work.input.changed",
-    Value.Parse(WorkInputChangedEventSchema, {
-      requestId: record.request.id,
-      revision: record.request.revision,
-      status: record.request.status,
-    }),
-    recipientIds(context, record.request.sessionKey),
-    { dropIfSlow: true },
-  );
-}
-
-export function createGatewayWorkInputOwner(context: GatewayRequestContext): WorkInputCreateOwner {
-  return {
-    appendRequestedTranscript: (record) => projectTranscript(record, context.getRuntimeConfig()),
-    emitRequested: (record) =>
-      context.broadcastToConnIds(
-        "work.input.requested",
-        Value.Parse(WorkInputRequestedEventSchema, { request: record.request }),
-        recipientIds(context, record.request.sessionKey),
-        { dropIfSlow: true },
-      ),
-  };
 }
 
 async function handle(
@@ -156,7 +81,7 @@ export function createWorkInputHandlers(
         if (!sessionKey) {
           throw new WorkInputConflictError("work input session is not visible");
         }
-        assertVisible(context, client, sessionKey);
+        assertGatewayWorkInputVisible(context, client, sessionKey);
         const page = service.list(params);
         return {
           requests: page.records.map((record) => record.request),
@@ -174,7 +99,7 @@ export function createWorkInputHandlers(
       }
       await handle(respond, () => {
         const record = service.get(params.requestId);
-        assertVisible(context, client, record.request.sessionKey);
+        assertGatewayWorkInputVisible(context, client, record.request.sessionKey);
         return publicResult(record);
       });
     },
@@ -188,7 +113,7 @@ export function createWorkInputHandlers(
       }
       await handle(respond, async () => {
         const current = service.get(params.requestId);
-        assertVisible(context, client, current.request.sessionKey);
+        assertGatewayWorkInputVisible(context, client, current.request.sessionKey);
         const record = await service.resolve(
           { ...params, actorId: actorId(client) },
           {
@@ -204,8 +129,8 @@ export function createWorkInputHandlers(
               }),
           },
         );
-        broadcastChanged(context, record);
-        projectTranscript(record, context.getRuntimeConfig());
+        broadcastGatewayWorkInputChanged(context, record);
+        projectGatewayWorkInputTranscript(record, context.getRuntimeConfig());
         return publicResult(record);
       });
     },
@@ -219,10 +144,10 @@ export function createWorkInputHandlers(
       }
       await handle(respond, () => {
         const current = service.get(params.requestId);
-        assertVisible(context, client, current.request.sessionKey);
+        assertGatewayWorkInputVisible(context, client, current.request.sessionKey);
         const record = service.cancel({ ...params, actorId: actorId(client) });
-        broadcastChanged(context, record);
-        projectTranscript(record, context.getRuntimeConfig());
+        broadcastGatewayWorkInputChanged(context, record);
+        projectGatewayWorkInputTranscript(record, context.getRuntimeConfig());
         return publicResult(record);
       });
     },

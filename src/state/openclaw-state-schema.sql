@@ -1764,6 +1764,29 @@ CREATE TABLE IF NOT EXISTS persona_memory_mutation_receipts (
   PRIMARY KEY (persona_id, idempotency_key)
 );
 
+CREATE TABLE IF NOT EXISTS persona_cognitive_opportunities (
+  opportunity_id TEXT PRIMARY KEY NOT NULL,
+  persona_id TEXT NOT NULL REFERENCES personas(persona_id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL,
+  session_key TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('explicit', 'scheduled')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'waiting_review', 'completed', 'failed')),
+  output_kind TEXT CHECK (output_kind IS NULL OR output_kind IN ('memory_candidate', 'internal_memo', 'project_suggestion', 'follow_up', 'persona_experiment_proposal', 'no_op')),
+  output_summary TEXT,
+  task_flow_id TEXT,
+  approval_request_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  record_revision INTEGER NOT NULL CHECK (record_revision >= 1),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  UNIQUE (persona_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_persona_cognitive_opportunities_persona_updated
+  ON persona_cognitive_opportunities(persona_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS work_input_requests (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
   request_id TEXT NOT NULL UNIQUE,

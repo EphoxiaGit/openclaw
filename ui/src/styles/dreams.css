@@ -12,6 +12,27 @@
 
 /* ---- Sub-tab bar ---- */
 
+.dreams__topbar,
+.dreams__identity-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dreams__topbar {
+  justify-content: space-between;
+  padding-right: 8px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 58%, transparent);
+}
+
+.dreams__agent-select {
+  margin: 0;
+}
+
+.dreams__agent-select select {
+  min-width: 190px;
+}
+
 .dreams__tabs {
   display: flex;
   align-items: center;
@@ -1136,6 +1157,18 @@
 /* ---- Responsive ---- */
 
 @media (max-width: 880px) {
+  .dreams__topbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 6px 8px 10px;
+  }
+
+  .dreams__identity-controls,
+  .dreams__agent-select,
+  .dreams__agent-select select {
+    width: 100%;
+  }
+
   .dreams {
     min-height: calc(100vh - 96px);
   }

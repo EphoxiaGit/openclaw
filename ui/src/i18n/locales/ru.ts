@@ -1077,6 +1077,20 @@ export const ru: TranslationMap = {
       label: "Агент",
       ariaLabel: "Агент Dreaming",
     },
+    personaSelect: {
+      label: "Persona",
+      ariaLabel: "Dreaming Persona",
+    },
+    cognition: {
+      reflect: "Reflect now",
+      queuing: "Queuing…",
+      title: "Persona reflections",
+      description:
+        "Bounded reflection runs through the backing Agent, TaskFlow, and existing review paths.",
+      loading: "Загрузка…",
+      empty: "No Persona reflections yet.",
+      waiting: "Reflection is waiting for review.",
+    },
     tabs: {
       scene: "Сцена",
       diary: "Дневник",

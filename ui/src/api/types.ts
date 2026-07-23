@@ -15,6 +15,8 @@ export type { ConfigUiHint, ConfigUiHints } from "../../../src/shared/config-ui-
 export type { SessionGoal } from "../../../src/config/sessions/types.js";
 export type { FastMode } from "@openclaw/normalization-core/string-coerce";
 export type {
+  PersonasCognitionListResult,
+  PersonasCognitionStartParams,
   PersonasCreateParams,
   PersonasGetResult,
   PersonasListResult,
