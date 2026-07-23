@@ -231,9 +231,29 @@ describe("Companion page", () => {
       event: "companion.event",
       payload: {
         type: "semantic-command",
+        conversationId: "foreign-conversation",
+        sequence: 50,
+        command: { type: "set", state: "activity.coding" },
+      },
+    });
+    eventListener?.({
+      type: "event",
+      event: "companion.event",
+      payload: {
+        type: "semantic-command",
+        conversationId: "opaque-conversation",
+        sequence: 2,
+        command: { type: "set", state: "activity.searching" },
+      },
+    });
+    eventListener?.({
+      type: "event",
+      event: "companion.event",
+      payload: {
+        type: "semantic-command",
         conversationId: "opaque-conversation",
         sequence: 1,
-        command: { type: "set", state: "activity.searching" },
+        command: { type: "set", state: "activity.coding" },
       },
     });
     frame?.dispatchEvent(new Event("load"));
@@ -245,8 +265,14 @@ describe("Companion page", () => {
     expect(port1.postMessage).toHaveBeenCalledWith({
       type: "set-companion-semantic",
       command: { type: "set", state: "activity.searching" },
-      revision: 1,
+      revision: 2,
     });
+    expect(port1.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "set-companion-semantic", revision: 50 }),
+    );
+    expect(port1.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "set-companion-semantic", revision: 1 }),
+    );
 
     eventListener?.({
       type: "event",
@@ -269,13 +295,28 @@ describe("Companion page", () => {
         type: "semantic-command",
         conversationId: "opaque-conversation",
         sequence: 2,
+        command: { type: "set", state: "activity.coding" },
+      },
+    });
+    expect(port1.postMessage).not.toHaveBeenCalledWith({
+      type: "set-companion-semantic",
+      command: { type: "set", state: "activity.coding" },
+      revision: 2,
+    });
+    eventListener?.({
+      type: "event",
+      event: "companion.event",
+      payload: {
+        type: "semantic-command",
+        conversationId: "opaque-conversation",
+        sequence: 3,
         command: { type: "set", state: "activity.searching" },
       },
     });
     expect(port1.postMessage).toHaveBeenLastCalledWith({
       type: "set-companion-semantic",
       command: { type: "set", state: "activity.searching" },
-      revision: 2,
+      revision: 3,
     });
 
     const cancel = page.querySelector<HTMLButtonElement>(".companion-host__cancel");

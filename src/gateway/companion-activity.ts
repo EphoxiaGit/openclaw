@@ -31,6 +31,7 @@ export type CompanionActivitySource =
   | "approval"
   | "patch"
   | "command-output"
+  | "chat-outcome"
   | "voice";
 
 export type CompanionActivityInput = Readonly<{
@@ -45,6 +46,7 @@ export type CompanionActivityInput = Readonly<{
 
 export type CompanionActivityPolicy = Readonly<{
   reduce: (input: CompanionActivityInput) => boolean;
+  force: (input: CompanionActivityInput) => boolean;
   dispose: () => void;
 }>;
 
@@ -58,6 +60,7 @@ const SOURCE_ALLOWLIST = new Set<string>([
   "approval",
   "patch",
   "command-output",
+  "chat-outcome",
   "voice",
 ] satisfies readonly CompanionActivitySource[]);
 
@@ -265,6 +268,27 @@ export function createCompanionActivityPolicy(params: {
         return false;
       }
       apply(input.activity, at);
+      return true;
+    },
+    force(input) {
+      if (
+        disposed ||
+        input.sessionKey !== params.sessionKey ||
+        input.agentId !== params.agentId ||
+        input.runId !== params.getRunId() ||
+        !SOURCE_ALLOWLIST.has(input.source) ||
+        !ACTIVITY_ALLOWLIST.has(input.activity) ||
+        !Number.isSafeInteger(input.sourceSequence) ||
+        input.sourceSequence < 0 ||
+        !Number.isSafeInteger(input.observedAtMs) ||
+        input.observedAtMs < 0
+      ) {
+        return false;
+      }
+      const previousSequence = lastSequence.get(input.source) ?? -1;
+      if (input.sourceSequence <= previousSequence) return false;
+      lastSequence.set(input.source, input.sourceSequence);
+      apply(input.activity, input.observedAtMs);
       return true;
     },
     dispose() {

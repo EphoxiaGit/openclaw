@@ -47,9 +47,11 @@ class CompanionPage extends LitElement {
   @state() private cancelling = false;
 
   private client: GatewayBrowserClient | null = null;
+  private attachedConversationId: string | null = null;
   private embodiment: CompanionEmbodiment | null = null;
   private channelPort: MessagePort | null = null;
   private lastRendererIntentSequence = 0;
+  private lastSemanticSequence = 0;
   private attachGeneration = 0;
   private expiryTimer: number | undefined;
   private stopGatewaySubscription?: () => void;
@@ -126,6 +128,7 @@ class CompanionPage extends LitElement {
         if (generation !== this.attachGeneration || this.client !== nextClient) return;
         const result = readCompanionAttachResult(payload);
         if (!result) throw new Error("invalid_companion_attach_response");
+        this.attachedConversationId = result.conversationId;
         this.embodiment = createCompanionEmbodiment(result.conversationId);
         this.runtimeState = "attached";
         this.publishCommand(this.embodiment.bootstrap());
@@ -143,6 +146,13 @@ class CompanionPage extends LitElement {
     const event = readCompanionEvent(frame.payload);
     if (!event) return;
     if (event.type === "semantic-command") {
+      if (
+        event.conversationId !== this.attachedConversationId ||
+        event.sequence <= this.lastSemanticSequence
+      ) {
+        return;
+      }
+      this.lastSemanticSequence = event.sequence;
       const command: CompanionSemanticRendererCommand = {
         type: "set-companion-semantic",
         command: event.command,
@@ -224,9 +234,11 @@ class CompanionPage extends LitElement {
     const wasAttached = this.embodiment !== null || this.runtimeState === "attaching";
     this.attachGeneration += 1;
     this.client = null;
+    this.attachedConversationId = null;
     this.embodiment = null;
     this.currentCommand = null;
     this.currentSemanticCommand = null;
+    this.lastSemanticSequence = 0;
     this.cancelling = false;
     if (this.expiryTimer !== undefined) window.clearTimeout(this.expiryTimer);
     this.expiryTimer = undefined;

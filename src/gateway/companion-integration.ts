@@ -120,6 +120,25 @@ export function createCompanionIntegration(params: {
     return events.length;
   };
 
+  const projectRunActivity = (params: {
+    runId: string;
+    source: "lifecycle" | "chat-outcome";
+    sourceSequence: number;
+    activity: "thinking" | "completed" | "idle" | "error";
+    force?: boolean;
+  }) => {
+    const input: CompanionActivityInput = {
+      sessionKey: binding.sessionKey,
+      agentId: binding.agentId,
+      runId: params.runId,
+      source: params.source,
+      sourceSequence: params.sourceSequence,
+      activity: params.activity,
+      observedAtMs: Date.now(),
+    };
+    return params.force ? activityPolicy?.force(input) : activityPolicy?.reduce(input);
+  };
+
   return {
     bootstrap: () => bridge.bootstrap(),
 
@@ -152,6 +171,14 @@ export function createCompanionIntegration(params: {
       abortPendingRunId = undefined;
       resetActivityPolicy();
       publishAll(bridge.recover(snapshot));
+      if (currentRunId) {
+        projectRunActivity({
+          runId: currentRunId,
+          source: "lifecycle",
+          sourceSequence: 0,
+          activity: "thinking",
+        });
+      }
       return true;
     },
 
@@ -186,6 +213,12 @@ export function createCompanionIntegration(params: {
       abortPendingRunId = undefined;
       resetActivityPolicy();
       recipient.publish(event);
+      projectRunActivity({
+        runId: started.runId,
+        source: "lifecycle",
+        sourceSequence: 0,
+        activity: "thinking",
+      });
       return true;
     },
 
@@ -195,7 +228,7 @@ export function createCompanionIntegration(params: {
       }
       const events = bridge.projectChatEvent(event);
       const count = publishAll(events);
-      if (
+      const acceptedTerminal =
         count > 0 &&
         event.runId === currentRunId &&
         events.some(
@@ -204,8 +237,16 @@ export function createCompanionIntegration(params: {
             (projected.phase === "complete" ||
               projected.phase === "cancelled" ||
               projected.phase === "error"),
-        )
-      ) {
+        );
+      if (acceptedTerminal) {
+        projectRunActivity({
+          runId: event.runId,
+          source: "chat-outcome",
+          sourceSequence: event.seq,
+          activity:
+            event.state === "final" ? "completed" : event.state === "aborted" ? "idle" : "error",
+          force: true,
+        });
         currentRunId = undefined;
         abortPendingRunId = undefined;
       }

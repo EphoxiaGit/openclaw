@@ -173,6 +173,10 @@ describe("companion integration", () => {
     expect(second).toEqual([
       expect.objectContaining({ type: "state", phase: "assistant-streaming" }),
       expect.objectContaining({ type: "assistant-text", text: "Native partial" }),
+      expect.objectContaining({
+        type: "semantic-command",
+        command: { type: "set", state: "activity.thinking" },
+      }),
     ]);
     expect(JSON.stringify(first)).not.toContain("must be dropped");
     expect(JSON.stringify(second)).not.toContain("must be dropped");
@@ -190,6 +194,12 @@ describe("companion integration", () => {
       publish: (event) => delivered.push(event),
     });
     expect(subject.onChatSendStarted(started("run-current"))).toBe(true);
+    expect(delivered).toContainEqual(
+      expect.objectContaining({
+        type: "semantic-command",
+        command: { type: "set", state: "activity.thinking" },
+      }),
+    );
     expect(
       subject.onActivity({
         sessionKey: "agent:other:main",
@@ -265,6 +275,73 @@ describe("companion integration", () => {
     ).toBe(1);
     expect(await subject.cancelCurrent("authorized")).toBe(false);
     expect(delivered).toContainEqual(expect.objectContaining({ phase: "cancelled" }));
+    expect(delivered.at(-1)).toEqual(
+      expect.objectContaining({ type: "semantic-command", command: { type: "clear" } }),
+    );
+  });
+
+  it("projects normalized completion and error outcomes without raw terminal details", async () => {
+    for (const [state, semanticState] of [
+      ["final", "activity.completed"],
+      ["error", "activity.error"],
+    ] as const) {
+      const delivered: unknown[] = [];
+      const subject = createCompanionIntegration({
+        conversationId: "companion-opaque",
+        cfg: { agents: { list: [{ id: "main" }] } },
+        nativeChat: nativeChat(),
+      });
+      await subject.attachAuthorizedRecipient({
+        connId: `authorized-${state}`,
+        publish: (event) => delivered.push(event),
+      });
+      expect(subject.onChatSendStarted(started(`run-${state}`))).toBe(true);
+      expect(
+        subject.onChatEvent(
+          chatEvent({
+            runId: `run-${state}`,
+            sessionKey: "agent:main:main",
+            agentId: "main",
+            seq: 0,
+            state,
+            errorMessage: "private terminal detail",
+          }),
+        ),
+      ).toBe(1);
+      expect(delivered.at(-1)).toEqual(
+        expect.objectContaining({
+          type: "semantic-command",
+          command: { type: "set", state: semanticState },
+        }),
+      );
+      expect(JSON.stringify(delivered)).not.toContain("private terminal detail");
+      subject.detachRecipient(`authorized-${state}`);
+    }
+  });
+
+  it("seeds thinking semantics for recovered in-flight runs with and without text", async () => {
+    for (const text of ["Partial", ""]) {
+      const delivered: unknown[] = [];
+      const subject = createCompanionIntegration({
+        conversationId: "companion-opaque",
+        cfg: { agents: { list: [{ id: "main" }] } },
+        nativeChat: nativeChat(async () => ({
+          messages: [],
+          inFlightRun: { runId: `run-${text || "empty"}`, text },
+        })),
+      });
+      await subject.attachAuthorizedRecipient({
+        connId: `authorized-${text || "empty"}`,
+        publish: (event) => delivered.push(event),
+      });
+      expect(delivered.at(-1)).toEqual(
+        expect.objectContaining({
+          type: "semantic-command",
+          command: { type: "set", state: "activity.thinking" },
+        }),
+      );
+      subject.detachRecipient(`authorized-${text || "empty"}`);
+    }
   });
 
   it("rejects foreign starts and lifecycle events before native authority is invoked", async () => {

@@ -7,10 +7,6 @@ function activityForEvent(event: AgentEventPayload): CompanionActivity | undefin
   switch (event.stream) {
     case "lifecycle":
       if (phase === "start") return "thinking";
-      if (phase === "end") return "completed";
-      if (phase === "error") {
-        return event.data.fallbackExhaustedFailure === true ? "error" : "warning";
-      }
       return undefined;
     case "thinking":
       return "thinking";
@@ -19,8 +15,9 @@ function activityForEvent(event: AgentEventPayload): CompanionActivity | undefin
     case "approval":
       return phase === "requested" ? "waiting-user" : phase === "resolved" ? "thinking" : undefined;
     case "patch":
-    case "command_output":
       return "coding";
+    case "command_output":
+      return "tool-use";
     case "tool":
       return phase === "start" ? "tool-use" : phase === "result" ? "thinking" : undefined;
     case "item": {
@@ -28,13 +25,11 @@ function activityForEvent(event: AgentEventPayload): CompanionActivity | undefin
       if (status === "blocked") return "waiting-user";
       const kind = typeof event.data.kind === "string" ? event.data.kind : undefined;
       if (kind === "search") return "searching";
-      if (kind === "command" || kind === "patch") return "coding";
-      if (kind === "tool") return "tool-use";
+      if (kind === "command" || kind === "tool") return "tool-use";
+      if (kind === "patch") return "coding";
       if (kind === "analysis") return "thinking";
       return undefined;
     }
-    case "error":
-      return "error";
     default:
       return undefined;
   }

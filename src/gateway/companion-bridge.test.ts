@@ -129,6 +129,30 @@ describe("companion bridge", () => {
     ).toEqual([]);
   });
 
+  it("uses one global sequence for lifecycle, semantic, and transcript projections", () => {
+    const subject = bridge();
+    const events = [
+      subject.beginRun(runStart("run-sequence")),
+      subject.projectSemanticCommand({ type: "set", state: "activity.thinking" }),
+      ...subject.projectChatEvent(
+        lifecycleEvent({
+          runId: "run-sequence",
+          sessionKey: "agent:main:main",
+          agentId: "main",
+          seq: 0,
+          state: "delta",
+          deltaText: "Safe text",
+          provider: "private-provider",
+          toolName: "private-tool",
+        }),
+      ),
+    ];
+    expect(events.map((event) => event?.sequence)).toEqual([1, 2, 3, 4]);
+    expect(JSON.stringify(events)).not.toMatch(
+      /sessionKey|runId|agentId|provider|toolName|private-provider|private-tool/,
+    );
+  });
+
   it("uses the terminal assistant snapshot only when no delta was available", () => {
     const subject = bridge();
     subject.beginRun(runStart("run-2"));
