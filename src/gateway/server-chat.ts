@@ -15,6 +15,7 @@ import { logError } from "../logger.js";
 import { isAcpSessionKey, isSubagentSessionKey } from "../sessions/session-key-utils.js";
 import { resolveAssistantEventPhase } from "../shared/chat-message-content.js";
 import { setSafeTimeout } from "../utils/timer-delay.js";
+import { projectAgentEventToCompanionActivity } from "./companion-activity-source.js";
 import {
   normalizeLiveAssistantBufferedText,
   projectLiveAssistantBufferedText,
@@ -305,6 +306,12 @@ export type AgentEventHandlerOptions = {
     sessionId?: string;
     agentId?: string;
   }) => { active: boolean; runIds: string[] };
+  onCompanionChatEvent?: (
+    event: import("../../packages/gateway-protocol/src/index.js").ChatEvent,
+  ) => number;
+  onCompanionActivity?: (
+    input: import("./companion-activity.js").CompanionActivityInput,
+  ) => boolean;
 };
 
 function roundedChatSendTimingMs(value: number): number {
@@ -331,6 +338,8 @@ export function createAgentEventHandler({
   resolveActiveLifecycleGenerationForRun = () => undefined,
   updateRunToolErrorSummary,
   resolveSessionActiveRunState,
+  onCompanionChatEvent,
+  onCompanionActivity,
 }: AgentEventHandlerOptions) {
   type TerminalLifecycleOptions = {
     skipChatErrorFinal?: boolean;
@@ -603,6 +612,7 @@ export function createAgentEventHandler({
     const isAborted =
       isChatAbortMarkerCurrent(chatRunState.abortedRuns.get(clientRunId), chatLink) ||
       isChatAbortMarkerCurrent(chatRunState.abortedRuns.get(evt.runId), chatLink);
+
     const lifecycleAborted = evt.data?.aborted === true;
     const deliverySessionKey = sessionKey
       ? resolveSessionDeliveryKey(sessionKey, sessionAgentId)
@@ -1232,6 +1242,14 @@ export function createAgentEventHandler({
     if (lifecyclePhase !== null && lifecyclePhase !== "error") {
       clearPendingTerminalLifecycleError(evt.runId);
     }
+
+    const companionActivity = projectAgentEventToCompanionActivity({
+      event: evt,
+      sessionKey,
+      agentId: sessionAgentId,
+      runId: eventRunId,
+    });
+    if (companionActivity) onCompanionActivity?.(companionActivity);
 
     // Include sessionKey so Control UI can filter tool streams per session.
     const spawnedBy = sessionKey ? resolveSpawnedBy(sessionKey) : null;

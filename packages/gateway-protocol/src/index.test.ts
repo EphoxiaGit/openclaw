@@ -60,6 +60,67 @@ const makeError = (overrides: Partial<ValidationError>): ValidationError => ({
 type ProtocolValidator = (value: unknown) => boolean;
 
 describe("lazy protocol validators", () => {
+  it("exports the closed Companion transport validators", () => {
+    expect(validateCompanionAttachParams({})).toBe(true);
+    expect(validateCompanionDetachParams({})).toBe(true);
+    expect(validateCompanionCancelParams({})).toBe(true);
+    expect(validateCompanionAttachParams({ sessionKey: "private" })).toBe(false);
+    expect(
+      validateCompanionBootstrap({
+        protocol: "openclaw.companion.v1",
+        conversationId: "opaque-companion",
+        phase: "idle",
+      }),
+    ).toBe(true);
+    expect(
+      validateCompanionAttachResult({
+        attached: true,
+        protocol: "openclaw.companion.v1",
+        conversationId: "opaque-companion",
+        phase: "idle",
+      }),
+    ).toBe(true);
+    expect(validateCompanionDetachResult({ detached: true })).toBe(true);
+    expect(validateCompanionCancelResult({ aborted: true })).toBe(true);
+    expect(
+      validateCompanionEvent({
+        type: "assistant-text",
+        conversationId: "opaque-companion",
+        sequence: 1,
+        mode: "replace",
+        text: "Safe assistant output",
+        truncated: false,
+      }),
+    ).toBe(true);
+    expect(
+      validateCompanionEvent({
+        type: "semantic-command",
+        conversationId: "main-companion",
+        sequence: 3,
+        command: { type: "set", state: "activity.searching" },
+      }),
+    ).toBe(true);
+    expect(
+      validateCompanionEvent({
+        type: "semantic-command",
+        conversationId: "main-companion",
+        sequence: 4,
+        command: { type: "set", state: "activity.searching", tool: "private" },
+      }),
+    ).toBe(false);
+    expect(
+      validateCompanionEvent({
+        type: "assistant-text",
+        conversationId: "opaque-companion",
+        sequence: 1,
+        mode: "replace",
+        text: "Safe assistant output",
+        truncated: false,
+        runId: "private-run",
+      }),
+    ).toBe(false);
+  });
+
   it("validates through exported lazy validators", () => {
     expect(validateCommandsListParams({})).toBe(true);
     expect(validateCommandsListParams({ includeArgs: true })).toBe(true);

@@ -86,6 +86,19 @@ export type GatewayRequestContext = {
   getHealthVersion: () => number;
   broadcast: GatewayBroadcastFn;
   broadcastToConnIds: GatewayBroadcastToConnIdsFn;
+  detachCompanionConnection?: (connId: string) => boolean;
+  onCompanionChatSendStarted?: (started: {
+    status: "started";
+    runId: string;
+    sessionKey: string;
+    agentId: string;
+  }) => boolean;
+  onCompanionChatEvent?: (
+    event: import("../../../packages/gateway-protocol/src/index.js").ChatEvent,
+  ) => number;
+  onCompanionActivity?: (
+    input: import("../companion-activity.js").CompanionActivityInput,
+  ) => boolean;
   nodeSendToSession: (sessionKey: string, event: string, payload: unknown) => void;
   nodeSendToAllSubscribed: (event: string, payload: unknown) => void;
   nodeSubscribe: (nodeId: string, sessionKey: string) => void;

@@ -1,3 +1,10 @@
+import type {
+  ChatEvent,
+  CompanionBootstrap,
+  CompanionEvent,
+  CompanionSemanticCommand,
+} from "../../packages/gateway-protocol/src/index.js";
+
 // Server-owned Companion Bridge contract.
 //
 // This module intentionally does not open a socket, select an agent, or own a
@@ -7,8 +14,6 @@
 export const COMPANION_BRIDGE_PROTOCOL = "openclaw.companion.v1" as const;
 export const MAX_COMPANION_TRANSCRIPT_CHARS = 4_000;
 export const COMPANION_MAIN_AGENT_ID = "main" as const;
-export const COMPANION_RUN_START_SOURCE = "authorized-chat-send" as const;
-export const COMPANION_CHAT_EVENT_SOURCE = "authoritative-chat-lifecycle" as const;
 
 export type CompanionBridgeBinding = Readonly<{
   /** Opaque client-facing identifier; not an OpenClaw session key. */
@@ -19,54 +24,31 @@ export type CompanionBridgeBinding = Readonly<{
   agentId: string;
 }>;
 
-export type CompanionChatEvent = Readonly<{
-  source: typeof COMPANION_CHAT_EVENT_SOURCE;
-  runId: string;
-  sessionKey: string;
-  agentId?: string;
-  seq: number;
-  state: "delta" | "final" | "aborted" | "error";
-  deltaText?: string;
-  replace?: boolean;
-  message?: unknown;
-}>;
-
-export type CompanionBootstrap = Readonly<{
-  protocol: typeof COMPANION_BRIDGE_PROTOCOL;
-  conversationId: string;
-  phase: "idle";
-}>;
-
-export type CompanionStateEvent = Readonly<{
-  type: "state";
-  conversationId: string;
-  sequence: number;
-  phase: "thinking" | "assistant-streaming" | "complete" | "cancelled" | "error";
-}>;
-
-export type CompanionTranscriptEvent = Readonly<{
-  type: "assistant-text";
-  conversationId: string;
-  sequence: number;
-  mode: "append" | "replace";
-  text: string;
-  truncated: boolean;
-}>;
-
-export type CompanionBridgeEvent = CompanionStateEvent | CompanionTranscriptEvent;
+export type CompanionStateEvent = Extract<CompanionEvent, { type: "state" }>;
+export type CompanionTranscriptEvent = Extract<CompanionEvent, { type: "assistant-text" }>;
+export type CompanionBridgeEvent = CompanionEvent;
 
 export type CompanionRunStart = Readonly<{
-  source: typeof COMPANION_RUN_START_SOURCE;
   status: "started";
   runId: string;
   sessionKey: string;
   agentId: string;
 }>;
 
+export type CompanionHistorySnapshot = Readonly<{
+  messages: readonly unknown[];
+  inFlightRun?: Readonly<{
+    runId: string;
+    text: string;
+  }>;
+}>;
+
 export type CompanionBridge = Readonly<{
   bootstrap: () => CompanionBootstrap;
   beginRun: (input: CompanionRunStart) => CompanionStateEvent | null;
-  projectChatEvent: (input: unknown) => readonly CompanionBridgeEvent[];
+  projectChatEvent: (input: ChatEvent) => readonly CompanionBridgeEvent[];
+  recover: (snapshot: CompanionHistorySnapshot) => readonly CompanionBridgeEvent[];
+  projectSemanticCommand: (command: CompanionSemanticCommand) => CompanionBridgeEvent;
 }>;
 
 /**
@@ -84,7 +66,8 @@ export type CompanionBridgePublisher = (event: CompanionBridgeEvent) => void;
 export type CompanionBridgeDelivery = Readonly<{
   bootstrap: () => CompanionBootstrap;
   beginRun: (input: CompanionRunStart) => boolean;
-  projectChatEvent: (input: unknown) => number;
+  projectChatEvent: (input: ChatEvent) => number;
+  recover: (snapshot: CompanionHistorySnapshot) => number;
 }>;
 
 type RunProjection = {
@@ -100,25 +83,6 @@ function requireNonEmpty(name: string, value: string): string {
     throw new Error(`invalid_companion_${name}`);
   }
   return value;
-}
-
-function isCompanionChatEvent(value: unknown): value is CompanionChatEvent {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const event = value as Record<string, unknown>;
-  return (
-    typeof event.runId === "string" &&
-    event.source === COMPANION_CHAT_EVENT_SOURCE &&
-    typeof event.sessionKey === "string" &&
-    typeof event.seq === "number" &&
-    Number.isInteger(event.seq) &&
-    event.seq >= 0 &&
-    (event.state === "delta" ||
-      event.state === "final" ||
-      event.state === "aborted" ||
-      event.state === "error")
-  );
 }
 
 function boundedText(value: string): { text: string; truncated: boolean } {
@@ -152,6 +116,24 @@ function readAssistantMessageText(message: unknown): string | undefined {
     })
     .join("");
   return text || undefined;
+}
+
+function readLatestAssistantText(messages: readonly unknown[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || typeof message !== "object") {
+      continue;
+    }
+    const entry = message as Record<string, unknown>;
+    if (entry.role !== "assistant") {
+      continue;
+    }
+    const text = readAssistantMessageText(message);
+    if (text) {
+      return text;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -201,7 +183,6 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
 
     beginRun: (input) => {
       if (
-        input.source !== COMPANION_RUN_START_SOURCE ||
         input.status !== "started" ||
         input.sessionKey !== fixedBinding.sessionKey ||
         input.agentId !== fixedBinding.agentId ||
@@ -224,10 +205,10 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
     },
 
     projectChatEvent: (input) => {
-      if (!isCompanionChatEvent(input)) {
-        return [];
-      }
-      if (input.sessionKey !== fixedBinding.sessionKey || input.agentId !== fixedBinding.agentId) {
+      if (
+        input.sessionKey !== fixedBinding.sessionKey ||
+        (input.agentId !== undefined && input.agentId !== fixedBinding.agentId)
+      ) {
         return [];
       }
       const run = runs.get(input.runId);
@@ -271,6 +252,40 @@ export function createCompanionBridge(binding: CompanionBridgeBinding): Companio
       run.terminal = true;
       return [emitState(input.state === "aborted" ? "cancelled" : "error")];
     },
+
+    recover: (snapshot) => {
+      const inFlightRun = snapshot.inFlightRun;
+      if (inFlightRun && inFlightRun.runId.trim().length > 0) {
+        runs.clear();
+        runs.set(inFlightRun.runId, {
+          lastSourceSequence: -1,
+          lastSourceWasDelta: false,
+          started: true,
+          sawAssistantText: inFlightRun.text.length > 0,
+          terminal: false,
+        });
+        const events: CompanionBridgeEvent[] = [
+          emitState(inFlightRun.text.length > 0 ? "assistant-streaming" : "thinking"),
+        ];
+        if (inFlightRun.text.length > 0) {
+          events.push(emitText("replace", inFlightRun.text));
+        }
+        return events;
+      }
+
+      runs.clear();
+      const latestAssistantText = readLatestAssistantText(snapshot.messages);
+      if (!latestAssistantText) {
+        return [];
+      }
+      return [emitText("replace", latestAssistantText), emitState("complete")];
+    },
+    projectSemanticCommand: (command) => ({
+      type: "semantic-command",
+      conversationId: fixedBinding.conversationId,
+      sequence: ++nextSequence,
+      command,
+    }),
   };
 }
 
@@ -301,5 +316,6 @@ export function createCompanionBridgeDelivery(params: {
       return true;
     },
     projectChatEvent: (input) => publishAll(bridge.projectChatEvent(input)),
+    recover: (snapshot) => publishAll(bridge.recover(snapshot)),
   };
 }

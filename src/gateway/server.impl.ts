@@ -1172,6 +1172,8 @@ export async function startGatewayServer(
     runtimeState.bonjourStop = earlyRuntime.bonjourStop;
     getActiveTaskCount = earlyRuntime.getActiveTaskCount;
     runtimeState.skillsChangeUnsub = earlyRuntime.skillsChangeUnsub;
+    let onCompanionChatEvent: GatewayRequestContext["onCompanionChatEvent"];
+    let onCompanionActivity: GatewayRequestContext["onCompanionActivity"];
 
     const [{ startGatewayEventSubscriptions }, { startGatewayRuntimeServices }] =
       await startupTrace.measure("runtime.post-early-imports", () =>
@@ -1193,6 +1195,8 @@ export async function startGatewayServer(
         sessionMessageSubscribers,
         chatAbortControllers,
         restartRecoveryCandidates,
+        onCompanionChatEvent: (event) => onCompanionChatEvent?.(event) ?? 0,
+        onCompanionActivity: (input) => onCompanionActivity?.(input) ?? false,
       }),
     );
     Object.assign(runtimeState, runtimeSubscriptions);
@@ -1518,6 +1522,8 @@ export async function startGatewayServer(
         });
       },
     );
+    onCompanionChatEvent = (event) => gatewayRequestContext.onCompanionChatEvent?.(event) ?? 0;
+    onCompanionActivity = (input) => gatewayRequestContext.onCompanionActivity?.(input) ?? false;
     currentPluginRegistryGatewayContext = gatewayRequestContext;
 
     const fallbackGatewayContextCleanup: unknown = setFallbackGatewayContextResolver(
