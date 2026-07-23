@@ -4,6 +4,14 @@ import { TALK_TEST_PROVIDER_ID } from "../../../src/test-utils/talk-test-provide
 import * as protocol from "./index.js";
 import {
   formatValidationErrors,
+  validateCompanionAttachParams,
+  validateCompanionAttachResult,
+  validateCompanionBootstrap,
+  validateCompanionCancelParams,
+  validateCompanionCancelResult,
+  validateCompanionDetachParams,
+  validateCompanionDetachResult,
+  validateCompanionEvent,
   validateChatAbortParams,
   validateChatHistoryParams,
   validateChatMetadataParams,

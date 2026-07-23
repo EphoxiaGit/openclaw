@@ -1276,6 +1276,17 @@ export const validateCompanionDetachParams = lazyCompile<CompanionDetachParams>(
 export const validateCompanionCancelParams = lazyCompile<CompanionCancelParams>(
   CompanionCancelParamsSchema,
 );
+export const validateCompanionAttachResult = lazyCompile<CompanionAttachResult>(
+  CompanionAttachResultSchema,
+);
+export const validateCompanionBootstrap = lazyCompile<CompanionBootstrap>(CompanionBootstrapSchema);
+export const validateCompanionCancelResult = lazyCompile<CompanionCancelResult>(
+  CompanionCancelResultSchema,
+);
+export const validateCompanionDetachResult = lazyCompile<CompanionDetachResult>(
+  CompanionDetachResultSchema,
+);
+export const validateCompanionEvent = lazyCompile<CompanionEvent>(CompanionEventSchema);
 export const validateChatHistoryParams = lazyCompile(ChatHistoryParamsSchema);
 export const validateChatMetadataParams = lazyCompile<ChatMetadataParams>(ChatMetadataParamsSchema);
 export const validateChatMessageGetParams = lazyCompile(ChatMessageGetParamsSchema);
